@@ -1,0 +1,28 @@
+[project]
+name = "legallens"
+version = "0.1.0"
+description = "Indian-law assistant using Corrective RAG"
+requires-python = ">=3.14"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "pydantic>=2.7",
+  "langgraph>=0.2",
+  "langchain-google-genai>=2.0",
+  "chromadb>=0.5",
+  "sentence-transformers>=3.0",
+  "pypdf>=4.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "httpx>=0.27", "ruff>=0.5"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
