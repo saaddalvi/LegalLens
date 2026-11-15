@@ -1,0 +1,313 @@
+{
+  "source": "civictech-India/constitution-of-india @ 48871da69fd03cf2f85aa845f0f99da815adf17b",
+  "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)",
+  "notes": [
+    "Articles 124 and 222 keep the dataset's pre-NJAC text: the official text shows the Ninety-ninth Amendment version, which the Supreme Court struck down (AIR 2016 SC 117), so the dataset text is the operative law.",
+    "Articles 124A, 124B and 124C (National Judicial Appointments Commission) are deliberately not added: inserted by the Ninety-ninth Amendment and struck down by the Supreme Court.",
+    "Article 232 is not added: the official text lists it only as a substitution note, with no Article text.",
+    "Article 370 matches the official text; the official PDF records the 2019 Presidential Order in a footnote only.",
+    "Preamble (article 0 in the dataset) is not an Article and is not ingested."
+  ],
+  "patches": [
+    {
+      "op": "add",
+      "number": "43B",
+      "text": "The State shall endeavour to promote voluntary formation, autonomous functioning, democratic control and professional management of co-operative societies.",
+      "reason": "Article absent from the open dataset (inserted by the Constitution (Ninety-seventh Amendment) Act, 2011)",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "279A",
+      "text": "(1) The President shall, within sixty days from the date of commencement of the Constitution (One Hundred and First Amendment) Act, 2016, by order, constitute a Council to be called the Goods and Services Tax Council.\n(2) The Goods and Services Tax Council shall consist of the following members, namely:—\n(a) the Union Finance Minister — Chairperson;\n(b) the Union Minister of State in charge of Revenue or Finance — Member;\n(c) the Minister in charge of Finance or Taxation or any other Minister nominated by each State Government — Members.\n(3) The Members of the Goods and Services Tax Council referred to in sub-clause (c) of clause (2) shall, as soon as may be, choose one amongst themselves to be the Vice-Chairperson of the Council for such period as they may decide.\n(4) The Goods and Services Tax Council shall make recommendations to the Union and the States on—\n(a) the taxes, cesses and surcharges levied by the Union, the States and the local bodies which may be subsumed in the goods and services tax;\n(b) the goods and services that may be subjected to, or exempted from, the goods and services tax;\n(c) model Goods and Services Tax Laws, principles of levy, apportionment of Goods and Services Tax levied on supplies in the course of inter-State trade or commerce under article 269A and the principles that govern the place of supply;\n(d) the threshold limit of turnover below which goods and services may be exempted from goods and services tax;\n(e) the rates including floor rates with bands of goods and services tax ;\n(f) any special rate or rates for a specified period, to raise additional resources during any natural calamity or disaster;\n(g) special provision with respect to the States of Arunachal Pradesh, Assam, Jammu and Kashmir, Manipur, Meghalaya, Mizoram, Nagaland, Sikkim, Tripura, Himachal Pradesh and Uttarakhand; and\n(h) any other matter relating to the goods and services tax, as the Council may decide.\n(5) The Goods and Services Tax Council shall recommend the date on which the goods and services tax be levied on petroleum crude, high speed diesel, motor spirit (commonly known as petrol), natural gas and aviation turbine fuel.\n(6) While discharging the functions conferred by this article, the Goods and Services Tax Council shall be guided by the need for a harmonised structure of goods and services tax and for the development of a harmonised national market for goods and services.\n(7) One-half of the total number of Members of the Goods and Services Tax Council shall constitute the quorum at its meetings.\n(8) The Goods and Services Tax Council shall determine the procedure in the performance of its functions.\n(9) Every decision of the Goods and Services Tax Council shall be taken at a meeting, by a majority of not less than three-fourths of the weighted votes of the members present and voting, in accordance with the following principles, namely:—\n(a) the vote of the Central Government shall have a weightage of one-third of the total votes cast, and\n(b) the votes of all the State Governments taken together shall have a weightage of two-thirds of the total votes cast, in that meeting.\n(10) No act or proceedings of the Goods and Services Tax Council shall be invalid merely by reason of—\n(a) any vacancy in, or any defect in, the constitution of the Council; or\n(b) any defect in the appointment of a person as a Member of the Council; or\n(c) any procedural irregularity of the Council not affecting the merits of the case.\n(11) The Goods and Services Tax Council shall establish a mechanism to adjudicate any dispute—\n(a) between the Government of India and one or more States; or\n(b) between the Government of India and any State or States on one side and one or more other States on the other side; or\n(c) between two or more States, arising out of the recommendations of the Council or implementation thereof.",
+      "reason": "Article absent from the open dataset (inserted by the Constitution (One Hundred and First Amendment) Act, 2016)",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "320",
+      "text": "(1) It shall be the duty of the Union and the State Public Service Commissions to conduct examinations for appointments to the services of the Union and the services of the State respectively.\n(2) It shall also be the duty of the Union Public Service Commission, if requested by any two or more States so to do, to assist those States in framing and operating schemes of joint recruitment for any services for which candidates possessing special qualifications are required.\n(3) The Union Public Service Commission or the State Public Service Commission, as the case may be, shall be consulted—\n(a) on all matters relating to methods of recruitment to civil services and for civil posts;\n(b) on the principles to be followed in making appointments to civil services and posts and in making promotions and transfers from one service to another and on the suitability of candidates for such appointments, promotions or transfers;\n(c) on all disciplinary matters affecting a person serving under the Government of India or the Government of a State in a civil capacity, including memorials or petitions relating to such matters;\n(d) on  any claim by or in respect of a person who is serving or has served under the Government of India or the Government of a State or under the Crown in India or under the Government of an Indian State, in a civil capacity, that any costs incurred by him in defending legal proceedings instituted against him in respect of acts done or purporting to be done in the execution of his duty should be paid out of the Consolidated Fund of India, or, as the case may be, out of the Consolidated Fund of the State;\n(e) on any claim for the award of a pension in respect of injuries sustained by a person while serving under the Government of India or the Government of a State or under the Crown in India or under the Government of an Indian State, in a civil capacity, and any question as to the amount of any such award, and it shall be the duty of a Public Service Commission to advise on any matter so referred to them and on any other matter which the President, or, as the case may be, the Governor *** of the State, may refer to them:\nProvided that the President as respects the all-India services and also as respects other services and posts in connection with the affairs of the Union, and the Governor ***, as respects other services and posts in connection with the affairs of a State, may make regulations specifying the matters in which either generally, or in any particular class of case or in any particular circumstances, it shall not be necessary for a Public Service Commission to be consulted.\n(4) Nothing in clause (3) shall require a Public Service Commission to be consulted as respects the manner in which any provision referred to in clause (4) of article 16 may be made or as respects the manner in which effect may be given to the provisions of article 335.\n(5) All regulations made under the proviso to clause (3) by the President or the Governor *** of a State shall be laid for not less than fourteen days before each House of Parliament or the House or each House of the Legislature of the State, as the case may be, as soon as possible after they are made, and shall be subject to such modifications, whether by way of repeal or amendment, as both Houses of Parliament or the House or both Houses of the Legislature of the State may make during the session in which they are so laid.",
+      "reason": "Article absent from the open dataset",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "338B",
+      "text": "(1) There shall be a Commission for the socially and educationally backward classes to be known as the National Commission for Backward Classes.\n(2) Subject to the provisions of any law made in this behalf by Parliament, the Commission shall consist of a Chairperson, Vice-Chairperson and three other Members and the conditions of service and tenure of office of the Chairperson, Vice-Chairperson and other Members so appointed shall be such as the President may by rule determine.\n(3) The Chairperson, Vice-Chairperson and other Members of the Commission shall be appointed by the President by warrant under his hand and seal.\n(4) The Commission shall have the power to regulate its own procedure.\n(5) It shall be the duty of the Commission—\n(a) to investigate and monitor all matters relating to the safeguards provided for the socially and educationally backward classes under this Constitution or under any other law for the time being in force or under any order of the Government and to evaluate the working of such safeguards;\n(b) to inquire into specific complaints with respect to the deprivation of rights and safeguards of the socially and educationally backward classes;\n(c) to participate and advise on the socio-economic development of the socially and educationally backward classes and to evaluate the progress of their development under the Union and any State;\n(d) to present to the President, annually and at such other times as the Commission may deem fit, reports upon the working of those safeguards;\n(e) to make in such reports the recommendations as to the measures that should be taken by the Union or any State for the effective implementation of those safeguards and other measures for the protection, welfare and socio-economic development of the socially and educationally backward classes; and\n(f) to discharge such other functions in relation to the protection, welfare and development and advancement of the socially and educationally backward classes as the President may, subject to the provisions of any law made by Parliament, by rule specify.\n(6) The President shall cause all such reports to be laid before each House of Parliament along with a memorandum explaining the action taken or proposed to be taken on the recommendations relating to the Union and the reasons for the non-acceptance, if any, of any such recommendations.\n(7) Where any such report, or any part thereof, relates to any matter with which any State Government is concerned, a copy of such report shall be forwarded to the State Government which shall cause it to be laid before the Legislature of the State along with a memorandum explaining the action taken or proposed to be taken on the recommendations relating to the State and the reasons for the non-acceptance, it any, of any of such recommendations.\n(8) The Commission shall, while investigating any matter referred to in sub-clause (a) or inquiring into any complaint referred to in sub-clause (b) of clause (5), have all the powers of a civil court trying a suit and in particular in respect of the following matters, namely :—\n(a) summoning and enforcing the attendance of any person from any part of India and examining him on oath;\n(b) requiring the discovery and production of any document;\n(c) receiving evidence on affidavits;\n(d) requisitioning any public record or copy thereof from any court or office;\n(e) issuing commissions for the examination of witnesses and documents;\n(f) any other matter which the President may by rule, determine.\n(9) The Union and every State Government shall consult the Commission on all major policy matters affecting the socially and educationally backward classes:\nProvided that nothing in this clause shall apply for the purposes of clause (3) of article 342A.",
+      "reason": "Article absent from the open dataset (inserted by the Constitution (One Hundred and Second Amendment) Act, 2018)",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "342A",
+      "text": "(1) The President may with respect to any State or Union territory, and where it is a State, after consultation with the Governor thereof, by public notification, specify the socially and educationally backward classes in the Central List which shall for the purposes of  the Central Government be deemed to be socially and educationally backward classes in relation to that State or Union territory, as the case may be.\n(2) Parliament may by law include in or exclude from the Central List of socially and educationally backward classes specified in a notification issued under clause (1) any socially and educationally backward class, but save as aforesaid a notification issued under the said clause shall not be varied by any subsequent notification.\nExplanation.—For the purposes of clauses (1) and (2), the expression “Central List” means the list of socially and educationally  backward classes prepared and maintained by and for the Central Government.\n(3) Notwithstanding any contained in clauses (1) and (2), every State or Union territory may, by law, prepare and maintain, for its own purposes, a list of socially and educationally backward classes, entries in which may be different from the Central List.",
+      "reason": "Article absent from the open dataset (inserted by the Constitution (One Hundred and Second Amendment) Act, 2018)",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "371J",
+      "text": "\n(1) The President may, by order made with respect to the State of Karnataka, provide for any special responsibility of the Governor for—\n(a) establishment of a separate development board for Hyderabad-Karnataka region with the provision that a report on the working of the board will be placed each year before the State Legislative Assembly;\n(b) equitable allocation of funds for developmental expenditure over the said region, subject  to the requirements of the State as a whole; and\n(c) equitable opportunities and facilities for the people belonging to the said region, in matters of public employment, education and vocational training, subject to the requirements of the State as a whole.\n(2) An order made under sub-clause (c) of clause (1) may provide for—\n(a) reservation of a proportion of  seats educational and vocational training institutions in the Hyderabad-Karnataka region for students who belong to that region by birth or by domicile; and\n(b) identification of posts or classes of posts under the State Government and in any body or organisation under the control of the State Government in the Hyderabad-Karnataka region and reservation of a proportion of such posts for persons who belong to that region by birth or by domicile and for appointment thereto by direct recruitment or by promotion or in any other manner as may be specified in the order.",
+      "reason": "Article absent from the open dataset (inserted by the Constitution (Ninety-eighth Amendment) Act, 2012)",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "replace",
+      "number": "45",
+      "text": "The State shall endeavour to provide early childhood care and education for all children until they complete the age of six years.",
+      "reason": "Dataset has the pre-2002 text; Article 45 was substituted by the Constitution (Eighty-sixth Amendment) Act, 2002",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "replace",
+      "number": "231",
+      "text": "(1) Notwithstanding anything contained in the preceding provisions of this Chapter, Parliament may by law establish a common High Court for two or more States or for two or more States and a Union territory.\n(2) In relation to any such High Court,—\n(a) ***\n(b) the reference in article 227 to the Governor shall, in relation to any rules, forms or tables for subordinate courts, be construed as a reference to the Governor of the State in which the subordinate courts are situate; and\n(c) the references in articles 219 and 229 to the State shall be construed as a reference to the State in which the High Court has its principal seat:\nProvided that if such principal seat is in a Union territory, the references in articles 219 and 229 to the Governor, Public Service Commission, Legislature and Consolidated Fund of the State shall be construed respectively as references to the President, Union Public Service Commission, Parliament and Consolidated Fund of India.",
+      "reason": "Dataset has the pre-1956 clause (2)(a) text; clause (2)(a) was omitted by the Constitution (Seventh Amendment) Act, 1956",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "replace",
+      "number": "268",
+      "text": "(1) Such stamp duties *** as are mentioned in the Union List shall be levied by the Government of India but shall be collected—\n(a) in the case where such duties are leviable within any Union territory, by the Government of India, and\n(b) in other cases, by the States within which such duties are respectively leviable.\n(2) The proceeds in any financial year of any such duty leviable within any State shall not form part of the Consolidated Fund of India, but shall be assigned to that State.",
+      "reason": "Dataset has the pre-2016 text; the words on excise duties on medicinal and toilet preparations were omitted by the Constitution (One Hundred and First Amendment) Act, 2016",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "replace",
+      "number": "286",
+      "text": "(1) No law of a State shall impose, or authorise the imposition of, a tax on the supply of goods or of services or both, where such supply takes place—\n(a) outside the State; or\n(b) in the course of the import of the goods or services or both into, or export of the goods or services or both out of, the territory of India.\n(2) Parliament may by law formulate principles for determining when a supply of goods or of services or both in any of the ways mentioned in clause (1).\n(3) ***",
+      "reason": "Dataset has the pre-2016 text; Article 286 was substituted by the Constitution (One Hundred and First Amendment) Act, 2016",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "2A",
+      "text": "[Sikkim to be associated with the Union.] Omitted by the Constitution (Thirty-sixth Amendment) Act, 1975, s. 5 (w.e.f. 26-4-1975).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "131A",
+      "text": "[Exclusive jurisdiction of the Supreme Court in regard to questions as to constitutional validity of Central laws.] Omitted by the Constitution (Forty-third Amendment) Act, 1977, s. 4 (w.e.f. 13-4-1978).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "144A",
+      "text": "[Special provisions as to disposal of questions relating to constitutional validity of laws.] Omitted by the Constitution (Forty-third Amendment) Act, 1977, s. 5 (w.e.f. 13-4-1978).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "226A",
+      "text": "[Constitutional validity of Central laws not to be considered in proceedings under article 226.] Omitted by the Constitution (Forty-third Amendment) Act, 1977, s. 8 (w.e.f. 13-4-1978).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "228A",
+      "text": "[Special provisions as to disposal of questions relating to constitutional validity of State laws.] Omitted by the Constitution (Forty-third Amendment) Act, 1977, s. 10 (w.e.f. 13-4-1978).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "242",
+      "text": "[Coorg.] Omitted by the Constitution (Seventh Amendment) Act, 1956, s. 29 and Sch. (w.e.f. 1-11-1956).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "257A",
+      "text": "[Assistance to States by deployment of armed forces or other forces of the Union.] Omitted by the Constitution (Forty-fourth Amendment) Act, 1978, s. 33 (w.e.f. 20-6-1979).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "259",
+      "text": "[Armed Forces in States in Part B of the First Schedule.] Omitted by the Constitution (Seventh Amendment) Act, 1956, s. 29 and Sch. (w.e.f. 1-11-1956).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "272",
+      "text": "[Taxes which are levied and collected by the Union and may be distributed between the Union and the States.] Omitted by the Constitution (Eightieth Amendment) Act, 2000, s. 4 (w.e.f. 9-6-2000).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "278",
+      "text": "[Agreement with States in Part B of the First Schedule with regard to certain financial matters.] Omitted by the Constitution (Seventh Amendment) Act, 1956, s. 29 and Sch. (w.e.f. 1-11-1956).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "291",
+      "text": "[Privy purse sums of Rulers.] Omitted by the Constitution (Twenty-sixth Amendment) Act, 1971, s. 2 (w.e.f. 28-12-1971).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "306",
+      "text": "[Power of certain States in Part B of the First Schedule to impose restrictions on trade and commerce.] Omitted by the Constitution (Seventh Amendment) Act, 1956, s. 29 and Sch. (w.e.f. 1-11-1956).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "314",
+      "text": "[Provision for protection of existing officers of certain services.] Omitted by the Constitution (Twenty-eighth Amendment) Act, 1972, s. 3 (w.e.f. 29-8-1972).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "329A",
+      "text": "[Special provision as to elections to Parliament in the case of Prime Minister and Speaker.] Omitted by the Constitution (Forty-fourth Amendment) Act, 1978, s. 36 (w.e.f. 20-6-1979).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "359A",
+      "text": "[Application of this Part to the State of Punjab.] Omitted by the Constitution (Sixty-third Amendment) Act, 1989, s. 3 (w.e.f. 6-1-1990).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "362",
+      "text": "[Rights and privileges of Rulers of Indian States.] Omitted by the Constitution (Twenty-sixth Amendment) Act, 1971, s. 2 (w.e.f. 28-12-1971).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "379",
+      "text": "[Provisions as to provisional Parliament and the Speaker and Deputy Speaker thereof.] Omitted by the Constitution (Seventh Amendment) Act, 1956, s. 29 and Sch. (w.e.f. 1-11-1956).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "380",
+      "text": "[Provision as to President.] Omitted by the Constitution (Seventh Amendment) Act, 1956, s. 29 and Sch. (w.e.f. 1-11-1956).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "381",
+      "text": "[Council of Ministers of the President.] Omitted by the Constitution (Seventh Amendment) Act, 1956, s. 29 and Sch. (w.e.f. 1-11-1956).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "382",
+      "text": "[Provisions as to provisional Legislatures for States in Part A of the First Schedule.] Omitted by the Constitution (Seventh Amendment) Act, 1956, s. 29 and Sch. (w.e.f. 1-11-1956).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "383",
+      "text": "[Provision as to Governors of Provinces.] Omitted by the Constitution (Seventh Amendment) Act, 1956, s. 29 and Sch. (w.e.f. 1-11-1956).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "384",
+      "text": "[Council of Ministers of the Governors.] Omitted by the Constitution (Seventh Amendment) Act, 1956, s. 29 and Sch. (w.e.f. 1-11-1956).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "385",
+      "text": "[Provision as to provisional Legislatures in States in Part B of the First Schedule.] Omitted by the Constitution (Seventh Amendment) Act, 1956, s. 29 and Sch. (w.e.f. 1-11-1956).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "386",
+      "text": "[Council of Ministers for States in Part B of the First Schedule.] Omitted by the Constitution (Seventh Amendment) Act, 1956, s. 29 and Sch. (w.e.f. 1-11-1956).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "387",
+      "text": "[Special provision as to determination of population for the purposes of certain elections.] Omitted by the Constitution (Seventh Amendment) Act, 1956, s. 29 and Sch. (w.e.f. 1-11-1956).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "388",
+      "text": "[Provisions as to the filling of casual vacancies in the provisional Parliament and provisional Legislatures of the States.] Omitted by the Constitution (Seventh Amendment) Act, 1956, s. 29 and Sch. (w.e.f. 1-11-1956).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "389",
+      "text": "[Provision as to Bills pending in the Dominion Legislatures and in the Legislatures of Provinces and Indian States.] Omitted by the Constitution (Seventh Amendment) Act, 1956, s. 29 and Sch. (w.e.f. 1-11-1956).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "390",
+      "text": "[Money received or raised or expenditure incurred between the commencement of the Constitution and the 31st day of March, 1950.] Omitted by the Constitution (Seventh Amendment) Act, 1956, s. 29 and Sch. (w.e.f. 1-11-1956).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "add",
+      "number": "391",
+      "text": "[Power of the President to amend the First and Fourth Schedules in certain contingencies.] Omitted by the Constitution (Seventh Amendment) Act, 1956, s. 29 and Sch. (w.e.f. 1-11-1956).",
+      "reason": "Omitted Article absent from the open dataset; recorded so its Status is repealed rather than unknown",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "replace",
+      "number": "338",
+      "text": "(1) There shall be a Commission for the Scheduled Castes to be known as the National Commission for the Scheduled Castes.\n(2) Subject to the provisions of any law made in this behalf by Parliament, the Commission shall consist of a Chairperson, Vice-Chairperson and three other Members and the conditions of service and tenure of office of the Chairperson, Vice-Chairperson and other Members so appointed shall be such as the President may by rule determine.\n(3) The Chairperson, Vice-Chairperson and other Members of the Commission shall be appointed by the President by warrant under his hand and seal.\n(4) The Commission shall have the power to regulate its own procedure.\n(5) It shall be the duty of the Commission —\n(a) to investigate and monitor all matters relating to the safeguards provided for the Scheduled Castes under this Constitution or under any other law for the time being in force or under any order of the Government and to evaluate the working of such safeguards;\n(b) to inquire into specific complaints with respect to the deprivation of rights and safeguards of the Scheduled Castes;\n(c) to participate and advise on the planning process of socio-economic development of the Scheduled Castes and to evaluate the progress of their development under the Union and any State;\n(d) to present to the President, annually and at such other times as the Commission may deem fit, reports upon the working of those safeguards;\n(e) to make in such reports recommendations as to the measures that should be taken by the Union or any State for the effective implementation of those safeguards and other measures for the protection, welfare and socio-economic development of the Scheduled Castes; and\n(f) to discharge such other functions in relation to the protection, welfare and development and advancement of the Scheduled Castes as the President may, subject to the provisions of any law made by Parliament, by rule specify.\n(6) The President shall cause all such reports to be laid before each House of Parliament along with a memorandum explaining the action taken or proposed to be taken on the recommendations relating to the Union and the reasons for the non-acceptance, if any, of any of such recommendations.\n(7) Where any such report, or any part thereof, relates to any matter with which any State Government is concerned, a copy of such report shall be forwarded to the Governor of the State who shall cause it to be laid before the Legislature of the State along with a memorandum explaining the action taken or proposed to be taken on the recommendations relating to the State and the reasons for the non-acceptance, if any, of any of such recommendations.\n(8) The Commission shall, while investigating any matter referred to in sub-clause (a) or inquiring into any complaint referred to in sub-clause (b) of clause (5), have all the powers of a civil court trying a suit and in particular in respect of the following matters, namely :—\n(a) summoning and enforcing the attendance of any person from any part of India and examining him on oath;\n(b) requiring the discovery and production of any document;\n(c) receiving evidence on affidavits;\n(d) requisitioning any public record or copy thereof from any court or office;\n(e) issuing commissions for the examination of witnesses and documents;\n(f) any other matter which the President may, by rule, determine.\n(9) The Union and every State Government shall consult the Commission on all major policy matters affecting Scheduled Castes.\n(10) In this article, references to the Scheduled Castes *** shall be construed as including references *** to the Anglo-Indian community.",
+      "reason": "Dataset has the pre-2018 clause (10); words were omitted by the Constitution (One Hundred and Second Amendment) Act, 2018, s. 2",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    },
+    {
+      "op": "replace",
+      "number": "268A",
+      "text": "[Service tax levied by Union and collected and appropriated by the Union and the States.] Omitted by the Constitution (One Hundred and First Amendment) Act, 2016, s. 7 (w.e.f. 16-9-2016).",
+      "reason": "Dataset has the in-force text; Article 268A was omitted by the Constitution (One Hundred and First Amendment) Act, 2016",
+      "verified_against": "Constitution of India, Ministry of Law and Justice, as on May 2022 (India Code CDN PDF, sha256 4699ff98cece2142f96ce0dba62539e8219e658ba6b595efcb666caf2fcea26d)"
+    }
+  ],
+  "excluded_from_corpus": [
+    "124A",
+    "124B",
+    "124C",
+    "232"
+  ],
+  "accepted_differences": {
+    "124": "pre-NJAC text is the operative law",
+    "222": "pre-NJAC text is the operative law",
+    "31": "official marks omission as 'Omitted', dataset as 'Rep.'",
+    "70": "one-word wording difference in the dataset ('provisions' for 'provision')",
+    "341": "footnote markers in the official extraction"
+  }
+}
