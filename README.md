@@ -67,19 +67,31 @@ for the Gemini free tier, so a full run takes about 20 minutes and uses roughly 
 - **Answer accuracy**: a Gemini judge compares the answer with the case's reference points. Out-of-scope cases are correct only when refused, and Hindi cases only when answered in Hindi.
 - **Citation validity**: no Citation fails the Hallucinated-citation check against the Corpus.
 
-### Results (preliminary)
+### Results
 
-The only complete-enough run so far hit Gemini errors on 6 of 72 case runs; those are excluded
-from the metrics, so the figures below are indicative. A full rerun is pending, after the daily
-Gemini quota resets.
+Latest run (2026-11-17, `gemini-3.1-flash-lite`, Tavily Fallback, full Corpus of 3,501 Chunks).
+10 of 72 case runs failed on Gemini 503 "high demand" errors after retries and are excluded from the
+metrics, so the figures cover 31 cases and are indicative, not definitive.
 
 | Metric | Plain RAG | CRAG |
 |---|---|---|
-| Retrieval hit-rate | 68% | 67% |
-| Answer accuracy | 62% | 68% |
+| Retrieval hit-rate | 57% | 52% |
+| Answer accuracy | 55% | 52% |
 | Citation validity | 100% | 100% |
 
-CRAG's gain comes from poor-retrieval Queries (0% to 40% accuracy); repealed-code and
-out-of-scope cases are 100% in both modes. Several English and Hindi labour and criminal-procedure
-cases miss their expected Provision in both modes, so the next step is to inspect those
-retrieval misses and the golden set's expectations. See `backend/evaluation/report.md` for per-case detail.
+| Category (answer accuracy) | Plain RAG | CRAG |
+|---|---|---|
+| English | 64% | 54% |
+| Hindi | 20% | 20% |
+| Repealed-code | 80% | 100% |
+| Out-of-scope | 100% | 100% |
+| Poor-retrieval | 0% | 0% |
+
+Read these with care:
+
+- CRAG did **not** beat plain RAG overall in this run. Its only clear gain is on repealed-code Queries. An earlier run on `gemini-3.5-flash-lite` (6 case runs lost to errors) showed CRAG ahead on poor-retrieval Queries (0% to 40%), so the result is sensitive to the model and to Gemini availability.
+- CRAG scored 0% on poor-retrieval Queries here, and its responses were labelled `corpus`, not `fallback`. The Grader scored retrieval as good enough or the Fallback returned nothing; this has not been diagnosed yet.
+- Hindi accuracy of 20% in both modes, and the many English misses on labour and criminal-procedure cases, need a look at retrieval and at the golden set's expected Provisions before drawing conclusions.
+- Citation validity is 100% by construction: the endpoint blocks Hallucinated citations before they reach the response.
+
+Per-case detail is in `backend/evaluation/report.md`.

@@ -10,4 +10,4 @@
 - [x] One command runs the evaluation and writes a readable report
 - [x] Citation validity uses the Hallucinated-citation check from ticket 04
 - [x] The report shows plain RAG versus CRAG on every metric
-- [ ] Results are summarised in the README (preliminary numbers are in; a clean full rerun is pending the Gemini daily quota reset)
+- [ ] Results are summarised in the README (results are in, with caveats noted there)
