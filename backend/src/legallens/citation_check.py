@@ -16,7 +16,9 @@ class CitationCheckResult(BaseModel):
         return not self.hallucinated
 
 
-def check_citations(citations: list[ProvisionRef], *, corpus: Corpus) -> CitationCheckResult:
+def check_citations(
+    citations: list[ProvisionRef], *, corpus: Corpus
+) -> CitationCheckResult:
     """Verify every cited Provision is present in the Corpus.
 
     Reused by the evaluation harness (ticket 11) to report citation validity.

@@ -25,7 +25,9 @@ class Corpus:
             return
         self._col.upsert(
             ids=[f"{p.act}|{p.number}" for p in provisions],
-            embeddings=self._embedder.embed([p.text for p in provisions], is_query=False),
+            embeddings=self._embedder.embed(
+                [p.text for p in provisions], is_query=False
+            ),
             documents=[p.text for p in provisions],
             metadatas=[
                 {
@@ -34,6 +36,7 @@ class Corpus:
                     "number": p.number,
                     "status": p.status,
                     "superseded_by": p.superseded_by or "",
+                    "supersedes": p.supersedes or "",
                 }
                 for p in provisions
             ],
@@ -51,6 +54,7 @@ class Corpus:
             status=m["status"],
             text=res["documents"][0],
             superseded_by=m["superseded_by"] or None,
+            supersedes=m.get("supersedes") or None,
         )
 
     def search(self, query: str, k: int = 5) -> list[Provision]:
@@ -68,6 +72,7 @@ class Corpus:
                 status=m["status"],
                 text=doc,
                 superseded_by=m["superseded_by"] or None,
+                supersedes=m.get("supersedes") or None,
             )
             for doc, m in zip(res["documents"][0], res["metadatas"][0])
         ]

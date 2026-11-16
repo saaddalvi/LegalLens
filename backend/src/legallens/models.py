@@ -15,7 +15,9 @@ class Provision(BaseModel):
     number: str
     status: Status
     text: str
-    superseded_by: str | None = None
+    # References are "<Act> <number>", "; "-separated when several (see refs.py).
+    superseded_by: str | None = None  # set on a repealed Provision
+    supersedes: str | None = None  # set on an in-force Provision: its old equivalent
 
 
 class Citation(BaseModel):
@@ -25,6 +27,7 @@ class Citation(BaseModel):
     status: Status
     text: str  # verbatim English Provision text, always taken from the Corpus
     superseded_by: str | None = None
+    supersedes: str | None = None
 
 
 class FallbackSource(BaseModel):

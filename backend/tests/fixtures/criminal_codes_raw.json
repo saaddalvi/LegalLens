@@ -1,0 +1,30 @@
+{
+  "ipc": [
+    {"section": "302", "chapter": "Chapter XVI", "title": "Punishment for murder", "text": "Whoever commits murder shall be punished with death, or imprisonment for life, and shall also be liable to fine."},
+    {"section": "376", "chapter": "Chapter XVI", "title": "Punishment for rape", "text": "Whoever commits rape shall be punished with rigorous imprisonment of  either description for a term which shall not be less than ten years."},
+    {"section": "498A", "chapter": "Chapter XXA", "title": "Cruelty by husband or relatives", "text": "Whoever, being the husband or the relative of the husband of a woman, subjects such woman to cruelty shall be punished with imprisonment for a term which may extend to three years and shall also be liable to fine."},
+    {"section": "420", "chapter": "Chapter XVII", "title": "Cheating", "text": "Whoever cheats and thereby dishonestly induces the person deceived to deliver any property shall be punished with imprisonment for a term which may extend to seven years."}
+  ],
+  "crpc": [
+    {"section": "154", "chapter": "Chapter XII", "title": "Information in cognizable cases", "text": "Every information relating to the commission of a cognizable offence, if given orally to an officer in charge of a police station, shall be reduced to writing by him."},
+    {"section": "41A", "chapter": "Chapter V", "title": "Notice of appearance before police officer", "text": "The police officer shall, in all cases where the arrest of a person is not required, issue a notice directing the person to appear before him."}
+  ],
+  "iea": [
+    {"section": "65B", "chapter": "Part II", "title": "Admissibility of electronic records", "text": "Any information contained in an electronic record which is printed on a paper shall be deemed to be also a document."},
+    {"section": "3", "chapter": "Part I", "title": "Interpretation clause", "text": "In this Act the following words and expressions are used in the following senses."}
+  ],
+  "bns": [
+    {"section": "103", "chapter": "Chapter VI", "title": "Punishment for murder", "text": "Whoever commits murder shall be punished with death or imprisonment for life, and shall also be liable to fine."},
+    {"section": "64", "chapter": "Chapter V", "title": "Punishment for rape", "text": "Whoever commits rape shall be punished with rigorous imprisonment of either description for a term which shall not be less than ten years."},
+    {"section": "318", "chapter": "Chapter XVII", "title": "Cheating", "text": "Whoever cheats and thereby dishonestly induces the person deceived to deliver any property shall be punished with imprisonment for a term which may extend to seven years."},
+    {"section": "85", "chapter": "Chapter V", "title": "Husband or relative of husband of a woman subjecting her to cruelty", "text": "Whoever, being the husband or the relative of the husband of a woman, subjects such woman to cruelty shall be punished with imprisonment for a term which may extend to three years and shall also be liable to fine."}
+  ],
+  "bnss": [
+    {"section": "173", "chapter": "Chapter XIII", "title": "Information in cognizable cases", "text": "Every information relating to the commission of a cognizable offence, given orally to an officer in charge of a police station, shall be reduced to writing by him."},
+    {"section": "35", "chapter": "Chapter V", "title": "When police may arrest without warrant", "text": "Any police officer may without an order from a Magistrate and without a warrant, arrest any person who commits a cognizable offence in his presence."}
+  ],
+  "bsa": [
+    {"section": "63", "chapter": "Chapter V", "title": "Admissibility of electronic records", "text": "Any information contained in an electronic record which is printed on paper shall be deemed to be also a document."},
+    {"section": "2", "chapter": "Chapter I", "title": "Definitions", "text": "In this Adhiniyam, unless the context otherwise requires, the following expressions have the meanings assigned."}
+  ]
+}

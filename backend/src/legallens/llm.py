@@ -63,6 +63,9 @@ Provisions by Act name and number exactly as listed, and do not translate the Ac
 Use plain language. Cite only Provisions listed below, by exact Act name and number; never
 cite web sources as Provisions. If the material does not answer the question, say so and
 cite nothing. Do not give personal advice.
+Provisions marked "repealed" are no longer law since 1 July 2024: say so, point to the
+Provision that replaced them, and prefer citing the in-force Provision. When an in-force
+Provision lists the old Provision it replaces, mention that old equivalent.
 
 Provisions:
 {provisions}

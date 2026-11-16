@@ -20,5 +20,7 @@ class E5Embedder:
 
             self._model = SentenceTransformer(self._model_name)
         prefix = "query: " if is_query else "passage: "
-        vecs = self._model.encode([prefix + t for t in texts], normalize_embeddings=True)
+        vecs = self._model.encode(
+            [prefix + t for t in texts], normalize_embeddings=True
+        )
         return vecs.tolist()

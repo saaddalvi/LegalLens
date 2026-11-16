@@ -4,11 +4,15 @@
 
 **Blocked by:** 03
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] Ingestion tests on fixture text for each of the six Acts
-- [ ] Repealed-to-superseding mapping is stored and tested on known examples
-- [ ] Endpoint test: a Query citing an old IPC section surfaces the BNS Superseding provision
-- [ ] Endpoint test: a plain-words Query about a current offence cites the in-force Provision
-- [ ] The frontend shows Status and a repeal notice on affected Citations
-- [ ] Per-Act counts are reported and verified against India Code
+- [x] Ingestion tests on fixture text for each of the six Acts
+- [x] Repealed-to-superseding mapping is stored and tested on known examples
+- [x] Endpoint test: a Query citing an old IPC section surfaces the BNS Superseding provision
+- [x] Endpoint test: a plain-words Query about a current offence cites the in-force Provision
+- [x] The frontend shows Status and a repeal notice on affected Citations
+- [ ] Per-Act counts are reported (done, ranges provisional) and verified against India Code (open)
+
+## Comments
+
+- Real ingestion is blocked: the official Act PDFs could not be fetched (India Code returned 504; no clean open dataset exists for BNS, BNSS, BSA or the old-to-new mapping). Built on fixtures instead: parsers accept one section-record format (`section`, `chapter`, `text`), so each real source needs an adapter yielding it. Still to do: obtain the six official PDFs plus the MHA IPC-BNS, CrPC-BNSS and IEA-BSA comparison tables, write adapters, replace `tests/fixtures/criminal_code_mappings.json` (fixture only) with the real mapping in `backend/sources/`, wire them into `build_corpus.main`, and confirm the provisional count ranges in `CRIMINAL_ACTS` against India Code.

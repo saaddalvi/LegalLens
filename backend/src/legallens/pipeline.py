@@ -6,7 +6,8 @@ from .corpus import Corpus
 from .fallback import WebFallback
 from .language import Language, detect_language
 from .llm import LLM
-from .models import AskResponse, FallbackSource, Provision, TrustLabel
+from .models import AskResponse, Citation, FallbackSource, Provision, TrustLabel
+from .refs import find_references, split_refs
 
 TOP_K = 5
 
@@ -68,6 +69,41 @@ def _refusal(message: dict[Language, str], language: Language) -> AskResponse:
     )
 
 
+def _retrieve(query: str, corpus: Corpus) -> list[Provision]:
+    """Chunks for a Query: Provisions it names, then matches without a Superseding provision, then the superseded ones.
+
+    A repealed Provision brings along its Superseding provision so the answer can point
+    to current law. Search matches that have a Superseding provision rank behind those that do not.
+    """
+    named = [p for ref in find_references(query) if (p := corpus.get(*ref))]
+    found = [
+        p for p in corpus.search(query, TOP_K) if (p.act, p.number) not in _ids(named)
+    ]
+    found.sort(key=lambda p: bool(p.superseded_by))  # stable: keeps similarity order
+    chunks = named + found
+    for p in list(chunks):
+        for ref in split_refs(p.superseded_by):
+            if ref not in _ids(chunks) and (current := corpus.get(*ref)):
+                chunks.append(current)
+    return chunks
+
+
+def _ids(provisions: list[Provision]) -> set[tuple[str, str]]:
+    return {(p.act, p.number) for p in provisions}
+
+
+def _with_superseding(citations: list[Citation], corpus: Corpus) -> list[Citation]:
+    """Add the current Provision for every cited repealed one, so users see its text."""
+    out = list(citations)
+    cited = {(c.act, c.number) for c in citations}
+    for c in citations:
+        for ref in split_refs(c.superseded_by):
+            if ref not in cited and (current := corpus.get(*ref)):
+                cited.add(ref)
+                out.append(Citation(**current.model_dump()))
+    return out
+
+
 def _search_fallback(
     query: str, *, llm: LLM, fallback: WebFallback
 ) -> list[FallbackSource]:
@@ -111,7 +147,7 @@ def _answer(
         answer=gen.answer,
         answer_language=language,
         trust_label=trust_label,
-        citations=result.valid,
+        citations=_with_superseding(result.valid, corpus),
         fallback_sources=sources,
     )
 
@@ -147,7 +183,7 @@ def answer_query(
             or DEFAULT_REFORMULATION[language],
         )
 
-    provisions = corpus.search(query, TOP_K)
+    provisions = _retrieve(query, corpus)
     if not crag:
         return _answer(
             query,

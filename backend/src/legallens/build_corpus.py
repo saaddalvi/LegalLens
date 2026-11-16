@@ -13,16 +13,30 @@ from pathlib import Path
 
 from .corpus import Corpus
 from .embeddings import E5Embedder
-from .ingestion import Report, build_report, parse_constitution
+from .ingestion import (
+    Report,
+    apply_mappings,
+    build_report,
+    parse_constitution,
+    parse_criminal_code,
+)
 from .ingestion.sources import fetch_constitution, load_patches
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
 def build(
-    corpus: Corpus, constitution_records: list[dict], patches: list[dict]
+    corpus: Corpus,
+    constitution_records: list[dict],
+    patches: list[dict],
+    criminal_codes: dict[str, list[dict]] | None = None,
+    mappings: list[dict] | None = None,
 ) -> Report:
+    """`criminal_codes` maps an Act key (ipc, crpc, iea, bns, bnss, bsa) to section records."""
     provisions = parse_constitution(constitution_records, patches)
+    for key, records in (criminal_codes or {}).items():
+        provisions += parse_criminal_code(key, records)
+    provisions = apply_mappings(provisions, mappings or [])
     corpus.add(provisions)
     return build_report(provisions)
 

@@ -41,14 +41,20 @@ def create_app(
     app = FastAPI(title="LegalLens")
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(","),
+        allow_origins=os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(
+            ","
+        ),
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
     @lru_cache(maxsize=1)
     def deps() -> tuple[Corpus, LLM, WebFallback]:
-        return (corpus or default_corpus(), llm or GeminiLLM(), fallback or default_fallback())
+        return (
+            corpus or default_corpus(),
+            llm or GeminiLLM(),
+            fallback or default_fallback(),
+        )
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -61,7 +67,9 @@ def create_app(
             return answer_query(req.query, corpus=c, llm=l, fallback=f, crag=crag)
         except Exception as exc:
             logging.getLogger(__name__).exception("answer generation failed")
-            raise HTTPException(503, "The service is unavailable. Please retry shortly.") from exc
+            raise HTTPException(
+                503, "The service is unavailable. Please retry shortly."
+            ) from exc
 
     return app
 

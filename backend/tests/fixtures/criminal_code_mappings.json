@@ -1,0 +1,12 @@
+{
+  "note": "FIXTURE ONLY. The real mapping comes from the MHA comparison tables.",
+  "mappings": [
+    {"old_act": "Indian Penal Code", "old_number": "302", "new_act": "Bharatiya Nyaya Sanhita", "new_number": "103"},
+    {"old_act": "Indian Penal Code", "old_number": "376", "new_act": "Bharatiya Nyaya Sanhita", "new_number": "64"},
+    {"old_act": "Indian Penal Code", "old_number": "420", "new_act": "Bharatiya Nyaya Sanhita", "new_number": "318"},
+    {"old_act": "Indian Penal Code", "old_number": "498A", "new_act": "Bharatiya Nyaya Sanhita", "new_number": "85"},
+    {"old_act": "Code of Criminal Procedure", "old_number": "154", "new_act": "Bharatiya Nagarik Suraksha Sanhita", "new_number": "173"},
+    {"old_act": "Code of Criminal Procedure", "old_number": "41A", "new_act": "Bharatiya Nagarik Suraksha Sanhita", "new_number": "35"},
+    {"old_act": "Indian Evidence Act", "old_number": "65B", "new_act": "Bharatiya Sakshya Adhiniyam", "new_number": "63"}
+  ]
+}

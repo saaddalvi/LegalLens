@@ -11,6 +11,7 @@ type Citation = {
   status: "in_force" | "repealed";
   text: string;
   superseded_by: string | null;
+  supersedes: string | null;
 };
 
 type FallbackSource = { title: string; url: string; snippet: string };
@@ -138,9 +139,20 @@ export default function Home() {
                       ({c.chapter}, {c.status === "repealed" ? "repealed" : "in force"})
                     </span>
                   </h3>
-                  {c.superseded_by && (
-                    <p className="text-sm text-red-700">
-                      Repealed. See {c.superseded_by}.
+                  {c.status === "repealed" && (
+                    <p
+                      role="note"
+                      className="mt-1 rounded bg-red-50 p-2 text-sm text-red-800"
+                    >
+                      This Provision has been repealed
+                      {c.superseded_by
+                        ? `. The current law is ${c.superseded_by.split("; ").join(" and ")}.`
+                        : "."}
+                    </p>
+                  )}
+                  {c.supersedes && (
+                    <p className="mt-1 text-sm text-zinc-600">
+                      Replaces {c.supersedes.split("; ").join(" and ")}.
                     </p>
                   )}
                   <blockquote lang="en" className="mt-1 text-sm">
