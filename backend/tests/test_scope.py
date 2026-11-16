@@ -16,9 +16,9 @@ class ScopedLLM(FakeLLM):
     def classify(self, query):
         return self.decision
 
-    def generate(self, query, provisions, sources=()):
+    def generate(self, query, provisions, sources=(), language="en"):
         self.generated = True
-        return super().generate(query, provisions, sources)
+        return super().generate(query, provisions, sources, language)
 
 
 def client(tmp_path, llm):

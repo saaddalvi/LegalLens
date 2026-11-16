@@ -99,7 +99,7 @@ export default function Home() {
           className="flex flex-col gap-2 rounded border border-red-300 bg-red-50 p-4 text-red-900"
         >
           <h2 className="font-semibold">LegalLens can&apos;t help with that question</h2>
-          <p>{result.refusal_reason ?? result.answer}</p>
+          <p lang={result.answer_language}>{result.refusal_reason ?? result.answer}</p>
           {result.suggested_reformulation && (
             <p>
               <span className="font-medium">Try asking instead: </span>
@@ -120,7 +120,9 @@ export default function Home() {
           <span className="self-start rounded-full bg-zinc-200 px-3 py-1 text-xs text-black">
             {TRUST_TEXT[result.trust_label]}
           </span>
-          <p className="whitespace-pre-wrap">{result.answer}</p>
+          <p lang={result.answer_language} className="whitespace-pre-wrap">
+            {result.answer}
+          </p>
 
           {result.citations.length > 0 && (
             <div className="flex flex-col gap-2">

@@ -94,7 +94,7 @@ def test_plain_rag_mode_never_grades_or_falls_back(tmp_path):
 
 def test_incorrect_verdict_never_returns_citations_even_if_model_cites(tmp_path):
     class CitingLLM(FakeLLM):
-        def generate(self, query, provisions, sources=()):
+        def generate(self, query, provisions, sources=(), language="en"):
             from legallens.llm import Generation, ProvisionRef
 
             return Generation(

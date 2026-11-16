@@ -3,6 +3,7 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel
 
+from .language import LANGUAGE_NAMES, Language
 from .models import FallbackSource, Provision
 
 
@@ -39,7 +40,10 @@ class LLM(Protocol):
         query: str,
         provisions: list[Provision],
         sources: list[FallbackSource] = ...,
-    ) -> Generation: ...
+        language: Language = ...,
+    ) -> Generation:
+        """Answer in `language` ("en" or "hi"); Citations still refer to English Provisions."""
+        ...
 
     def classify(self, query: str) -> ScopeDecision:
         """Whether the Query is in scope, or an Out-of-scope query to refuse."""
@@ -55,8 +59,9 @@ class LLM(Protocol):
 
 
 _PROMPT = """You answer laypeople's questions about Indian law using ONLY the Provisions and
-web sources below. Reply in the language of the question (language code "en" or "hi").
-Use plain language. Cite only Provisions listed below, by exact Act name and number; never
+web sources below. Write the answer in {language_name}. Provision text is English: refer to
+Provisions by Act name and number exactly as listed, and do not translate the Act names.
+Set the language field to "{language}". Use plain language. Cite only Provisions listed below, by exact Act name and number; never
 cite web sources as Provisions. If the material does not answer the question, say so and
 cite nothing. Do not give personal advice.
 
@@ -100,7 +105,9 @@ class GeminiLLM:
     """Gemini behind the LLM interface. Reads GOOGLE_API_KEY from the environment."""
 
     def __init__(self, model: str | None = None):
-        self._model_name = model or os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
+        self._model_name = model or os.environ.get(
+            "GEMINI_MODEL", "gemini-3.5-flash-lite"
+        )
         self._model = None
 
     def _structured(self, schema):
@@ -114,21 +121,33 @@ class GeminiLLM:
 
     @staticmethod
     def _format(provisions: list[Provision]) -> str:
-        return "\n\n".join(f"[{p.act} {p.number}] {p.text}" for p in provisions) or "(none)"
+        return (
+            "\n\n".join(f"[{p.act} {p.number}] {p.text}" for p in provisions)
+            or "(none)"
+        )
 
     def generate(
         self,
         query: str,
         provisions: list[Provision],
         sources: list[FallbackSource] = (),
+        language: Language = "en",
     ) -> Generation:
         web = ""
         if sources:
             web = _WEB_NOTE.format(
-                sources="\n".join(f"- {s.title} ({s.url}): {s.snippet}" for s in sources)
+                sources="\n".join(
+                    f"- {s.title} ({s.url}): {s.snippet}" for s in sources
+                )
             )
         return self._structured(Generation).invoke(
-            _PROMPT.format(provisions=self._format(provisions), web=web, query=query)
+            _PROMPT.format(
+                provisions=self._format(provisions),
+                web=web,
+                query=query,
+                language=language,
+                language_name=LANGUAGE_NAMES[language],
+            )
         )
 
     def classify(self, query: str) -> ScopeDecision:
@@ -143,4 +162,8 @@ class GeminiLLM:
         return min(1.0, max(0.0, out.score))
 
     def rewrite(self, query: str) -> str:
-        return self._structured(RewrittenQuery).invoke(_REWRITE_PROMPT.format(query=query)).query
+        return (
+            self._structured(RewrittenQuery)
+            .invoke(_REWRITE_PROMPT.format(query=query))
+            .query
+        )

@@ -63,7 +63,7 @@ class FakeLLM(GradingStub):
         self.seen: list[Provision] = []
         self.sources_seen = ()
 
-    def generate(self, query, provisions, sources=()):
+    def generate(self, query, provisions, sources=(), language="en"):
         self.seen = provisions
         self.sources_seen = sources
         if not provisions:
@@ -87,7 +87,7 @@ class HallucinatingThenValidLLM(GradingStub):
     def __init__(self):
         self.calls = 0
 
-    def generate(self, query, provisions, sources=()):
+    def generate(self, query, provisions, sources=(), language="en"):
         self.calls += 1
         if self.calls == 1:
             return Generation(
@@ -109,7 +109,7 @@ class AlwaysHallucinatingLLM(GradingStub):
     def __init__(self):
         self.calls = 0
 
-    def generate(self, query, provisions, sources=()):
+    def generate(self, query, provisions, sources=(), language="en"):
         self.calls += 1
         return Generation(
             answer="Ghost citation answer.",
@@ -179,7 +179,7 @@ def test_hallucinated_citation_after_regeneration_is_blocked(tmp_path):
 
 def test_llm_failure_returns_503(tmp_path):
     class BrokenLLM(GradingStub):
-        def generate(self, query, provisions, sources=()):
+        def generate(self, query, provisions, sources=(), language="en"):
             raise RuntimeError("quota")
 
     corpus = Corpus(tmp_path / "chroma", FakeEmbedder())

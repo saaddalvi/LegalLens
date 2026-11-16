@@ -4,10 +4,10 @@
 
 **Blocked by:** 03
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Endpoint test: a Hindi Query about a constitutional right retrieves the expected Article
-- [ ] Endpoint test: the answer language is Hindi and the Citation text is the unchanged English Provision
-- [ ] Endpoint test: an English Query still gets an English answer
-- [ ] The response reports the detected answer language
-- [ ] The frontend renders Hindi text correctly
+- [x] Endpoint test: a Hindi Query about a constitutional right retrieves the expected Article
+- [x] Endpoint test: the answer language is Hindi and the Citation text is the unchanged English Provision
+- [x] Endpoint test: an English Query still gets an English answer
+- [x] The response reports the detected answer language
+- [x] The frontend renders Hindi text correctly
