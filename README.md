@@ -39,11 +39,11 @@ cd backend && python scripts/verify_constitution.py path/to/official.pdf
 ## Run locally
 
 Secrets come from environment variables only. Copy `backend/.env.example` to `backend/.env`
-and set `GOOGLE_API_KEY` (optional: `GEMINI_MODEL`, `CORS_ORIGINS`, `CHROMA_PATH`).
+and set `GOOGLE_API_KEY` and `WEB_SEARCH_API_KEY` (a Tavily key for the web Fallback; optional: `GEMINI_MODEL`, `CORS_ORIGINS`, `CHROMA_PATH`).
 
 ```bash
 # backend (http://localhost:8000); uses the built Corpus; seeds a small fixture Corpus on first question if none is built
-cd backend && uvicorn legallens.main:app --env-file .env
+cd backend && .venv/bin/uvicorn legallens.main:app --env-file .env
 
 # frontend (http://localhost:3000); set NEXT_PUBLIC_API_URL if the backend is elsewhere
 cd frontend && npm install && npm run dev

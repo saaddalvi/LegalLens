@@ -77,14 +77,16 @@ class GeminiLLM:
     """Gemini behind the LLM interface. Reads GOOGLE_API_KEY from the environment."""
 
     def __init__(self, model: str | None = None):
-        self._model_name = model or os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
+        self._model_name = model or os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
         self._model = None
 
     def _structured(self, schema):
         if self._model is None:
             from langchain_google_genai import ChatGoogleGenerativeAI
 
-            self._model = ChatGoogleGenerativeAI(model=self._model_name, temperature=0)
+            self._model = ChatGoogleGenerativeAI(
+                model=self._model_name, temperature=0, timeout=30, max_retries=1
+            )
         return self._model.with_structured_output(schema)
 
     @staticmethod
