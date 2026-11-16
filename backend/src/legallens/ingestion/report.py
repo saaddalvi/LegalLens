@@ -1,4 +1,5 @@
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from ..models import Provision
@@ -22,7 +23,7 @@ class Report:
     warnings: list[str] = field(default_factory=list)
 
 
-def build_report(provisions: list[Provision]) -> Report:
+def build_report(provisions: list[Provision], required: Sequence[str] = ()) -> Report:
     counts = dict(Counter(p.act for p in provisions))
     warnings: list[str] = []
     for act, n in counts.items():
@@ -32,6 +33,10 @@ def build_report(provisions: list[Provision]) -> Report:
                 warnings.append(f"{act}: {n} Chunks, expected {lo}-{hi}")
         else:
             warnings.append(f"{act}: {n} Chunks but no expected range is configured")
+    for act in required:  # a build that silently lost a whole Act is wrong
+        if act not in counts:
+            lo, hi = EXPECTED_COUNTS[act]
+            warnings.append(f"{act}: no Chunks, expected {lo}-{hi}")
     seen = Counter((p.act, p.number) for p in provisions)
     for (act, number), n in seen.items():
         if n > 1:

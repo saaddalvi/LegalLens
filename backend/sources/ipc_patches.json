@@ -1,0 +1,76 @@
+{
+  "source": "Indian Kanoon IPC (ipc_ik.pdf), checked against the India Code copy up to 2012 (ipc_ic_2012.pdf) and an unattributed 2016 copy (ipc_unknown_2016.pdf). A fix is recorded only where those copies agree with each other and with the official text, on a section neither amended after 2012 nor otherwise doubtful.",
+  "replacements": [
+    {
+      "section": "19",
+      "find": "under 21 Regulation",
+      "replace": "under Regulation",
+      "reason": "21 is a footnote number of the Kanoon page; neither other copy has it."
+    },
+    {
+      "section": "20",
+      "find": "under 22 Regulation",
+      "replace": "under Regulation",
+      "reason": "22 is a footnote number of the Kanoon page; neither other copy has it."
+    },
+    {
+      "section": "121A",
+      "find": "shall make place",
+      "replace": "shall take place",
+      "reason": "Kanoon typo; both other copies read 'take place'."
+    },
+    {
+      "section": "295",
+      "find": "shall be punishable with imprisonment",
+      "replace": "shall be punished with imprisonment",
+      "reason": "Kanoon reads 'punishable'; both other copies read 'punished'."
+    },
+    {
+      "section": "297",
+      "find": "place of sepulchre",
+      "replace": "place of sepulture",
+      "reason": "Kanoon spelling; both other copies read 'sepulture'."
+    },
+    {
+      "section": "297",
+      "find": "set apart from the performance",
+      "replace": "set apart for the performance",
+      "reason": "The India Code copy reads 'for'; the 2016 copy shares Kanoon's 'from'."
+    },
+    {
+      "section": "309",
+      "find": "shall he punished",
+      "replace": "shall be punished",
+      "reason": "Kanoon typo; both other copies read 'be'."
+    },
+    {
+      "section": "477",
+      "find": "in respect of such documents,",
+      "replace": "in respect of such document,",
+      "reason": "Kanoon reads the plural; both other copies read 'such document'."
+    },
+    {
+      "section": "499",
+      "find": "may be substituted to the judgment",
+      "replace": "may be submitted to the judgment",
+      "reason": "Kanoon reads 'substituted'; both other copies read 'submitted'."
+    }
+  ],
+  "texts": [
+    {
+      "section": "59",
+      "text": "Rep. by the Code of Criminal Procedure (Amendment) Act, 1955 (26 of 1955), s. 117 and the Sch. (w.e.f. 1-1-1956).",
+      "reason": "Kanoon prints the heading of repealed section 59 with no repeal note; wording from the India Code copy, laid out as Kanoon does section 58."
+    }
+  ],
+  "insertions": [
+    {
+      "section": "333",
+      "after": "332",
+      "chapter": "Chapter XVI",
+      "title": "Voluntarily causing grievous hurt to deter public servant from his duty.",
+      "text": "Whoever voluntarily causes grievous hurt to any person being a public servant in the discharge of his duty as such public servant, or with intent to prevent or deter that person or any other public servant from discharging his duty as such public servant, or in consequence of anything done or attempted to be done by that person in the lawful discharge of his duty as such public servant, shall be punished with imprisonment of either description for a term which may extend to ten years, and shall also be liable to fine.",
+      "reason": "Kanoon omits section 333 and prints 334 twice. Text from the India Code copy; the 2016 copy is word for word the same."
+    }
+  ]
+}

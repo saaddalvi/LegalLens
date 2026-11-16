@@ -128,13 +128,16 @@ def parse_corresponding_table(
 
 
 _BSA_OLD_TITLE = "INDIAN EVIDENCE ACT, 1872"
+_BNS_OLD_TITLE = "Indian Penal Code, 1860"
 _BSA_TOKEN = re.compile(
-    r"(?P<deleted>DELETED\s+(?P<dn>\d+[A-Z]{0,3})\.)"  # an Evidence Act section with no BSA one
+    r"(?P<deleted>DELETED\s+(?P<dn>\d+[A-Z]{0,3})[.-])"  # an old section with no new one
     r"|(?P<repealed>(?P<rn>\d+)\.\s+Repealed)"
     r"|(?P<proviso>\d+\.\s+Proviso(?:\s+\d(?!\d))?)"  # a BSA proviso row: the section's row goes on
+    r"|(?P<newsub>New\s+Sub-?\s*Section)"  # a sub-section row with no old counterpart
     r"|(?P<newsec>New\s+Section)"
+    r"|(?P<oldsub>(?<![\w.(])(?P<on>\d+[A-Z]{0,3})\s+\(\d+\))"  # 228A (3): an old sub-section
     r"|(?P<sub>(?<![\w.])\d+\(\d+[a-z]?\))"  # 23(1), 146(3): sub-sections of the BSA row
-    r"|(?P<head>(?<![\w(])(?P<hn>\d+[A-Z]{0,3})\.\s+(?=\S))",
+    r"|(?P<head>(?<![\w(])(?P<hn>\d+-?[A-Z]{0,3})\.(?:\s+(?=\S)|(?=[A-Z][a-z])))",  # 171-I. is 171I; 216A.Penalty
     re.IGNORECASE,
 )
 
@@ -142,9 +145,23 @@ _BSA_TOKEN = re.compile(
 def parse_bsa_table(
     pages: list[str], new_act: str, old_act: str, first: int = 1
 ) -> MappingTable:
-    """The NCRB BSA table against the Indian Evidence Act, as whole-section mappings.
+    """The NCRB BSA table against the Indian Evidence Act: see `_parse_sequential_table`."""
+    return _parse_sequential_table(pages, _BSA_OLD_TITLE, new_act, old_act, first)
 
-    The BSA's section numbers run 1..170 in order, with no lettered sections, so a numbered
+
+def parse_bns_table(
+    pages: list[str], new_act: str, old_act: str, first: int = 1
+) -> MappingTable:
+    """The NCRB BNS table against the Indian Penal Code: see `_parse_sequential_table`."""
+    return _parse_sequential_table(pages, _BNS_OLD_TITLE, new_act, old_act, first)
+
+
+def _parse_sequential_table(
+    pages: list[str], old_title: str, new_act: str, old_act: str, first: int
+) -> MappingTable:
+    """A corresponding-section table (new Act first) as whole-section mappings.
+
+    The new Act's section numbers run 1..N in order, with no lettered sections, so a numbered
     heading is the next row's BSA section only when it is exactly the next number and the
     current row already has its Evidence Act counterpart (or is a "New Section"). Any other
     heading is an Evidence Act section of the current row. That settles rows such as BSA 2,
@@ -159,7 +176,7 @@ def parse_bsa_table(
     last = first - 1
     row_closed = False  # the current row has an old section, or is a new one
     after_marker = False
-    for line in _table_lines(pages, _BSA_OLD_TITLE):
+    for line in _table_lines(pages, old_title):
         if line.startswith(("P a g e", "HomePage")):
             continue
         for m in _BSA_TOKEN.finditer(line):
@@ -169,11 +186,24 @@ def parse_bsa_table(
                 if cur is not None and not row_closed:
                     new.append(cur)
                     row_closed = True
+            elif m.group("newsub"):
+                pass  # closes a sub-section marker: whatever follows is a new heading
             elif m.group("sub") or m.group("proviso"):
+                sub_of = (
+                    int(re.match(r"\d+", m.group(0)).group())
+                    if m.group("sub")
+                    else None
+                )
+                if sub_of == last + 1 and (cur is None or row_closed):
+                    # a row whose only marker is "319(1)": the sub-section opens the section
+                    cur, last, row_closed = str(sub_of), sub_of, False
                 after_marker = True
                 continue
-            elif m.group("head"):
-                number = m.group("hn").upper()
+            elif m.group("oldsub") and m.group("on") == cur:
+                after_marker = True  # "178 (1)": a sub-section of the current row
+                continue
+            elif m.group("head") or m.group("oldsub"):
+                number = (m.group("hn") or m.group("on")).upper().replace("-", "")
                 if (
                     number.isdigit()
                     and int(number) == last + 1

@@ -7,8 +7,19 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .criminal_codes import CRIMINAL_ACTS
-from .mapping_tables import parse_bsa_table, parse_corresponding_table
-from .pdf_text import crpc_sections, gazette_sections, iea_sections, pdf_pages
+from .mapping_tables import (
+    parse_bns_table,
+    parse_bsa_table,
+    parse_corresponding_table,
+)
+from .pdf_text import (
+    crpc_sections,
+    gazette_sections,
+    iea_sections,
+    kanoon_ipc_sections,
+    pdf_pages,
+)
+from .record_patches import apply_record_patches
 
 # civictech-India/constitution-of-india, pinned so the Corpus builds reproducibly.
 DATASET_URL = (
@@ -79,6 +90,21 @@ CRIMINAL_PDFS: dict[str, PinnedPdf] = {
         "62b33659545e001223a99364447e9314d5372f1791db5cccadd87a08c267eb91",
         "Indian Evidence Act, 1872: India Code consolidated text, last updated 13-3-2020",
     ),
+    "ipc": PinnedPdf(
+        "ipc_ik.pdf",
+        "64b4e5bacc7a0c9f49f2858b160088e927e2e51f8baf001afe26c225832669a3",
+        "Indian Penal Code, 1860: Indian Kanoon print of the text as of 7 February 2022 (unofficial)",
+    ),
+    "ipc_ic_2012": PinnedPdf(
+        "ipc_ic_2012.pdf",
+        "ef8945c5d1b02904da67959e245b87bd5751ed5563d03ab0079758909f145309",
+        "Indian Penal Code, 1860: India Code text from before 2013, kept to check the Kanoon text",
+    ),
+    "ipc_unknown_2016": PinnedPdf(
+        "ipc_unknown_2016.pdf",
+        "de4e710af30ef968474a17e2e7d3d147daf2175e15c98137983eb101a46ec80e",
+        "Indian Penal Code, 1860: unattributed text from about 2016, kept to check the Kanoon text",
+    ),
     "ncrb_bns": PinnedPdf(
         "ncrb_bns.pdf",
         "a83f12a93e32c9e0b39a85f75850a448dc4682b1b44b2d6bd680165bb9931549",
@@ -111,11 +137,17 @@ def read_pinned_pdf_pages(raw_dir: Path, key: str) -> list[str]:
     return pdf_pages(path)
 
 
-def load_criminal_codes(raw_dir: Path) -> tuple[dict[str, list[dict]], list[dict]]:
-    """Section records for BNS, BNSS, BSA, CrPC and the Evidence Act, and the BNSS-CrPC and
-    BSA-IEA mappings.
+# Fixes to the Indian Kanoon IPC text, each checked against the other IPC copies.
+IPC_PATCHES = Path(__file__).resolve().parents[3] / "sources" / "ipc_patches.json"
 
-    The BNS-IPC mapping waits for the IPC.
+
+def load_criminal_codes(
+    raw_dir: Path, ipc_patches: Path = IPC_PATCHES
+) -> tuple[dict[str, list[dict]], list[dict]]:
+    """Section records for all six Acts, and the BNSS-CrPC, BSA-IEA and BNS-IPC mappings.
+
+    The IPC comes from the Indian Kanoon print, the only copy that is both complete and current,
+    with the fixes in `ipc_patches`. No copy of it is official and current.
     """
     records = {
         "bns": gazette_sections(read_pinned_pdf_pages(raw_dir, "bns")),
@@ -123,6 +155,10 @@ def load_criminal_codes(raw_dir: Path) -> tuple[dict[str, list[dict]], list[dict
         "bsa": gazette_sections(read_pinned_pdf_pages(raw_dir, "bsa")),
         "crpc": crpc_sections(read_pinned_pdf_pages(raw_dir, "crpc")),
         "iea": iea_sections(read_pinned_pdf_pages(raw_dir, "iea")),
+        "ipc": apply_record_patches(
+            kanoon_ipc_sections(read_pinned_pdf_pages(raw_dir, "ipc")),
+            json.loads(ipc_patches.read_text(encoding="utf-8")),
+        ),
     }
     table = parse_corresponding_table(
         read_pinned_pdf_pages(raw_dir, "ncrb_bnss"),
@@ -135,4 +171,9 @@ def load_criminal_codes(raw_dir: Path) -> tuple[dict[str, list[dict]], list[dict
         new_act=CRIMINAL_ACTS["bsa"].name,
         old_act=CRIMINAL_ACTS["iea"].name,
     )
-    return records, table.mappings + bsa_table.mappings
+    bns_table = parse_bns_table(
+        read_pinned_pdf_pages(raw_dir, "ncrb_bns"),
+        new_act=CRIMINAL_ACTS["bns"].name,
+        old_act=CRIMINAL_ACTS["ipc"].name,
+    )
+    return records, table.mappings + bsa_table.mappings + bns_table.mappings

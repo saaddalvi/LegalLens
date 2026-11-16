@@ -158,12 +158,17 @@ def gazette_sections(pages: list[str]) -> list[dict]:
     return [{**r, "text": r["text"].strip()} for r in records]
 
 
-def follows(prev: tuple[int, str] | None, base: int, suffix: str) -> bool:
-    """A heading counts only if it is the next section number, so list items don't start one."""
+def follows(prev: tuple[int, str] | None, base: int, suffix: str, gap: int = 1) -> bool:
+    """A heading counts only if it is the next section number, so list items don't start one.
+
+    `gap` > 1 lets a source that lost a section through: 334 may follow 332.
+    """
     if prev is None:
         return base == 1 and not suffix
     pbase, psuffix = prev
-    return (base == pbase + 1 and not suffix) or (base == pbase and suffix > psuffix)
+    return (pbase < base <= pbase + gap and not suffix) or (
+        base == pbase and suffix > psuffix
+    )
 
 
 _CRPC_HEAD = re.compile(
@@ -375,3 +380,167 @@ def _tidy_iea(text: str) -> str:
             out.append("[")
     out.append(text[pos:])
     return re.sub(r"[ \t]+", " ", "".join(out)).strip()
+
+
+# --- Indian Penal Code, from Indian Kanoon (unofficial; no current official copy exists) ---
+
+_KANOON_CHARS = str.maketrans(
+    {"□": "", "−": "", "€": "—", "‚": "“", "ƒ": "”", "„": "’"}
+)
+# a hyphenated word broken across a line (□ or −), a dash (€), quotation marks (‚ ƒ), an
+# apostrophe („). "†begging„" is a quoted word; the PDF has † for the opening mark.
+_ENUMERATOR = re.compile(
+    r"(?<![A-Za-z0-9])(\((?:\d+|[a-z]{1,4}|[A-Z])\))(?=[A-Za-z“‘])"
+)  # "(1)any" -> "(1) any"; not "2(a) of"
+_GLUED_LABEL = re.compile(
+    r"(?<=[.;:])(?=(?:Illustrations?|Explanation|Exception|Provided)\b)|(?<=[a-z,])(?=Illustrations?(?=[A-Z(]))"
+)  # "both.Illustrations", "bothIllustrationA"
+_LABEL_THEN_ITEM = re.compile(
+    r"\b(Illustrations?)(?=[A-Z(])"
+)  # "Illustrations(a)A", "IllustrationA,"
+_KANOON_FURNITURE = re.compile(r"^(?:Indian Kanoon - |The Indian Penal Code, 1860$)")
+_KANOON_PART = re.compile(r"^Part\s+\d+\s+[–—-]\s+\S")  # "Part 5 – Of Kidnapping, ..."
+_KANOON_HEAD = re.compile(r"^(\d+)([A-Z]{0,3})\.\s+(\S.*)$")
+_KANOON_CHAPTER = re.compile(r"^Chapter\s+(\d+|[IVXL]+)([A-Z]?)\s*$")
+_ROMAN = [(10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I")]
+
+
+# Words the Kanoon text layer splits at a line end, with a space or a hyphen: every case in the
+# PDF, checked against the other IPC copies. "imprison-ment" is not a compound word.
+_KANOON_SPLIT_WORDS = (
+    ("de", "scription"), ("sen", "tenced"), ("instiga", "tion"), ("commis", "sion"),
+    ("represen", "tation"), ("fabri", "cates"), ("inves", "tigation"), ("infor", "mation"),
+    ("homi", "cide"), ("impris", "onment"), ("informa", "tion"), ("mer", "chant"),
+    ("im", "prisonment"), ("reli", "gious"), ("imprison", "ment"), ("sec", "tion"),
+)  # fmt: skip
+_KANOON_SPLIT = re.compile(
+    r"\b(?:" + "|".join(f"{a}[\\s-]+{b}" for a, b in _KANOON_SPLIT_WORDS) + r")\b"
+)
+_KANOON_NOTE_DIGIT = re.compile(
+    r"(?<![\w.(\[])\d{1,2}(?=[A-Za-z]{2,}\b)(?!(?:st|nd|rd|th)\b)"
+)  # a footnote marker stuck to the next word: "1Indian coin"
+_KANOON_RUN_ON = re.compile(
+    r"\bor(?=(?:with|if|who|where|Consent|Secondly|Thirdly|Fourthly|Fifthly|Sixthly)\b)|\bof(?=Indian\b)"
+)  # "orwith", "orSecondly", "ofIndian": the space after "or"/"of" went missing
+
+
+def repair_kanoon(text: str) -> str:
+    """Undo the damage the Indian Kanoon PDF's text layer does to characters and spacing."""
+    text = re.sub(r"†(\w+)„", r"“\1”", text).translate(_KANOON_CHARS)
+    text = _KANOON_SPLIT.sub(lambda m: re.sub(r"[\s-]+", "", m.group(0)), text)
+    text = _KANOON_RUN_ON.sub(lambda m: m.group(0) + " ", text)
+    text = _KANOON_NOTE_DIGIT.sub("", text)
+    text = _GLUED_LABEL.sub(" ", text)
+    text = _LABEL_THEN_ITEM.sub(r"\1 ", text)
+    text = _ENUMERATOR.sub(r"\1 ", text)
+    return re.sub(r"\)\s{2,}", ") ", text)
+
+
+def _roman(n: int) -> str:
+    out = ""
+    for value, numeral in _ROMAN:
+        while n >= value:
+            out, n = out + numeral, n - value
+    return out
+
+
+def _kanoon_chapter(number: str, suffix: str) -> str:
+    return f"Chapter {_roman(int(number)) if number.isdigit() else number}{suffix}"
+
+
+def kanoon_ipc_sections(
+    pages: list[str], after: tuple[int, str] | None = None
+) -> list[dict]:
+    """Sections of the Indian Penal Code from the Indian Kanoon PDF text, in order.
+
+    A heading is a line "N. Title" whose N is the next section number (`after` names the
+    section before the first one, for excerpts). A title that wraps ends on a later line with
+    a dash; repealed sections are single "[Title.] Rep. by ..." lines; a few headings (376AB)
+    carry no dash at all. Page furniture and chapter titles are dropped; characters are
+    repaired by `repair_kanoon`. Each record also carries the section's `title`.
+    """
+    lines = [
+        l.strip()
+        for page in pages
+        for l in repair_kanoon(page).splitlines()
+        if l.strip() and not _KANOON_FURNITURE.match(l.strip())
+    ]
+    records: list[dict] = []
+    chapter, in_chapter_heading, prev = "", False, after
+    repeated, dropping = "", False
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        m = _KANOON_CHAPTER.match(line)
+        h = _KANOON_HEAD.match(line)
+        if m:
+            chapter, in_chapter_heading = _kanoon_chapter(*m.groups()), True
+            i += 1
+        elif _KANOON_PART.match(line):
+            i += 1  # a sub-division heading of the chapter, not statute text
+        elif h and prev and line == repeated:
+            dropping = (
+                True  # Kanoon prints some headings twice, with the body each time
+            )
+            i += 1
+        elif h and follows(prev, int(h.group(1)), h.group(2), gap=2):
+            prev, dropping = (int(h.group(1)), h.group(2)), False
+            repeated = line
+            title, text, used = _kanoon_heading(lines, i, h.group(3))
+            records.append(
+                {
+                    "section": h.group(1) + h.group(2),
+                    "chapter": chapter,
+                    "title": title,
+                    "text": text,
+                }
+            )
+            in_chapter_heading = False
+            i += used
+        else:
+            if records and not in_chapter_heading and not dropping:
+                records[-1]["text"] += "\n" + line
+            i += 1
+    if not records:
+        raise ValueError("no sections found in the Indian Kanoon text")
+    return [{**r, "text": _drop_note(r["text"]).strip()} for r in records]
+
+
+def _drop_note(text: str) -> str:
+    """Cut the case-law note Kanoon appends to a few sections: a bracket holding a web link.
+
+    Brackets that close before the link are the Act's own amendments and stay.
+    """
+    link = text.find("https:")
+    if link < 0:
+        return text
+    depth, opened = 0, []
+    for pos, ch in enumerate(text[:link]):
+        if ch == "[":
+            depth += 1
+            if depth == 1:
+                opened.append(pos)
+        elif ch == "]":
+            depth = max(0, depth - 1)
+    return text[: opened[-1]] if depth and opened else text
+
+
+def _kanoon_heading(lines: list[str], i: int, first: str) -> tuple[str, str, int]:
+    """The heading at line i as (title, text on its own lines, lines used)."""
+    first = first.removeprefix(
+        ". "
+    )  # "61. . [Sentence of forfeiture of property.] Rep. ..."
+    if first.startswith("["):
+        return "", first, 1  # repealed or omitted: the whole entry is the text
+    title = first
+    if not first.endswith("—"):
+        for k in (1, 2):
+            if i + k >= len(lines) or lines[i + k - 1].endswith("—"):
+                break
+            tail = lines[i + k]
+            if not (tail[:1].islower() or re.match(r"[IVXL]+\b", tail)):
+                break
+            if tail.endswith("—"):
+                title = " ".join([first, *lines[i + 1 : i + k + 1]])
+                return title.rstrip("— ").strip(), "", k + 1
+    return title.rstrip("— ").strip(), "", 1

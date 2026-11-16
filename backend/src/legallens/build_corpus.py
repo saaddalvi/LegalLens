@@ -1,8 +1,8 @@
 """Build the Corpus from source texts: `python -m legallens.build_corpus`.
 
 Downloads the pinned Constitution dataset (checking its hash), applies the recorded patches,
-reads the pinned criminal-law PDFs from `<raw-dir>/criminal/` (BNS, BNSS, BSA, CrPC and the
-BNSS-CrPC mapping), reports Chunk counts per Act, and writes a fresh vector store. Exits
+reads the pinned criminal-law PDFs from `<raw-dir>/criminal/` (all six Acts and the three
+old-to-new mappings), reports Chunk counts per Act, and writes a fresh vector store. Exits
 non-zero if any count or Chunk looks wrong, so a bad parse is not silently shipped.
 """
 
@@ -21,6 +21,8 @@ from .ingestion import (
     parse_constitution,
     parse_criminal_code,
 )
+from .ingestion.constitution import ACT as CONSTITUTION
+from .ingestion.criminal_codes import CRIMINAL_ACTS
 from .ingestion.sources import fetch_constitution, load_criminal_codes, load_patches
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -32,6 +34,7 @@ def build(
     patches: list[dict],
     criminal_codes: dict[str, list[dict]] | None = None,
     mappings: list[dict] | None = None,
+    required_acts: list[str] | None = None,
 ) -> Report:
     """`criminal_codes` maps an Act key (ipc, crpc, iea, bns, bnss, bsa) to section records."""
     provisions = parse_constitution(constitution_records, patches)
@@ -39,7 +42,7 @@ def build(
         provisions += parse_criminal_code(key, records)
     provisions = apply_mappings(provisions, mappings or [])
     corpus.add(provisions)
-    return build_report(provisions)
+    return build_report(provisions, required=required_acts or [])
 
 
 def main() -> int:
@@ -74,7 +77,12 @@ def main() -> int:
     shutil.rmtree(staging, ignore_errors=True)
     corpus = Corpus(staging, E5Embedder())
     report = build(
-        corpus, records, load_patches(args.patches), criminal_codes, mappings
+        corpus,
+        records,
+        load_patches(args.patches),
+        criminal_codes,
+        mappings,
+        required_acts=[CONSTITUTION, *(a.name for a in CRIMINAL_ACTS.values())],
     )
 
     for act, n in sorted(report.counts.items()):

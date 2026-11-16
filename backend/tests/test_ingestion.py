@@ -174,3 +174,21 @@ def test_preamble_is_skipped_however_the_source_spells_zero():
         {"article": "0", "title": "Preamble", "description": "WE, THE PEOPLE"}
     ] + RAW[1:]
     assert "0" not in {p.number for p in parse_constitution(records)}
+
+
+def test_report_flags_a_required_act_that_is_absent_from_the_build():
+    provisions = [
+        Provision(
+            act="Constitution of India",
+            chapter="Part I",
+            number=str(i),
+            status="in_force",
+            text="x",
+        )
+        for i in range(1, 500)
+    ]
+    report = build_report(
+        provisions, required=["Constitution of India", "Indian Penal Code"]
+    )
+    assert report.warnings == ["Indian Penal Code: no Chunks, expected 575-575"]
+    assert build_report(provisions, required=["Constitution of India"]).warnings == []

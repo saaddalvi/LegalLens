@@ -34,6 +34,9 @@ def test_every_source_is_pinned_by_sha256():
         "bsa",
         "crpc",
         "iea",
+        "ipc",
+        "ipc_ic_2012",
+        "ipc_unknown_2016",
         "ncrb_bns",
         "ncrb_bnss",
         "ncrb_bsa",
@@ -53,6 +56,7 @@ def test_real_pdfs_ingest_to_the_published_section_counts_with_clean_mappings():
         "bsa": 170,
         "crpc": 535,
         "iea": 185,
+        "ipc": 575,
     }
     provisions = [p for k, rs in records.items() for p in parse_criminal_code(k, rs)]
     linked = {(p.act, p.number): p for p in apply_mappings(provisions, mappings)}
@@ -70,4 +74,19 @@ def test_real_pdfs_ingest_to_the_published_section_counts_with_clean_mappings():
         "Indian Evidence Act 24; Indian Evidence Act 28; Indian Evidence Act 29"
     )
     assert linked["Bharatiya Sakshya Adhiniyam", "61"].supersedes is None  # new section
+    ipc = "Indian Penal Code"
+    bns = "Bharatiya Nyaya Sanhita"
+    assert linked[ipc, "302"].superseded_by == f"{bns} 103"
+    assert linked[bns, "103"].supersedes == f"{ipc} 302"
+    assert linked[ipc, "304A"].superseded_by == f"{bns} 106"
+    assert (
+        linked[ipc, "124A"].superseded_by is None
+    )  # sedition: deleted, not carried over
+    assert linked[bns, "111"].supersedes is None  # organised crime: a new section
+    assert linked[ipc, "333"].text.startswith(
+        "Whoever voluntarily causes grievous hurt"
+    )
+    assert (
+        "Mithu" not in linked[ipc, "303"].text
+    )  # Kanoon's case-law note is not statute text
     assert build_report(provisions).warnings == []

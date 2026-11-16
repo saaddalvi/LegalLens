@@ -1,4 +1,4 @@
-"""Check the criminal-law Chunks (BNS, BNSS, BSA, CrPC, IEA) against independent evidence.
+"""Check the criminal-law Chunks (all six Acts) against independent evidence.
 
 The Acts are built from one official PDF each, so there is no second copy of the same text to
 diff against for CrPC and IEA; what this script can do, per Act:
@@ -12,9 +12,15 @@ diff against for CrPC and IEA; what this script can do, per Act:
   separately from the Gazette PDF; every word of our Chunk must appear in order in its
   section there. It catches lost or garbled text and leftover page furniture, but not text
   that is truncated in both;
-* mapping check (BNSS-CrPC, BSA-IEA): every new-Act section is a mapping target or a "New
-  Section", every old-Act section a mapping source or "Deleted", and every mapping names a
-  real section.
+* mapping check (BNSS-CrPC, BSA-IEA, BNS-IPC): every new-Act section is a mapping target or a
+  "New Section", every old-Act section a mapping source or "Deleted" (or listed in the sources
+  file as absent from the table), and every mapping names a real section;
+* IPC text check: the only IPC with every section is the unofficial Indian Kanoon print, so
+  each section is compared word for word with two older copies (India Code, pre-2013, and an
+  unattributed one of about 2016). A section whose words all appear in order in the India Code
+  copy is "official"; one that matches only the 2016 copy, or neither (sections amended or
+  added since), is listed in the sources file as unverified, and the script fails if that list
+  changes.
 
 It does not replace the last ticket-08 checkbox: comparison against India Code itself.
 Usage:
@@ -32,6 +38,7 @@ from pathlib import Path
 from legallens.ingestion import apply_mappings, parse_criminal_code
 from legallens.ingestion.criminal_codes import CRIMINAL_ACTS
 from legallens.ingestion.mapping_tables import (
+    parse_bns_table,
     parse_bsa_table,
     parse_corresponding_table,
     section_key,
@@ -119,6 +126,76 @@ def iea_toc(raw_dir: Path) -> list[str]:
     return index_numbers(lines[:body])
 
 
+_IPC_2016_HEAD = re.compile(r"^Section (\d+)([A-Z]{0,3})\.")
+_IPC_2012_HEAD = re.compile(
+    r"^(\d+)([A-Z]{0,3})\.\s*$"
+)  # the margin number above each heading
+_REFERENCE_END = re.compile(
+    r"CLASSIFICATION OF OFFENCE|\n\s*1\*?\. (?:Subs|Ins|Rep|Omitted|The words|Added)"
+)  # a section's own text ends where its classification or first footnote starts
+
+
+def ipc_reference_spans(raw_dir: Path, key: str) -> dict[str, str]:
+    """Section texts of an older IPC copy. Headings must follow in order, allowing a gap
+    (the copies leave out repealed sections). The India Code copy prints each section's number
+    alone in the margin above its heading; footnotes also start "2. Subs." so only that counts."""
+    head = _IPC_2016_HEAD if key == "ipc_unknown_2016" else _IPC_2012_HEAD
+    spans: dict[str, list[str]] = {}
+    prev: tuple[int, str] | None = None
+    current: str | None = None
+    for page in read_pinned_pdf_pages(raw_dir, key):
+        for line in page.splitlines():
+            m = head.match(line.strip())
+            if m and follows(prev, int(m.group(1)), m.group(2), gap=8):
+                prev, current = (int(m.group(1)), m.group(2)), m.group(1) + m.group(2)
+                spans.setdefault(current, [])
+            if current:
+                spans[current].append(line)
+    return {n: _REFERENCE_END.split("\n".join(ls))[0] for n, ls in spans.items()}
+
+
+def ipc_text_check(args, provisions, notes, report) -> None:
+    spans = {
+        k: ipc_reference_spans(args.raw_dir, k)
+        for k in ("ipc_ic_2012", "ipc_unknown_2016")
+    }
+    ours = {p.number for p in provisions}
+    seen_in_copies = set().union(*(set(sp) for sp in spans.values()))
+    report(
+        seen_in_copies <= ours,
+        f"IPC: sections the older copies print that we lack: {sorted(seen_in_copies - ours, key=section_key)}"
+        f" (the Kanoon print adds {len(ours - seen_in_copies)} they lack)",
+    )
+    official: list[str] = []
+    only_2016: list[str] = []
+    neither: list[str] = []
+    for p in provisions:
+        r = {
+            k: recall(p.text, sp[p.number]) if p.number in sp else None
+            for k, sp in spans.items()
+        }
+        if (r["ipc_ic_2012"] or 0) >= args.threshold:
+            official.append(p.number)
+        elif (r["ipc_unknown_2016"] or 0) >= args.threshold:
+            only_2016.append(p.number)
+        else:
+            neither.append(p.number)
+    recorded = notes["ipc_verification"]
+    report(
+        True,
+        f"IPC: {len(official)} of {len(provisions)} Chunks match the India Code copy of before"
+        f" 2013, {len(only_2016)} only the 2016 copy, {len(neither)} neither",
+    )
+    for name, found in (("only_2016_copy", only_2016), ("neither_copy", neither)):
+        want = list(recorded[name])
+        report(
+            found == want,
+            f"IPC sections matching {name.replace('_', ' ')}: {len(found)} as recorded;"
+            f" new {sorted(set(found) - set(want), key=section_key)},"
+            f" gone {sorted(set(want) - set(found), key=section_key)}",
+        )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--raw-dir", type=Path, default=BACKEND_DIR / "data" / "raw")
@@ -189,6 +266,11 @@ def main() -> int:
             old_act=CRIMINAL_ACTS["crpc"].name,
             old_title=_NCRB_OLD_TITLE["bnss"],
         ),
+        ("bns", "ipc"): parse_bns_table(
+            read_pinned_pdf_pages(args.raw_dir, "ncrb_bns"),
+            new_act=CRIMINAL_ACTS["bns"].name,
+            old_act=CRIMINAL_ACTS["ipc"].name,
+        ),
         ("bsa", "iea"): parse_bsa_table(
             read_pinned_pdf_pages(args.raw_dir, "ncrb_bsa"),
             new_act=CRIMINAL_ACTS["bsa"].name,
@@ -207,10 +289,17 @@ def main() -> int:
             f"{label}: {new_key.upper()} sections without a mapping row:"
             f" {sorted(new_numbers - targets, key=section_key)}",
         )
+        absent = set(notes.get("not_in_mapping_table", {}).get(old_key, {}))
         report(
-            not old_numbers - sources,
+            not old_numbers - sources - absent,
             f"{label}: {old_key.upper()} sections without a mapping row:"
-            f" {sorted(old_numbers - sources, key=section_key)}",
+            f" {sorted(old_numbers - sources - absent, key=section_key)}"
+            f" ({len(absent)} accepted, see sources file)",
+        )
+        report(
+            not absent & sources,
+            f"{label}: accepted sections that the table does list after all:"
+            f" {sorted(absent & sources, key=section_key)}",
         )
         report(
             targets <= new_numbers and sources <= old_numbers,
@@ -231,9 +320,8 @@ def main() -> int:
             )
         except ValueError as e:
             report(False, str(e))
-    print(
-        "\nNot checked: the IPC and the BNS-IPC mapping (not ingested); comparison with India Code."
-    )
+    ipc_text_check(args, parsed["ipc"], notes, report)
+    print("\nNot checked: comparison with India Code (ticket 08, last checkbox).")
     return 1 if problems else 0
 
 
