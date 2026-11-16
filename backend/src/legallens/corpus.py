@@ -39,6 +39,20 @@ class Corpus:
             ],
         )
 
+    def get(self, act: str, number: str) -> Provision | None:
+        res = self._col.get(ids=[f"{act}|{number}"])
+        if not res["ids"]:
+            return None
+        m = res["metadatas"][0]
+        return Provision(
+            act=m["act"],
+            chapter=m["chapter"],
+            number=m["number"],
+            status=m["status"],
+            text=res["documents"][0],
+            superseded_by=m["superseded_by"] or None,
+        )
+
     def search(self, query: str, k: int = 5) -> list[Provision]:
         if self.count() == 0:
             return []

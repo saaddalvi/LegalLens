@@ -61,6 +61,43 @@ class FakeFallback:
         return []
 
 
+class HallucinatingThenValidLLM:
+    """Cites a Provision absent from the Corpus once, then recovers on regeneration."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def generate(self, query, provisions):
+        self.calls += 1
+        if self.calls == 1:
+            return Generation(
+                answer="Ghost citation answer.",
+                language="en",
+                citations=[ProvisionRef(act="Indian Penal Code", number="420")],
+            )
+        top = provisions[0]
+        return Generation(
+            answer=f"Plain-language summary of {top.act} {top.number}.",
+            language="en",
+            citations=[ProvisionRef(act=top.act, number=top.number)],
+        )
+
+
+class AlwaysHallucinatingLLM:
+    """Cites a Provision absent from the Corpus on every call."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def generate(self, query, provisions):
+        self.calls += 1
+        return Generation(
+            answer="Ghost citation answer.",
+            language="en",
+            citations=[ProvisionRef(act="Indian Penal Code", number="420")],
+        )
+
+
 @pytest.fixture
 def client(tmp_path):
     corpus = Corpus(tmp_path / "chroma", FakeEmbedder())
@@ -91,6 +128,33 @@ def test_repealed_provision_citation_carries_status(client):
 
 def test_empty_query_is_rejected(client):
     assert client.post("/ask", json={"query": "  "}).status_code == 422
+
+
+def test_hallucinated_citation_triggers_regeneration(tmp_path):
+    corpus = Corpus(tmp_path / "chroma", FakeEmbedder())
+    corpus.add([ART_21])
+    llm = HallucinatingThenValidLLM()
+    c = TestClient(create_app(corpus=corpus, llm=llm, fallback=FakeFallback()))
+    r = c.post("/ask", json={"query": "Can I be deprived of personal liberty?"})
+    assert r.status_code == 200
+    body = r.json()
+    assert llm.calls == 2
+    refs = [(cit["act"], cit["number"]) for cit in body["citations"]]
+    assert ("Indian Penal Code", "420") not in refs
+    assert ("Constitution of India", "21") in refs
+
+
+def test_hallucinated_citation_after_regeneration_is_blocked(tmp_path):
+    corpus = Corpus(tmp_path / "chroma", FakeEmbedder())
+    corpus.add([ART_21])
+    llm = AlwaysHallucinatingLLM()
+    c = TestClient(create_app(corpus=corpus, llm=llm, fallback=FakeFallback()))
+    r = c.post("/ask", json={"query": "Can I be deprived of personal liberty?"})
+    assert r.status_code == 200
+    body = r.json()
+    assert llm.calls == 2
+    assert body["citations"] == []
+    assert "cannot answer reliably" in body["answer"].lower()
 
 
 def test_llm_failure_returns_503(tmp_path):
