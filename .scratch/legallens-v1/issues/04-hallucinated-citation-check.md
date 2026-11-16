@@ -4,9 +4,9 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Endpoint test with a faked Gemini that cites a Provision absent from the Corpus: the response contains no such Citation
-- [ ] Endpoint test: valid Citations pass through unchanged
-- [ ] Behaviour when regeneration also fails is defined and tested (clear "cannot answer reliably" outcome)
-- [ ] The check is reusable by the evaluation harness to report citation validity
+- [x] Endpoint test with a faked Gemini that cites a Provision absent from the Corpus: the response contains no such Citation
+- [x] Endpoint test: valid Citations pass through unchanged
+- [x] Behaviour when regeneration also fails is defined and tested (clear "cannot answer reliably" outcome)
+- [x] The check is reusable by the evaluation harness to report citation validity

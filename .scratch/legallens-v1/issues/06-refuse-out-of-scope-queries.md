@@ -4,10 +4,10 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Endpoint tests: a non-Indian-law Query returns a refusal response type with a reason
-- [ ] Endpoint tests: "should I sue/sign" Queries return a refusal or a law-only explanation with no personal recommendation
-- [ ] Endpoint test: ordinary in-scope Queries are not refused
-- [ ] The frontend shows refusals distinctly with the suggested reformulation
-- [ ] The disclaimer remains visible on every state of the page
+- [x] Endpoint tests: a non-Indian-law Query returns a refusal response type with a reason
+- [x] Endpoint tests: "should I sue/sign" Queries return a refusal or a law-only explanation with no personal recommendation
+- [x] Endpoint test: ordinary in-scope Queries are not refused
+- [x] The frontend shows refusals distinctly with the suggested reformulation
+- [x] The disclaimer remains visible on every state of the page
