@@ -6,8 +6,8 @@
 
 **Status:** ready-for-agent
 
-- [ ] Light component checks with a mocked API response: disclaimer, Trust label and Citations render
-- [ ] Citations expand and collapse
-- [ ] Fallback-sourced answers show the lower-trust label and source list
-- [ ] Loading state is shown while waiting; a helpful message is shown on service errors or rate limits
-- [ ] The layout is usable at phone width with no horizontal scrolling
+- [x] Light component checks with a mocked API response: disclaimer, Trust label and Citations render
+- [x] Citations expand and collapse
+- [x] Fallback-sourced answers show the lower-trust label and source list
+- [x] Loading state is shown while waiting; a helpful message is shown on service errors or rate limits
+- [x] The layout is usable at phone width with no horizontal scrolling

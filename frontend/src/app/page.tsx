@@ -33,11 +33,75 @@ const TRUST_TEXT: Record<AskResponse["trust_label"], string> = {
   corpus_and_fallback: "From statute text and web sources",
 };
 
+function errorMessage(status: number | null): string {
+  if (status === null)
+    return "We could not reach the LegalLens service. Check your connection and try again.";
+  if (status === 429)
+    return "You have asked too many questions in a short time. Please wait a minute and try again.";
+  if (status === 503 || status >= 500)
+    return "The service is unavailable right now. Please try again shortly.";
+  if (status === 422)
+    return "That question could not be processed. Please check it and try again.";
+  return "Something went wrong. Please try again.";
+}
+
 const STATUS_TEXT: Record<Citation["status"], string> = {
   in_force: "in force",
   repealed: "repealed",
   model: "model Act, not in force by itself",
 };
+
+function CitationCard({ c }: { c: Citation }) {
+  const [open, setOpen] = useState(false);
+  const panelId = `citation-${c.act}-${c.number}`.replace(/\W+/g, "-");
+  return (
+    <article className="rounded border border-zinc-300">
+      <h3 className="text-sm font-semibold">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={() => setOpen(!open)}
+          className="flex w-full items-start justify-between gap-2 p-3 text-left"
+        >
+          <span className="min-w-0 break-words">
+            {c.act}, {c.number}{" "}
+            <span className="font-normal text-zinc-500">
+              ({c.chapter}, {STATUS_TEXT[c.status]})
+            </span>
+          </span>
+          <span aria-hidden="true">{open ? "−" : "+"}</span>
+        </button>
+      </h3>
+      {c.status === "repealed" && (
+        <p role="note" className="mx-3 mb-3 rounded bg-red-50 p-2 text-sm text-red-800">
+          This Provision has been repealed
+          {c.superseded_by
+            ? `. The current law is ${c.superseded_by.split("; ").join(" and ")}.`
+            : "."}
+        </p>
+      )}
+      {c.status === "model" && (
+        <p role="note" className="mx-3 mb-3 rounded bg-amber-50 p-2 text-sm text-amber-900">
+          This is a model Act, a template that States may adopt. It is not law in force by
+          itself. Your State&apos;s own law may differ, so check it.
+        </p>
+      )}
+      {open && (
+        <div id={panelId} className="px-3 pb-3">
+          {c.supersedes && (
+            <p className="text-sm text-zinc-600">
+              Replaces {c.supersedes.split("; ").join(" and ")}.
+            </p>
+          )}
+          <blockquote lang="en" className="mt-1 break-words text-sm">
+            {c.text}
+          </blockquote>
+        </div>
+      )}
+    </article>
+  );
+}
 
 export default function Home() {
   const [query, setQuery] = useState("");
@@ -50,17 +114,22 @@ export default function Home() {
     if (!query.trim()) return;
     setLoading(true);
     setError(null);
+    setResult(null);
     try {
       const res = await fetch(`${API_URL}/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        setResult(null);
+        setError(errorMessage(res.status));
+        return;
+      }
       setResult(await res.json());
     } catch {
       setResult(null);
-      setError("Something went wrong. Please try again.");
+      setError(errorMessage(null));
     } finally {
       setLoading(false);
     }
@@ -86,18 +155,31 @@ export default function Home() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           rows={3}
-          className="rounded border border-zinc-300 p-2 text-black"
+          className="w-full rounded border border-zinc-300 p-2 text-base text-black"
         />
         <button
           type="submit"
           disabled={loading}
-          className="self-start rounded bg-zinc-900 px-4 py-2 text-white disabled:opacity-50"
+          className="rounded bg-zinc-900 px-4 py-3 text-white disabled:opacity-50 sm:self-start"
         >
           {loading ? "Thinking…" : "Ask"}
         </button>
       </form>
 
-      {error && <p role="alert" className="text-red-700">{error}</p>}
+      {loading && (
+        <p role="status" aria-label="Loading" className="animate-pulse text-zinc-600">
+          Looking through the statutes…
+        </p>
+      )}
+
+      {error && (
+        <p
+          role="alert"
+          className="rounded border border-red-300 bg-red-50 p-3 text-red-800"
+        >
+          {error}
+        </p>
+      )}
 
       {result?.response_type === "refusal" && (
         <section
@@ -127,7 +209,7 @@ export default function Home() {
           <span className="self-start rounded-full bg-zinc-200 px-3 py-1 text-xs text-black">
             {TRUST_TEXT[result.trust_label]}
           </span>
-          <p lang={result.answer_language} className="whitespace-pre-wrap">
+          <p lang={result.answer_language} className="whitespace-pre-wrap break-words">
             {result.answer}
           </p>
 
@@ -135,57 +217,22 @@ export default function Home() {
             <div className="flex flex-col gap-2">
               <h2 className="font-medium">Citations</h2>
               {result.citations.map((c) => (
-                <article
-                  key={`${c.act}-${c.number}`}
-                  className="rounded border border-zinc-300 p-3"
-                >
-                  <h3 className="text-sm font-semibold">
-                    {c.act}, {c.number}{" "}
-                    <span className="font-normal text-zinc-500">
-                      ({c.chapter}, {STATUS_TEXT[c.status]})
-                    </span>
-                  </h3>
-                  {c.status === "repealed" && (
-                    <p
-                      role="note"
-                      className="mt-1 rounded bg-red-50 p-2 text-sm text-red-800"
-                    >
-                      This Provision has been repealed
-                      {c.superseded_by
-                        ? `. The current law is ${c.superseded_by.split("; ").join(" and ")}.`
-                        : "."}
-                    </p>
-                  )}
-                  {c.status === "model" && (
-                    <p
-                      role="note"
-                      className="mt-1 rounded bg-amber-50 p-2 text-sm text-amber-900"
-                    >
-                      This is a model Act, a template that States may adopt. It is not law
-                      in force by itself. Your State&apos;s own law may differ, so check it.
-                    </p>
-                  )}
-                  {c.supersedes && (
-                    <p className="mt-1 text-sm text-zinc-600">
-                      Replaces {c.supersedes.split("; ").join(" and ")}.
-                    </p>
-                  )}
-                  <blockquote lang="en" className="mt-1 text-sm">
-                    {c.text}
-                  </blockquote>
-                </article>
+                <CitationCard key={`${c.act}-${c.number}`} c={c} />
               ))}
             </div>
           )}
 
           {result.fallback_sources.length > 0 && (
-            <ul className="list-disc pl-5 text-sm">
+            <div className="flex flex-col gap-1">
+            <h2 className="font-medium">Web sources</h2>
+            <ul className="list-disc break-words pl-5 text-sm">
               {result.fallback_sources.map((s) => (
                 <li key={s.url}>
                   <a href={s.url} className="underline">{s.title}</a>
                 </li>
               ))}
             </ul>
+            </div>
           )}
         </section>
       )}
