@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from legallens.corpus import Corpus
-from legallens.llm import Generation, ProvisionRef
+from legallens.llm import Generation, ProvisionRef, ScopeDecision
 from legallens.main import create_app
 from legallens.models import Provision
 
@@ -44,6 +44,9 @@ class GradingStub:
     """Grader and rewriter defaults: retrieval is judged fully relevant."""
 
     score = 1.0
+
+    def classify(self, query):
+        return ScopeDecision(category="in_scope")
 
     def grade(self, query, provisions):
         return self.score

@@ -16,6 +16,9 @@ type Citation = {
 type FallbackSource = { title: string; url: string; snippet: string };
 
 type AskResponse = {
+  response_type: "answer" | "refusal";
+  refusal_reason: string | null;
+  suggested_reformulation: string | null;
   answer: string;
   answer_language: string;
   trust_label: "corpus" | "fallback" | "corpus_and_fallback";
@@ -89,7 +92,30 @@ export default function Home() {
 
       {error && <p role="alert" className="text-red-700">{error}</p>}
 
-      {result && (
+      {result?.response_type === "refusal" && (
+        <section
+          role="status"
+          aria-label="Refusal"
+          className="flex flex-col gap-2 rounded border border-red-300 bg-red-50 p-4 text-red-900"
+        >
+          <h2 className="font-semibold">LegalLens can&apos;t help with that question</h2>
+          <p>{result.refusal_reason ?? result.answer}</p>
+          {result.suggested_reformulation && (
+            <p>
+              <span className="font-medium">Try asking instead: </span>
+              <button
+                type="button"
+                onClick={() => setQuery(result.suggested_reformulation ?? "")}
+                className="text-left underline"
+              >
+                {result.suggested_reformulation}
+              </button>
+            </p>
+          )}
+        </section>
+      )}
+
+      {result?.response_type === "answer" && (
         <section className="flex flex-col gap-4" aria-label="Answer">
           <span className="self-start rounded-full bg-zinc-200 px-3 py-1 text-xs text-black">
             {TRUST_TEXT[result.trust_label]}

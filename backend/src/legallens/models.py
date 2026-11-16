@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 Status = Literal["in_force", "repealed"]
+ResponseType = Literal["answer", "refusal"]
 TrustLabel = Literal["corpus", "fallback", "corpus_and_fallback"]
 
 
@@ -45,6 +46,9 @@ class AskRequest(BaseModel):
 
 
 class AskResponse(BaseModel):
+    response_type: ResponseType = "answer"
+    refusal_reason: str | None = None
+    suggested_reformulation: str | None = None
     answer: str
     answer_language: str
     trust_label: TrustLabel

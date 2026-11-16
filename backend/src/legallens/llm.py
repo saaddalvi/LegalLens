@@ -1,5 +1,5 @@
 import os
-from typing import Protocol
+from typing import Literal, Protocol
 
 from pydantic import BaseModel
 
@@ -25,6 +25,14 @@ class RewrittenQuery(BaseModel):
     query: str
 
 
+class ScopeDecision(BaseModel):
+    """Whether a Query is in scope; refusals carry a reason and a suggested reformulation."""
+
+    category: Literal["in_scope", "not_indian_law", "personal_advice"]
+    reason: str = ""
+    suggested_reformulation: str = ""
+
+
 class LLM(Protocol):
     def generate(
         self,
@@ -32,6 +40,10 @@ class LLM(Protocol):
         provisions: list[Provision],
         sources: list[FallbackSource] = ...,
     ) -> Generation: ...
+
+    def classify(self, query: str) -> ScopeDecision:
+        """Whether the Query is in scope, or an Out-of-scope query to refuse."""
+        ...
 
     def grade(self, query: str, provisions: list[Provision]) -> float:
         """Relevance of the retrieved Chunks to the Query, in [0, 1]."""
@@ -58,6 +70,17 @@ Web sources (less reliable than Provisions; never cite them as Provisions, and s
 when an answer rests on them):
 {sources}
 """
+
+_SCOPE_PROMPT = """Classify this question for an assistant that explains Indian law to laypeople.
+- "not_indian_law": not about Indian law (other countries' law, or no legal topic at all).
+- "personal_advice": asks what the user personally should do (e.g. whether to sue, sign,
+  plead or settle). General questions about what the law says are NOT personal advice.
+- "in_scope": anything else about Indian law.
+For the first two, write a short polite reason, in the language of the question, and a
+suggested reformulation that the assistant could answer (for personal_advice, ask what the
+law says about the situation). Leave both empty for in_scope.
+
+Question: {query}"""
 
 _GRADE_PROMPT = """Rate from 0.0 to 1.0 how well the Provisions below answer the question
 (1.0 = they directly answer it, 0.5 = partly relevant or incomplete, 0.0 = irrelevant).
@@ -107,6 +130,9 @@ class GeminiLLM:
         return self._structured(Generation).invoke(
             _PROMPT.format(provisions=self._format(provisions), web=web, query=query)
         )
+
+    def classify(self, query: str) -> ScopeDecision:
+        return self._structured(ScopeDecision).invoke(_SCOPE_PROMPT.format(query=query))
 
     def grade(self, query: str, provisions: list[Provision]) -> float:
         if not provisions:

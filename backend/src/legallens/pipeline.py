@@ -24,6 +24,12 @@ CANNOT_ANSWER_NO_SOURCES = (
     "search could not supply reliable sources. Please try rephrasing your question."
 )
 
+DEFAULT_REFUSAL_REASON = (
+    "LegalLens only explains Indian law and cannot advise on personal decisions."
+)
+
+DEFAULT_REFORMULATION = "What does Indian law say about the situation you are asking about?"
+
 log = logging.getLogger(__name__)
 
 
@@ -102,11 +108,25 @@ def answer_query(
 ) -> AskResponse:
     """Corrective RAG (ADR 0001); with crag=False, the plain-RAG baseline.
 
-    The Grader scores retrieved Chunks into a Verdict. Correct: answer from Chunks.
+    Out-of-scope queries are refused first, before any retrieval. The Grader scores retrieved Chunks into a Verdict. Correct: answer from Chunks.
     Ambiguous: Chunks plus Fallback results. Incorrect: Fallback results only. A
     Fallback failure degrades to a Corpus-only answer (ambiguous) or an explicit
     "cannot answer" (incorrect).
     """
+    scope = llm.classify(query)
+    if scope.category != "in_scope":
+        reason = scope.reason or DEFAULT_REFUSAL_REASON
+        return AskResponse(
+            response_type="refusal",
+            answer=reason,
+            answer_language="en",
+            trust_label="corpus",
+            citations=[],
+            fallback_sources=[],
+            refusal_reason=reason,
+            suggested_reformulation=scope.suggested_reformulation or DEFAULT_REFORMULATION,
+        )
+
     provisions = corpus.search(query, TOP_K)
     if not crag:
         return _answer(query, provisions, [], corpus=corpus, llm=llm, trust_label="corpus")
