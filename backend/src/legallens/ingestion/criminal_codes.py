@@ -22,14 +22,14 @@ class CriminalAct:
     expected_count: tuple[int, int]  # plausible Chunk range, for the ingestion report
 
 
-# BNS, BNSS, BSA and CrPC have exact counts: the section totals of the pinned PDFs (see
+# BNS, BNSS, BSA, CrPC and IEA have exact counts: the section totals of the pinned PDFs (see
 # `sources.CRIMINAL_PDFS`), cross-checked by scripts/verify_criminal_codes.py. The CrPC's 535
-# includes lettered insertions such as 41A and 105A-105L. The IPC and Indian Evidence Act
-# ranges are still provisional: neither is ingested yet (ticket 08).
+# includes lettered insertions such as 41A and 105A-105L, and the IEA's 185 are 167 numbers and
+# 18 lettered insertions. The IPC range is still provisional: it is not ingested yet (ticket 08).
 CRIMINAL_ACTS: dict[str, CriminalAct] = {
     "ipc": CriminalAct("Indian Penal Code", "repealed", (490, 580)),
     "crpc": CriminalAct("Code of Criminal Procedure", "repealed", (535, 535)),
-    "iea": CriminalAct("Indian Evidence Act", "repealed", (160, 190)),
+    "iea": CriminalAct("Indian Evidence Act", "repealed", (185, 185)),
     "bns": CriminalAct("Bharatiya Nyaya Sanhita", "in_force", (358, 358)),
     "bnss": CriminalAct("Bharatiya Nagarik Suraksha Sanhita", "in_force", (531, 531)),
     "bsa": CriminalAct("Bharatiya Sakshya Adhiniyam", "in_force", (170, 170)),

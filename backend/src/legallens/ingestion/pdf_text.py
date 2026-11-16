@@ -258,3 +258,120 @@ def _increases(prev: tuple[int, str] | None, head: tuple[int, str, str, str]) ->
         and (head[0], head[1]) == (1, "")
         or (prev is not None and (head[0], head[1]) > prev)
     )
+
+
+_IEA_HEAD = re.compile(
+    r"^(?:\d+\[)?(\d+)([A-Z]{0,2})\.\s+(\S.{0,240}?)\s*[–—―]{1,3}\s*(.*)$", re.DOTALL
+)  # "1. Short title.  ––This Act ..."; a hyphen is not a dash, so "Interpretation-clause" is safe
+_IEA_HEAD_NO_DASH = re.compile(
+    r"^(?:\d+\[)?(\d+)([A-Z]{0,2})\.\s+([A-Z][^.]{0,200}\.)\s{2,}(\S.*)$", re.DOTALL
+)  # section 86: the PDF leaves two spaces where the dash should be
+_IEA_CHAPTER = re.compile(r"^CHAPTER\s+([IVXL]+)\s*[.–—]")
+_IEA_PART = re.compile(r"^PART\s+[IVX]+\s*$")
+_IEA_START = (
+    "WHEREAS it is expedient"  # the preamble; the contents list ahead of it has no text
+)
+_IEA_END = re.compile(r"^THE SCHEDULE\.")
+
+
+def iea_sections(pages: list[str]) -> list[dict]:
+    """Sections of the Indian Evidence Act from the India Code PDF text, in order.
+
+    Skips the contents list (everything before the preamble), page footnotes (under a line of
+    spaces), page numbers, PART headings and amendment markers. A heading counts only if it
+    is the next section number and has the "––" between title and text. Each record also
+    carries the section's `title`.
+    """
+    lines: list[str] = []
+    for page in pages:
+        for line in page.splitlines():
+            if not line.strip() and len(line) >= _FOOTNOTE_RULE_MIN:
+                break  # footnotes follow
+            if line.strip() and not line.strip().isdigit():
+                lines.append(line.strip())
+    start = next((i for i, l in enumerate(lines) if _IEA_START in l), None)
+    if start is None:
+        raise ValueError(f"no line has the preamble marker {_IEA_START!r}")
+    records: list[dict] = []
+    chapter, prev = "", None
+    i = start + 1
+    while i < len(lines):
+        line = lines[i]
+        if _IEA_END.match(line):
+            break
+        head, used = _iea_heading(lines, i)
+        if head and not follows(prev, int(head[0]), head[1]):
+            # a footnote marker can be glued to the number: "1145." is 145
+            head = next(
+                (
+                    (head[0][k:], *head[1:])
+                    for k in (1, 2)
+                    if len(head[0]) > k and follows(prev, int(head[0][k:]), head[1])
+                ),
+                None,
+            )
+        if head and follows(prev, int(head[0]), head[1]):
+            prev = (int(head[0]), head[1])
+            records.append(
+                {
+                    "section": head[0] + head[1],
+                    "chapter": chapter,
+                    "title": head[2],
+                    "text": head[3],
+                }
+            )
+            i += used
+            continue
+        m = _IEA_CHAPTER.match(line)
+        if m:
+            chapter = f"Chapter {m.group(1)}"
+        elif _IEA_PART.match(line):
+            # "PART II" is followed by a subtitle line, then the CHAPTER line
+            i += 1 if _IEA_CHAPTER.match(lines[i + 1]) else 2
+            continue
+        elif records:
+            records[-1]["text"] += "\n" + line
+        i += 1
+    return [
+        {
+            **r,
+            "title": _tidy_iea(r["title"]),
+            "text": _tidy_iea(r["text"]),
+        }
+        for r in records
+    ]
+
+
+def _iea_heading(
+    lines: list[str], i: int
+) -> tuple[tuple[str, str, str, str] | None, int]:
+    for used in (1, 2):
+        m = _IEA_HEAD.match(" ".join(lines[i : i + used]))
+        if m:
+            return (m.group(1), m.group(2), m.group(3), m.group(4)), used
+    m = _IEA_HEAD_NO_DASH.match(lines[i])  # raw line: its two spaces are the only cue
+    if m:
+        return (m.group(1), m.group(2), m.group(3), m.group(4)), 1
+    return None, 0
+
+
+def _tidy_iea(text: str) -> str:
+    """Drop amendment markers ("2[" ... "]") but keep the Act's own square brackets."""
+    out: list[str] = []
+    stack: list[bool] = []  # True for an amendment marker's bracket
+    pos = 0
+    for m in re.finditer(r"(\d+)?\[|\]", text):
+        out.append(text[pos : m.start()])
+        pos = m.end()
+        if m.group(0) == "]":
+            if not stack:
+                continue  # closes a marker opened ahead of the section heading
+            if not stack.pop():
+                out.append("]")
+        elif m.group(1):
+            stack.append(True)
+        else:
+            stack.append(False)
+            out.append("[")
+    out.append(text[pos:])
+    return re.sub(r"[ \t]+", " ", "".join(out)).strip()

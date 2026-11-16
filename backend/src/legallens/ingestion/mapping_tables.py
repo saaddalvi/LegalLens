@@ -125,3 +125,72 @@ def parse_corresponding_table(
         sorted(set(deleted), key=section_key),
         sorted(set(new), key=section_key),
     )
+
+
+_BSA_OLD_TITLE = "INDIAN EVIDENCE ACT, 1872"
+_BSA_TOKEN = re.compile(
+    r"(?P<deleted>DELETED\s+(?P<dn>\d+[A-Z]{0,3})\.)"  # an Evidence Act section with no BSA one
+    r"|(?P<repealed>(?P<rn>\d+)\.\s+Repealed)"
+    r"|(?P<proviso>\d+\.\s+Proviso(?:\s+\d(?!\d))?)"  # a BSA proviso row: the section's row goes on
+    r"|(?P<newsec>New\s+Section)"
+    r"|(?P<sub>(?<![\w.])\d+\(\d+[a-z]?\))"  # 23(1), 146(3): sub-sections of the BSA row
+    r"|(?P<head>(?<![\w(])(?P<hn>\d+[A-Z]{0,3})\.\s+(?=\S))",
+    re.IGNORECASE,
+)
+
+
+def parse_bsa_table(
+    pages: list[str], new_act: str, old_act: str, first: int = 1
+) -> MappingTable:
+    """The NCRB BSA table against the Indian Evidence Act, as whole-section mappings.
+
+    The BSA's section numbers run 1..170 in order, with no lettered sections, so a numbered
+    heading is the next row's BSA section only when it is exactly the next number and the
+    current row already has its Evidence Act counterpart (or is a "New Section"). Any other
+    heading is an Evidence Act section of the current row. That settles rows such as BSA 2,
+    whose Evidence Act sections 3 and 4 come ahead of BSA 3. Sub-section and proviso markers
+    belong to the current row; an Evidence Act heading right after one is not a new row.
+    `first` is the BSA section the table starts at (1 except in tests on excerpts).
+    """
+    pairs: set[tuple[str, str]] = set()
+    deleted: list[str] = []
+    new: list[str] = []
+    cur: str | None = None
+    last = first - 1
+    row_closed = False  # the current row has an old section, or is a new one
+    after_marker = False
+    for line in _table_lines(pages, _BSA_OLD_TITLE):
+        if line.startswith(("P a g e", "HomePage")):
+            continue
+        for m in _BSA_TOKEN.finditer(line):
+            if m.group("deleted") or m.group("repealed"):
+                deleted.append((m.group("dn") or m.group("rn")).upper())
+            elif m.group("newsec"):
+                if cur is not None and not row_closed:
+                    new.append(cur)
+                    row_closed = True
+            elif m.group("sub") or m.group("proviso"):
+                after_marker = True
+                continue
+            elif m.group("head"):
+                number = m.group("hn").upper()
+                if (
+                    number.isdigit()
+                    and int(number) == last + 1
+                    and (cur is None or row_closed)
+                    and not after_marker
+                ):
+                    cur, last, row_closed = number, int(number), False
+                elif cur is not None:
+                    pairs.add((cur, number))
+                    row_closed = True
+            after_marker = False
+    mappings = [
+        {"old_act": old_act, "old_number": o, "new_act": new_act, "new_number": n}
+        for n, o in sorted(pairs, key=lambda p: (section_key(p[0]), section_key(p[1])))
+    ]
+    return MappingTable(
+        mappings,
+        sorted(set(deleted), key=section_key),
+        sorted(set(new), key=section_key),
+    )

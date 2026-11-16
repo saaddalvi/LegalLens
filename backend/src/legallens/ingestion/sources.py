@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .criminal_codes import CRIMINAL_ACTS
-from .mapping_tables import parse_corresponding_table
-from .pdf_text import crpc_sections, gazette_sections, pdf_pages
+from .mapping_tables import parse_bsa_table, parse_corresponding_table
+from .pdf_text import crpc_sections, gazette_sections, iea_sections, pdf_pages
 
 # civictech-India/constitution-of-india, pinned so the Corpus builds reproducibly.
 DATASET_URL = (
@@ -74,6 +74,11 @@ CRIMINAL_PDFS: dict[str, PinnedPdf] = {
         "5bb6514251a9ec6375b2c894cef5280dab0d1c3cca1e0f4a1e57f29b54033d72",
         "Code of Criminal Procedure, 1973: India Code handle 15272",
     ),
+    "iea": PinnedPdf(
+        "iea_1872.pdf",
+        "62b33659545e001223a99364447e9314d5372f1791db5cccadd87a08c267eb91",
+        "Indian Evidence Act, 1872: India Code consolidated text, last updated 13-3-2020",
+    ),
     "ncrb_bns": PinnedPdf(
         "ncrb_bns.pdf",
         "a83f12a93e32c9e0b39a85f75850a448dc4682b1b44b2d6bd680165bb9931549",
@@ -83,6 +88,11 @@ CRIMINAL_PDFS: dict[str, PinnedPdf] = {
         "ncrb_bnss.pdf",
         "b943f18662141aaae93a17f94a4387534934b5f4809bf9672ed47e10600bdec5",
         "NCRB Sankalan: BNSS with its corresponding-section table against the CrPC",
+    ),
+    "ncrb_bsa": PinnedPdf(
+        "bsa_ncrb.pdf",
+        "cd6f6e04eea925672f5590347cfa832c01ab0f36b26eb45800fcd30828e89334",
+        "NCRB Sankalan: BSA with its corresponding-section table against the Evidence Act",
     ),
 }
 
@@ -102,15 +112,17 @@ def read_pinned_pdf_pages(raw_dir: Path, key: str) -> list[str]:
 
 
 def load_criminal_codes(raw_dir: Path) -> tuple[dict[str, list[dict]], list[dict]]:
-    """Section records for BNS, BNSS, BSA and CrPC, and the BNSS-CrPC mappings.
+    """Section records for BNS, BNSS, BSA, CrPC and the Evidence Act, and the BNSS-CrPC and
+    BSA-IEA mappings.
 
-    The BNS-IPC and BSA-IEA mappings wait for the IPC and the consolidated Evidence Act.
+    The BNS-IPC mapping waits for the IPC.
     """
     records = {
         "bns": gazette_sections(read_pinned_pdf_pages(raw_dir, "bns")),
         "bnss": gazette_sections(read_pinned_pdf_pages(raw_dir, "bnss")),
         "bsa": gazette_sections(read_pinned_pdf_pages(raw_dir, "bsa")),
         "crpc": crpc_sections(read_pinned_pdf_pages(raw_dir, "crpc")),
+        "iea": iea_sections(read_pinned_pdf_pages(raw_dir, "iea")),
     }
     table = parse_corresponding_table(
         read_pinned_pdf_pages(raw_dir, "ncrb_bnss"),
@@ -118,4 +130,9 @@ def load_criminal_codes(raw_dir: Path) -> tuple[dict[str, list[dict]], list[dict
         old_act=CRIMINAL_ACTS["crpc"].name,
         old_title="Code of Criminal Procedure, 1973",
     )
-    return records, table.mappings
+    bsa_table = parse_bsa_table(
+        read_pinned_pdf_pages(raw_dir, "ncrb_bsa"),
+        new_act=CRIMINAL_ACTS["bsa"].name,
+        old_act=CRIMINAL_ACTS["iea"].name,
+    )
+    return records, table.mappings + bsa_table.mappings

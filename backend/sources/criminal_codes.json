@@ -1,6 +1,6 @@
 {
   "sources": "Pinned by sha256 in legallens/ingestion/sources.py (CRIMINAL_PDFS); the PDFs are gitignored in backend/data/raw/criminal/.",
-  "verified_against": "scripts/verify_criminal_codes.py: section counts and numbering; the NCRB Sankalan compilations' own index and re-printed Act text for BNS and BNSS; the CrPC PDF's table of contents; the BNSS-CrPC corresponding-section table. NOT yet verified against India Code (ticket 08, last checkbox).",
+  "verified_against": "scripts/verify_criminal_codes.py: section counts and numbering; the NCRB Sankalan compilations' own index and re-printed Act text for BNS, BNSS and BSA; the CrPC PDF's and the Evidence Act PDF's tables of contents; the BNSS-CrPC and BSA-IEA corresponding-section tables. NOT yet verified against India Code (ticket 08, last checkbox).",
   "notes": [
     "No patches to the source text are needed: the adapters' output matched every independent check except the four accepted differences below.",
     "BNS, BNSS and BSA are the Gazette of India Extraordinary prints (Nos. 250883, 250884, 250882). Side-headings and Act-citation margin notes are stripped, so a Chunk is the section's operative text without its marginal title; BNS and BNSS carry no titles in the Chunk.",
@@ -9,7 +9,9 @@
     "Side-heading stripping is a length heuristic (short, capitalised, not starting with '(' or ending in ';' ':' or a dash). A one-word final body line at a page end (for example 'proceed.') would be dropped with the side-headings; the verify script's recall check against the NCRB text found no such loss in BNS or BNSS, but BSA and CrPC have no second text to check.",
     "BNSS section 359 (the compounding tables) is a table flattened by the PDF text layer; word order inside the table cells is not reliable.",
     "BNSS-CrPC mappings come from the NCRB table: sub-section rows collapse to whole sections, and one BNSS section can map to several CrPC sections (35 to 41 and 41A). CrPC sections marked 'Deleted' and BNSS sections marked 'New Section' (10 and 9; scripts/verify_criminal_codes.py reports them) get no Superseding-provision link.",
-    "Not ingested, so not mapped: BNS-IPC (the NCRB table is keyed by sub-section and needs its own parser), BSA-IEA (no table in hand)."
+    "The Indian Evidence Act is the India Code consolidated text 'last updated 13-3-2020': 185 Chunks, the 167 numbered sections plus 18 lettered insertions (22A, 45A, 47A, 53A, 65A, 65B, 67A, 73A, 81A, 85A-85C, 88A, 90A, 111A, 113A, 113B, 114A). Section 2 (and 22A, 82, 88, 113, 166 in the BSA table) are kept as repealed or deleted Chunks. Page footnotes and amendment markers are stripped, but footnote reference digits inside the text (for example 'Judges 9 and Magistrates 10') stay: they cannot be told from numbers safely. Each Chunk is the section text without its title.",
+    "BSA-IEA mappings (179) come from the NCRB BSA table, which has its own parser (`parse_bsa_table`, not the BNSS one): BSA numbers run 1..170 with no lettered sections, so the next number starts the next row; provisos and sub-section rows collapse to whole sections. IEA sections marked 'Deleted' or 'Repealed' (2, 22A, 82, 88, 113, 166) and BSA sections 61 and 170 ('New Section') get no Superseding-provision link. The check covers every BSA and IEA section in both directions.",
+    "Not ingested, so not mapped: the IPC and BNS-IPC (the NCRB BNS table is keyed by sub-section and needs its own parser)."
   ],
   "accepted_differences": {
     "bns": {

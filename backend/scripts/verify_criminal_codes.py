@@ -1,19 +1,20 @@
-"""Check the criminal-law Chunks (BNS, BNSS, BSA, CrPC) against independent evidence.
+"""Check the criminal-law Chunks (BNS, BNSS, BSA, CrPC, IEA) against independent evidence.
 
 The Acts are built from one official PDF each, so there is no second copy of the same text to
-diff against for BSA and CrPC; what this script can do, per Act:
+diff against for CrPC and IEA; what this script can do, per Act:
 
 * count and number checks: the Chunk count is the Act's published total and the base numbers
   run 1..N without a gap;
-* index check (BNS, BNSS, CrPC): the section numbers match an index that is not our parse of
-  the body: the NCRB compilation's own index for BNS and BNSS, the CrPC PDF's table of
-  contents for CrPC;
-* text check (BNS, BNSS): the NCRB compilation prints the whole Act again, extracted
+* index check (BNS, BNSS, BSA, CrPC, IEA): the section numbers match an index that is not our
+  parse of the body: the NCRB compilation's own index for BNS, BNSS and BSA, the PDF's table
+  of contents for CrPC and IEA;
+* text check (BNS, BNSS, BSA): the NCRB compilation prints the whole Act again, extracted
   separately from the Gazette PDF; every word of our Chunk must appear in order in its
   section there. It catches lost or garbled text and leftover page furniture, but not text
   that is truncated in both;
-* mapping check (BNSS-CrPC): every BNSS section is a mapping target or a "New Section",
-  every CrPC section a mapping source or "Deleted", and every mapping names a real section.
+* mapping check (BNSS-CrPC, BSA-IEA): every new-Act section is a mapping target or a "New
+  Section", every old-Act section a mapping source or "Deleted", and every mapping names a
+  real section.
 
 It does not replace the last ticket-08 checkbox: comparison against India Code itself.
 Usage:
@@ -30,7 +31,11 @@ from pathlib import Path
 
 from legallens.ingestion import apply_mappings, parse_criminal_code
 from legallens.ingestion.criminal_codes import CRIMINAL_ACTS
-from legallens.ingestion.mapping_tables import parse_corresponding_table, section_key
+from legallens.ingestion.mapping_tables import (
+    parse_bsa_table,
+    parse_corresponding_table,
+    section_key,
+)
 from legallens.ingestion.pdf_text import follows
 from legallens.ingestion.sources import load_criminal_codes, read_pinned_pdf_pages
 
@@ -39,6 +44,7 @@ _NUMBERED = re.compile(r"^(\d+)(-?[A-Z]{0,3})\.(?!\d)\s*\S")  # "105-I.", "144A.
 _NCRB_OLD_TITLE = {
     "bns": "Indian Penal Code, 1860",
     "bnss": "Code of Criminal Procedure, 1973",
+    "bsa": "INDIAN EVIDENCE ACT, 1872",
 }
 
 
@@ -107,6 +113,12 @@ def crpc_toc(raw_dir: Path) -> list[str]:
     return index_numbers(lines[:body])
 
 
+def iea_toc(raw_dir: Path) -> list[str]:
+    lines = [l for p in read_pinned_pdf_pages(raw_dir, "iea") for l in p.splitlines()]
+    body = next(i for i, l in enumerate(lines) if "WHEREAS it is expedient" in l)
+    return index_numbers(lines[:body])
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--raw-dir", type=Path, default=BACKEND_DIR / "data" / "raw")
@@ -127,9 +139,9 @@ def main() -> int:
         problems += not ok
 
     parsed = {k: parse_criminal_code(k, rs) for k, rs in records.items()}
-    indexes = {"crpc": crpc_toc(args.raw_dir)}
+    indexes = {"crpc": crpc_toc(args.raw_dir), "iea": iea_toc(args.raw_dir)}
     official: dict[str, dict[str, str]] = {}
-    for k in ("bns", "bnss"):
+    for k in ("bns", "bnss", "bsa"):
         indexes[k], official[k] = ncrb_index_and_text(args.raw_dir, k)
 
     for key, provisions in parsed.items():
@@ -169,41 +181,58 @@ def main() -> int:
             for n, r in sorted(unexpected, key=lambda x: x[1]):
                 print(f"        {n}: {r:.3f}")
 
-    table = parse_corresponding_table(
-        read_pinned_pdf_pages(args.raw_dir, "ncrb_bnss"),
-        new_act=CRIMINAL_ACTS["bnss"].name,
-        old_act=CRIMINAL_ACTS["crpc"].name,
-        old_title=_NCRB_OLD_TITLE["bnss"],
-    )
-    bnss = {p.number for p in parsed["bnss"]}
-    crpc = {p.number for p in parsed["crpc"]}
-    targets = {m["new_number"] for m in table.mappings} | set(table.new)
-    sources = {m["old_number"] for m in table.mappings} | set(table.deleted)
-    report(
-        not bnss - targets,
-        f"BNSS sections without a mapping row: {sorted(bnss - targets, key=section_key)}",
-    )
-    report(
-        not crpc - sources,
-        f"CrPC sections without a mapping row: {sorted(crpc - sources, key=section_key)}",
-    )
-    report(
-        targets <= bnss and sources <= crpc,
-        f"mapping rows naming sections not in the Acts: {sorted(targets - bnss, key=section_key)}"
-        f" {sorted(sources - crpc, key=section_key)}",
-    )
-    try:
-        apply_mappings([p for ps in parsed.values() for p in ps], mappings)
+    all_provisions = [p for ps in parsed.values() for p in ps]
+    tables = {
+        ("bnss", "crpc"): parse_corresponding_table(
+            read_pinned_pdf_pages(args.raw_dir, "ncrb_bnss"),
+            new_act=CRIMINAL_ACTS["bnss"].name,
+            old_act=CRIMINAL_ACTS["crpc"].name,
+            old_title=_NCRB_OLD_TITLE["bnss"],
+        ),
+        ("bsa", "iea"): parse_bsa_table(
+            read_pinned_pdf_pages(args.raw_dir, "ncrb_bsa"),
+            new_act=CRIMINAL_ACTS["bsa"].name,
+            old_act=CRIMINAL_ACTS["iea"].name,
+        ),
+    }
+    for (new_key, old_key), table in tables.items():
+        new_name, old_name = CRIMINAL_ACTS[new_key].name, CRIMINAL_ACTS[old_key].name
+        new_numbers = {p.number for p in parsed[new_key]}
+        old_numbers = {p.number for p in parsed[old_key]}
+        targets = {m["new_number"] for m in table.mappings} | set(table.new)
+        sources = {m["old_number"] for m in table.mappings} | set(table.deleted)
+        label = f"{new_key.upper()}-{old_key.upper()}"
         report(
-            True,
-            f"{len(mappings)} BNSS-CrPC mappings apply cleanly"
-            f" ({len(table.deleted)} CrPC sections deleted, {len(table.new)} BNSS sections new)",
+            not new_numbers - targets,
+            f"{label}: {new_key.upper()} sections without a mapping row:"
+            f" {sorted(new_numbers - targets, key=section_key)}",
         )
-    except ValueError as e:
-        report(False, str(e))
+        report(
+            not old_numbers - sources,
+            f"{label}: {old_key.upper()} sections without a mapping row:"
+            f" {sorted(old_numbers - sources, key=section_key)}",
+        )
+        report(
+            targets <= new_numbers and sources <= old_numbers,
+            f"{label}: mapping rows naming sections not in the Acts:"
+            f" {sorted(targets - new_numbers, key=section_key)}"
+            f" {sorted(sources - old_numbers, key=section_key)}",
+        )
+        mine = [
+            m for m in mappings if (m["new_act"], m["old_act"]) == (new_name, old_name)
+        ]
+        try:
+            apply_mappings(all_provisions, mine)
+            report(
+                True,
+                f"{len(mine)} {label} mappings apply cleanly"
+                f" ({len(table.deleted)} {old_key.upper()} sections deleted,"
+                f" {len(table.new)} {new_key.upper()} sections new)",
+            )
+        except ValueError as e:
+            report(False, str(e))
     print(
-        "\nNot checked: BNS-IPC and BSA-IEA mappings (IPC and consolidated Evidence Act not"
-        " ingested); comparison with India Code."
+        "\nNot checked: the IPC and the BNS-IPC mapping (not ingested); comparison with India Code."
     )
     return 1 if problems else 0
 

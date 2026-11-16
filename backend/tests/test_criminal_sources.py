@@ -28,7 +28,16 @@ def test_a_missing_pdf_says_which_file_to_put_where(tmp_path):
 
 
 def test_every_source_is_pinned_by_sha256():
-    assert set(CRIMINAL_PDFS) == {"bns", "bnss", "bsa", "crpc", "ncrb_bns", "ncrb_bnss"}
+    assert set(CRIMINAL_PDFS) == {
+        "bns",
+        "bnss",
+        "bsa",
+        "crpc",
+        "iea",
+        "ncrb_bns",
+        "ncrb_bnss",
+        "ncrb_bsa",
+    }
     for pdf in CRIMINAL_PDFS.values():
         assert len(pdf.sha256) == 64 and int(pdf.sha256, 16) >= 0
 
@@ -43,6 +52,7 @@ def test_real_pdfs_ingest_to_the_published_section_counts_with_clean_mappings():
         "bnss": 531,
         "bsa": 170,
         "crpc": 535,
+        "iea": 185,
     }
     provisions = [p for k, rs in records.items() for p in parse_criminal_code(k, rs)]
     linked = {(p.act, p.number): p for p in apply_mappings(provisions, mappings)}
@@ -52,4 +62,12 @@ def test_real_pdfs_ingest_to_the_published_section_counts_with_clean_mappings():
     assert linked["Bharatiya Nagarik Suraksha Sanhita", "35"].supersedes == (
         "Code of Criminal Procedure 41; Code of Criminal Procedure 41A"
     )
+    iea = "Indian Evidence Act"
+    assert linked[iea, "3"].superseded_by == "Bharatiya Sakshya Adhiniyam 2"
+    assert linked[iea, "65B"].superseded_by == "Bharatiya Sakshya Adhiniyam 63"
+    assert linked[iea, "22A"].superseded_by is None  # deleted, with no counterpart
+    assert linked["Bharatiya Sakshya Adhiniyam", "22"].supersedes == (
+        "Indian Evidence Act 24; Indian Evidence Act 28; Indian Evidence Act 29"
+    )
+    assert linked["Bharatiya Sakshya Adhiniyam", "61"].supersedes is None  # new section
     assert build_report(provisions).warnings == []
