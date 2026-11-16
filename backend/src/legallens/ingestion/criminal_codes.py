@@ -1,8 +1,8 @@
 """Parser for the six criminal-law Acts: one Chunk per Section (ADR 0002).
 
 All six share one section-record format, `{"section", "chapter", "text"}` (an optional
-"title" is ignored), so one parser serves them. The real source texts (official PDFs) will
-need an adapter that yields these records; parsing is deliberately separate from that.
+"title" is ignored), so one parser serves them. The adapters that turn the official PDFs into
+these records are in `pdf_text`; parsing is deliberately separate from that.
 """
 
 import re
@@ -22,15 +22,17 @@ class CriminalAct:
     expected_count: tuple[int, int]  # plausible Chunk range, for the ingestion report
 
 
-# Ranges bracket each Act's published section count plus lettered insertions. They are
-# provisional until verified against India Code (ticket 08, last checkbox).
+# BNS, BNSS, BSA and CrPC have exact counts: the section totals of the pinned PDFs (see
+# `sources.CRIMINAL_PDFS`), cross-checked by scripts/verify_criminal_codes.py. The CrPC's 535
+# includes lettered insertions such as 41A and 105A-105L. The IPC and Indian Evidence Act
+# ranges are still provisional: neither is ingested yet (ticket 08).
 CRIMINAL_ACTS: dict[str, CriminalAct] = {
     "ipc": CriminalAct("Indian Penal Code", "repealed", (490, 580)),
-    "crpc": CriminalAct("Code of Criminal Procedure", "repealed", (480, 580)),
+    "crpc": CriminalAct("Code of Criminal Procedure", "repealed", (535, 535)),
     "iea": CriminalAct("Indian Evidence Act", "repealed", (160, 190)),
-    "bns": CriminalAct("Bharatiya Nyaya Sanhita", "in_force", (350, 365)),
-    "bnss": CriminalAct("Bharatiya Nagarik Suraksha Sanhita", "in_force", (525, 540)),
-    "bsa": CriminalAct("Bharatiya Sakshya Adhiniyam", "in_force", (165, 175)),
+    "bns": CriminalAct("Bharatiya Nyaya Sanhita", "in_force", (358, 358)),
+    "bnss": CriminalAct("Bharatiya Nagarik Suraksha Sanhita", "in_force", (531, 531)),
+    "bsa": CriminalAct("Bharatiya Sakshya Adhiniyam", "in_force", (170, 170)),
 }
 
 

@@ -1,0 +1,24 @@
+{
+  "sources": "Pinned by sha256 in legallens/ingestion/sources.py (CRIMINAL_PDFS); the PDFs are gitignored in backend/data/raw/criminal/.",
+  "verified_against": "scripts/verify_criminal_codes.py: section counts and numbering; the NCRB Sankalan compilations' own index and re-printed Act text for BNS and BNSS; the CrPC PDF's table of contents; the BNSS-CrPC corresponding-section table. NOT yet verified against India Code (ticket 08, last checkbox).",
+  "notes": [
+    "No patches to the source text are needed: the adapters' output matched every independent check except the four accepted differences below.",
+    "BNS, BNSS and BSA are the Gazette of India Extraordinary prints (Nos. 250883, 250884, 250882). Side-headings and Act-citation margin notes are stripped, so a Chunk is the section's operative text without its marginal title; BNS and BNSS carry no titles in the Chunk.",
+    "The Gazette PDFs break a few words mid-token where the text layer is irregular (for example 'either d escription' in BNS 323). The Chunk keeps the split; it does not change meaning but slightly lowers lexical match.",
+    "The CrPC is the India Code consolidated text with State amendments, footnotes and amendment markers removed, so a Chunk is the central Act's text only. Its 535 Chunks include 105-I and 265-I (printed hyphenated in the PDF, stored as 105I and 265I).",
+    "Side-heading stripping is a length heuristic (short, capitalised, not starting with '(' or ending in ';' ':' or a dash). A one-word final body line at a page end (for example 'proceed.') would be dropped with the side-headings; the verify script's recall check against the NCRB text found no such loss in BNS or BNSS, but BSA and CrPC have no second text to check.",
+    "BNSS section 359 (the compounding tables) is a table flattened by the PDF text layer; word order inside the table cells is not reliable.",
+    "BNSS-CrPC mappings come from the NCRB table: sub-section rows collapse to whole sections, and one BNSS section can map to several CrPC sections (35 to 41 and 41A). CrPC sections marked 'Deleted' and BNSS sections marked 'New Section' (10 and 9; scripts/verify_criminal_codes.py reports them) get no Superseding-provision link.",
+    "Not ingested, so not mapped: BNS-IPC (the NCRB table is keyed by sub-section and needs its own parser), BSA-IEA (no table in hand)."
+  ],
+  "accepted_differences": {
+    "bns": {
+      "323": "The Gazette PDF text layer splits 'either d / escription'; the NCRB copy has the word whole. Our Chunk follows the Gazette."
+    },
+    "bnss": {
+      "1": "The Gazette reads 'Chapters IX, XI and XII'; the NCRB copy drops 'XI'. Our Chunk follows the Gazette.",
+      "359": "Compounding tables: the two PDFs flatten the table cells in different orders, so in-order word recall is low although the words are present.",
+      "480": "The NCRB copy lays out sub-sections (2) to (5) in a different order across a page break; the same words are present in both PDFs."
+    }
+  }
+}

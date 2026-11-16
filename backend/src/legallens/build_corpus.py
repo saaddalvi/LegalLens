@@ -1,8 +1,9 @@
 """Build the Corpus from source texts: `python -m legallens.build_corpus`.
 
 Downloads the pinned Constitution dataset (checking its hash), applies the recorded patches,
-reports Chunk counts per Act, and writes a fresh vector store. Exits non-zero if any count or
-Chunk looks wrong, so a bad parse is not silently shipped.
+reads the pinned criminal-law PDFs from `<raw-dir>/criminal/` (BNS, BNSS, BSA, CrPC and the
+BNSS-CrPC mapping), reports Chunk counts per Act, and writes a fresh vector store. Exits
+non-zero if any count or Chunk looks wrong, so a bad parse is not silently shipped.
 """
 
 import argparse
@@ -20,7 +21,7 @@ from .ingestion import (
     parse_constitution,
     parse_criminal_code,
 )
-from .ingestion.sources import fetch_constitution, load_patches
+from .ingestion.sources import fetch_constitution, load_criminal_codes, load_patches
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -62,12 +63,19 @@ def main() -> int:
         return 2
 
     records = fetch_constitution(args.raw_dir / "constitution_of_india.json")
+    try:
+        criminal_codes, mappings = load_criminal_codes(args.raw_dir)
+    except FileNotFoundError as e:
+        print(e, file=sys.stderr)
+        return 2
     # Build beside the target and swap in only a clean result, so a failed or suspicious
     # build never destroys a good store.
     staging = out.with_name(out.name + ".building")
     shutil.rmtree(staging, ignore_errors=True)
     corpus = Corpus(staging, E5Embedder())
-    report = build(corpus, records, load_patches(args.patches))
+    report = build(
+        corpus, records, load_patches(args.patches), criminal_codes, mappings
+    )
 
     for act, n in sorted(report.counts.items()):
         print(f"  {act}: {n} Chunks")
