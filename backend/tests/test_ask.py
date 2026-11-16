@@ -40,14 +40,31 @@ class FakeEmbedder:
         return out
 
 
-class FakeLLM:
+class GradingStub:
+    """Grader and rewriter defaults: retrieval is judged fully relevant."""
+
+    score = 1.0
+
+    def grade(self, query, provisions):
+        return self.score
+
+    def rewrite(self, query):
+        return query
+
+
+class FakeLLM(GradingStub):
     """Cites the top retrieved Provision, as a well-behaved Gemini would."""
 
-    def __init__(self):
+    def __init__(self, score: float = 1.0):
+        self.score = score
         self.seen: list[Provision] = []
+        self.sources_seen = ()
 
-    def generate(self, query, provisions):
+    def generate(self, query, provisions, sources=()):
         self.seen = provisions
+        self.sources_seen = sources
+        if not provisions:
+            return Generation(answer="Web-based summary.", language="en", citations=[])
         top = provisions[0]
         return Generation(
             answer=f"Plain-language summary of {top.act} {top.number}.",
@@ -61,13 +78,13 @@ class FakeFallback:
         return []
 
 
-class HallucinatingThenValidLLM:
+class HallucinatingThenValidLLM(GradingStub):
     """Cites a Provision absent from the Corpus once, then recovers on regeneration."""
 
     def __init__(self):
         self.calls = 0
 
-    def generate(self, query, provisions):
+    def generate(self, query, provisions, sources=()):
         self.calls += 1
         if self.calls == 1:
             return Generation(
@@ -83,13 +100,13 @@ class HallucinatingThenValidLLM:
         )
 
 
-class AlwaysHallucinatingLLM:
+class AlwaysHallucinatingLLM(GradingStub):
     """Cites a Provision absent from the Corpus on every call."""
 
     def __init__(self):
         self.calls = 0
 
-    def generate(self, query, provisions):
+    def generate(self, query, provisions, sources=()):
         self.calls += 1
         return Generation(
             answer="Ghost citation answer.",
@@ -158,8 +175,8 @@ def test_hallucinated_citation_after_regeneration_is_blocked(tmp_path):
 
 
 def test_llm_failure_returns_503(tmp_path):
-    class BrokenLLM:
-        def generate(self, query, provisions):
+    class BrokenLLM(GradingStub):
+        def generate(self, query, provisions, sources=()):
             raise RuntimeError("quota")
 
     corpus = Corpus(tmp_path / "chroma", FakeEmbedder())

@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .corpus import Corpus
 from .embeddings import E5Embedder
-from .fallback import NoFallback, WebFallback
+from .fallback import WebFallback, default_fallback
 from .llm import LLM, GeminiLLM
 from .models import AskRequest, AskResponse, Provision
 from .pipeline import answer_query
@@ -32,8 +32,12 @@ def create_app(
     corpus: Corpus | None = None,
     llm: LLM | None = None,
     fallback: WebFallback | None = None,
+    crag: bool = True,
 ) -> FastAPI:
-    """Dependencies not supplied are built lazily on the first question."""
+    """Dependencies not supplied are built lazily on the first question.
+
+    crag=False serves the plain-RAG baseline (no Grader, no Fallback) for evaluation.
+    """
     app = FastAPI(title="LegalLens")
     app.add_middleware(
         CORSMiddleware,
@@ -44,7 +48,7 @@ def create_app(
 
     @lru_cache(maxsize=1)
     def deps() -> tuple[Corpus, LLM, WebFallback]:
-        return (corpus or default_corpus(), llm or GeminiLLM(), fallback or NoFallback())
+        return (corpus or default_corpus(), llm or GeminiLLM(), fallback or default_fallback())
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -54,7 +58,7 @@ def create_app(
     def ask(req: AskRequest) -> AskResponse:
         c, l, f = deps()
         try:
-            return answer_query(req.query, corpus=c, llm=l, fallback=f)
+            return answer_query(req.query, corpus=c, llm=l, fallback=f, crag=crag)
         except Exception as exc:
             logging.getLogger(__name__).exception("answer generation failed")
             raise HTTPException(503, "The service is unavailable. Please retry shortly.") from exc

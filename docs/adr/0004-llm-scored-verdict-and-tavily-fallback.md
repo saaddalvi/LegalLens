@@ -1,0 +1,3 @@
+# LLM-scored Verdict thresholds and Tavily as the web Fallback
+
+The Grader (Gemini) returns a relevance score in [0, 1] for the retrieved Chunks. The Verdict is **correct** at >= 0.7, **incorrect** at <= 0.3, and **ambiguous** in between. These are starting values, to be re-tuned against the golden set in the evaluation (ticket 11). The Fallback is Tavily's general search API (free tier, returns title, URL and extracted snippet, one HTTP call), selected via `WEB_SEARCH_API_KEY`; with no key configured the Fallback yields nothing and the pipeline degrades to Corpus-only or "cannot answer". An incorrect Verdict answers from Fallback sources alone and carries no Citations; ambiguous combines Chunks and sources.

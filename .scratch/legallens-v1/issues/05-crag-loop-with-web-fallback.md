@@ -4,10 +4,10 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Endpoint tests with faked Gemini and Fallback: each Verdict produces the expected Trust label and sources
-- [ ] Endpoint test: Fallback failure degrades gracefully without an error to the user
-- [ ] A poor first retrieval triggers a rewritten Query, observable through the Fallback receiving the rewritten text
-- [ ] Web provider and Verdict thresholds are chosen and recorded (open item from the spec)
-- [ ] A plain-RAG mode (no Grader, no Fallback) is available for the evaluation comparison
+- [x] Endpoint tests with faked Gemini and Fallback: each Verdict produces the expected Trust label and sources
+- [x] Endpoint test: Fallback failure degrades gracefully without an error to the user
+- [x] A poor first retrieval triggers a rewritten Query, observable through the Fallback receiving the rewritten text
+- [x] Web provider and Verdict thresholds are chosen and recorded (open item from the spec)
+- [x] A plain-RAG mode (no Grader, no Fallback) is available for the evaluation comparison

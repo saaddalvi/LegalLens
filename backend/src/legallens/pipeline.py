@@ -1,43 +1,118 @@
+import logging
+from typing import Literal
+
 from .citation_check import check_citations
 from .corpus import Corpus
 from .fallback import WebFallback
 from .llm import LLM
-from .models import AskResponse
+from .models import AskResponse, FallbackSource, Provision, TrustLabel
 
 TOP_K = 5
+
+# Verdict thresholds on the Grader's relevance score (recorded in ADR 0004).
+CORRECT_THRESHOLD = 0.7
+INCORRECT_THRESHOLD = 0.3
+
+Verdict = Literal["correct", "ambiguous", "incorrect"]
 
 CANNOT_ANSWER_RELIABLY = (
     "LegalLens cannot answer reliably: it could not confirm this answer's citations "
     "against the Corpus. Please try rephrasing your question."
 )
+CANNOT_ANSWER_NO_SOURCES = (
+    "LegalLens cannot answer this question: the Corpus does not cover it and the web "
+    "search could not supply reliable sources. Please try rephrasing your question."
+)
+
+log = logging.getLogger(__name__)
 
 
-def answer_query(query: str, *, corpus: Corpus, llm: LLM, fallback: WebFallback) -> AskResponse:
-    """Retrieve, generate, and verify Citations against the Corpus.
+def verdict_for(score: float) -> Verdict:
+    if score >= CORRECT_THRESHOLD:
+        return "correct"
+    if score <= INCORRECT_THRESHOLD:
+        return "incorrect"
+    return "ambiguous"
 
-    A Hallucinated citation (ticket 04) triggers one regeneration attempt; if that
-    also hallucinates, the answer is blocked with a clear "cannot answer reliably"
-    message instead of reaching the user. The Fallback is held for the CRAG loop
-    (ticket 05); the skeleton is Corpus-only.
-    """
-    provisions = corpus.search(query, TOP_K)
-    gen = llm.generate(query, provisions)
+
+def _refusal(message: str) -> AskResponse:
+    return AskResponse(
+        answer=message,
+        answer_language="en",
+        trust_label="corpus",
+        citations=[],
+        fallback_sources=[],
+    )
+
+
+def _search_fallback(
+    query: str, *, llm: LLM, fallback: WebFallback
+) -> list[FallbackSource]:
+    """Rewrite the Query and run the Fallback; any provider failure yields no sources."""
+    rewritten = llm.rewrite(query)
+    try:
+        return fallback.search(rewritten)
+    except Exception:
+        log.exception("web Fallback failed")
+        return []
+
+
+def _answer(
+    query: str,
+    provisions: list[Provision],
+    sources: list[FallbackSource],
+    *,
+    corpus: Corpus,
+    llm: LLM,
+    trust_label: TrustLabel,
+) -> AskResponse:
+    """Generate, verifying Citations against the Corpus (one regeneration, then block)."""
+    gen = llm.generate(query, provisions, sources)
     result = check_citations(gen.citations, corpus=corpus)
     if not result.all_valid:
-        gen = llm.generate(query, provisions)
+        gen = llm.generate(query, provisions, sources)
         result = check_citations(gen.citations, corpus=corpus)
     if not result.all_valid:
-        return AskResponse(
-            answer=CANNOT_ANSWER_RELIABLY,
-            answer_language="en",
-            trust_label="corpus",
-            citations=[],
-            fallback_sources=[],
-        )
+        return _refusal(CANNOT_ANSWER_RELIABLY)
     return AskResponse(
         answer=gen.answer,
         answer_language=gen.language,
-        trust_label="corpus",
+        trust_label=trust_label,
         citations=result.valid,
-        fallback_sources=[],
+        fallback_sources=sources,
     )
+
+
+def answer_query(
+    query: str,
+    *,
+    corpus: Corpus,
+    llm: LLM,
+    fallback: WebFallback,
+    crag: bool = True,
+) -> AskResponse:
+    """Corrective RAG (ADR 0001); with crag=False, the plain-RAG baseline.
+
+    The Grader scores retrieved Chunks into a Verdict. Correct: answer from Chunks.
+    Ambiguous: Chunks plus Fallback results. Incorrect: Fallback results only. A
+    Fallback failure degrades to a Corpus-only answer (ambiguous) or an explicit
+    "cannot answer" (incorrect).
+    """
+    provisions = corpus.search(query, TOP_K)
+    if not crag:
+        return _answer(query, provisions, [], corpus=corpus, llm=llm, trust_label="corpus")
+
+    verdict = verdict_for(llm.grade(query, provisions))
+    if verdict == "correct":
+        return _answer(query, provisions, [], corpus=corpus, llm=llm, trust_label="corpus")
+
+    sources = _search_fallback(query, llm=llm, fallback=fallback)
+    if verdict == "ambiguous":
+        if not sources:
+            return _answer(query, provisions, [], corpus=corpus, llm=llm, trust_label="corpus")
+        return _answer(
+            query, provisions, sources, corpus=corpus, llm=llm, trust_label="corpus_and_fallback"
+        )
+    if not sources:
+        return _refusal(CANNOT_ANSWER_NO_SOURCES)
+    return _answer(query, [], sources, corpus=corpus, llm=llm, trust_label="fallback")
