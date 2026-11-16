@@ -6,8 +6,8 @@
 
 **Status:** ready-for-agent
 
-- [ ] The golden set includes English, Hindi, repealed-code, out-of-scope and poor-retrieval cases across all Acts in the Corpus
-- [ ] One command runs the evaluation and writes a readable report
-- [ ] Citation validity uses the Hallucinated-citation check from ticket 04
-- [ ] The report shows plain RAG versus CRAG on every metric
-- [ ] Results are summarised in the README
+- [x] The golden set includes English, Hindi, repealed-code, out-of-scope and poor-retrieval cases across all Acts in the Corpus
+- [x] One command runs the evaluation and writes a readable report
+- [x] Citation validity uses the Hallucinated-citation check from ticket 04
+- [x] The report shows plain RAG versus CRAG on every metric
+- [ ] Results are summarised in the README (preliminary numbers are in; a clean full rerun is pending the Gemini daily quota reset)
