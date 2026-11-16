@@ -45,7 +45,7 @@ def build(
     everyday_acts: dict[str, list[dict]] | None = None,
 ) -> Report:
     """`criminal_codes` maps an Act key (ipc, crpc, iea, bns, bnss, bsa) to section records;
-    `everyday_acts` does the same for the consumer, tenancy and labour Acts (cpa, tpa, wages,
+    `everyday_acts` does the same for the consumer, tenancy and labour Acts (cpa, tpa, mta, wages,
     ir, ss, osh)."""
     provisions = parse_constitution(constitution_records, patches)
     for key, records in (criminal_codes or {}).items():

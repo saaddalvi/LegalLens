@@ -676,3 +676,138 @@ def tpa_lease_sections(pages: list[str]) -> list[dict]:
         text = _DELETED.sub("", "\n".join(kept))
         rec["text"] = _AMENDMENT_MARK.sub("", text).replace("]", "").strip()
     return records
+
+
+_MTA_FURNITURE = re.compile(r"\s*(?:Page \d+ of \d+|WWW\.LIVELAW\.IN)\s*")
+_MTA_CONTENTS_ENTRY = re.compile(r"^(\d+)\.\s+(\S.*)$")
+_MTA_SENTENCE_END = (".", ";", ":", "—", "–")
+_MTA_NOTE_PART = re.compile(
+    r"^\d+ of$"
+)  # "41 of" / "2006.": an Act citation split over two lines
+_MTA_YEAR = re.compile(r"^\d{4}\.?$")
+
+
+def _mta_words(text: str) -> list[str]:
+    """Words for matching side-headings to titles: the print hyphenates "sub-letting" in one."""
+    return text.replace("-", "").split()
+
+
+def _mta_contents_titles(lines: list[str]) -> dict[str, list[str]]:
+    """Section number -> the words of its title, from the Arrangement of Clauses."""
+    titles: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in lines:
+        if line.startswith(("First Schedule", "THE FIRST")):
+            break
+        m = _MTA_CONTENTS_ENTRY.match(line)
+        if m:
+            current = m.group(1)
+            titles[current] = _mta_words(m.group(2))
+        elif current and not titles[current][-1].endswith("."):
+            titles[current] += _mta_words(line)  # a title wrapped onto the next line
+    return titles
+
+
+def _strip_title(lines: list[str], title: list[str]) -> list[str]:
+    """Drop the section's side-heading, which the PDF scatters over its text.
+
+    The side-heading repeats the section's title from the Arrangement of Clauses, wrapped
+    over several lines or at the end of the heading line. Words are matched in order.
+    """
+    out: list[str] = []
+    p = 0  # the next title word to find
+    for line in lines:
+        tokens = line.split()
+        words = _mta_words(line)
+        for k in range(min(len(tokens), len(title) - p), 0, -1):
+            if words[-k:] != title[p : p + k]:
+                continue
+            if k == len(tokens) or k >= 2 or len(title) == 1:
+                tokens = tokens[:-k]
+                p += k
+                break
+        if tokens:
+            out.append(" ".join(tokens) if len(tokens) != len(words) else line)
+    return out
+
+
+def _strip_other_titles(lines: list[str], titles: list[list[str]]) -> list[str]:
+    """Drop side-headings of other sections that the PDF placed in this section's text.
+
+    Only runs of whole lines that spell out a title exactly are dropped, longest titles first.
+    """
+    for title in sorted(titles, key=len, reverse=True):
+        i = 0
+        while i < len(lines):
+            for j in range(i + 1, min(i + 9, len(lines)) + 1):
+                tokens = _mta_words(" ".join(lines[i:j]))
+                if tokens == title:
+                    # a last line after an unfinished sentence is body text ("... by a Rent Court.")
+                    if (
+                        j == len(lines)
+                        and i
+                        and not lines[i - 1].endswith(_MTA_SENTENCE_END)
+                    ):
+                        break
+                    del lines[i:j]
+                    i -= 1
+                    break
+                if len(tokens) >= len(title):
+                    break
+            i += 1
+    return lines
+
+
+def model_tenancy_sections(pages: list[str], gap: int = 1) -> list[dict]:
+    """Sections of the Model Tenancy Act 2021 (MoHUA text, LiveLaw print), in order.
+
+    Page headers/footers and the Act citations in the margin ("41 of" / "2006.") are dropped,
+    as is each section's side-heading (matched to its title in the table of contents). The
+    body ends at the First Schedule, whose forms also number their lines "1.", "2.".
+    `gap` is as for `follows`; the real text has no gaps, short test excerpts do.
+    """
+    lines = [
+        l.strip()
+        for page in pages
+        for l in page.splitlines()
+        if l.strip() and not _MTA_FURNITURE.fullmatch(l)
+    ]
+    start = next(i for i, l in enumerate(lines) if l == "THE MODEL TENANCY ACT, 2021")
+    titles = _mta_contents_titles(lines[:start])
+    records: list[dict] = []
+    bodies: list[list[str]] = []
+    chapter, in_chapter_heading = "", False
+    prev: tuple[int, str] | None = None
+    for line in lines[start + 1 :]:
+        if line.startswith("THE FIRST SCHEDULE"):
+            break
+        m = _CHAPTER.match(line)
+        if m:
+            chapter, in_chapter_heading = f"Chapter {m.group(1)}", True
+            continue
+        h = _SECTION_HEAD.match(line)
+        if h and follows(prev, int(h.group(1)), h.group(2), gap):
+            prev = (int(h.group(1)), h.group(2))
+            records.append({"section": h.group(1) + h.group(2), "chapter": chapter})
+            bodies.append([h.group(3)] if h.group(3) else [])
+            in_chapter_heading = False
+        elif bodies and not (in_chapter_heading and line.isupper()):
+            in_chapter_heading = False
+            bodies[-1].append(line)
+    for rec, body in zip(records, bodies):
+        body = _strip_title(body, titles.get(rec["section"], []))
+        body = _strip_other_titles(body, list(titles.values()))
+        kept: list[str] = []
+        i = 0
+        while i < len(body):
+            if (
+                _MTA_NOTE_PART.match(body[i])
+                and i + 1 < len(body)
+                and _MTA_YEAR.match(body[i + 1])
+            ):
+                i += 2  # an Act citation in the margin
+                continue
+            kept.append(body[i])
+            i += 1
+        rec["text"] = "\n".join(kept).strip()
+    return records

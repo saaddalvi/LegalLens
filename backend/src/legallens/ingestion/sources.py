@@ -18,6 +18,7 @@ from .pdf_text import (
     gazette_sections,
     iea_sections,
     kanoon_ipc_sections,
+    model_tenancy_sections,
     pdf_pages,
     tpa_lease_sections,
 )
@@ -176,6 +177,11 @@ EVERYDAY_PDFS: dict[str, PinnedPdf] = {
         "56a363929cefe94696f890eb3240bcfb4aa64527e30ecfed7a8d3a1dfede1646",
         "Transfer of Property Act, 1882: International Insolvency Institute print (unofficial); only Chapter V is used",
     ),
+    "mta": PinnedPdf(
+        "mta_livelaw.pdf",
+        "d408b32be6e0167abb259330cbc3cb55addda48e953a69188398a0eb5fda98a9",
+        "Model Tenancy Act, 2021: the Ministry of Housing and Urban Affairs text as printed by LiveLaw (unofficial copy)",
+    ),
     "ss_ic": PinnedPdf(
         "ss_ic.pdf",
         "53ad67f75fbc874fd837274e9e887fac7a21cc55c7454398b2cdb96046fd7967",
@@ -189,12 +195,13 @@ def read_everyday_pdf_pages(raw_dir: Path, key: str) -> list[str]:
 
 
 def load_everyday_acts(raw_dir: Path) -> dict[str, list[dict]]:
-    """Section records for the six consumer, tenancy and labour Acts, by `EVERYDAY_ACTS` key."""
+    """Section records for the seven consumer, tenancy and labour Acts, by `EVERYDAY_ACTS` key."""
     gazette = ("cpa", "wages", "ir", "ss", "osh")
     records = {
         key: gazette_sections(read_everyday_pdf_pages(raw_dir, key)) for key in gazette
     }
     records["tpa"] = tpa_lease_sections(read_everyday_pdf_pages(raw_dir, "tpa"))
+    records["mta"] = model_tenancy_sections(read_everyday_pdf_pages(raw_dir, "mta"))
     assert set(records) == set(EVERYDAY_ACTS)
     return records
 

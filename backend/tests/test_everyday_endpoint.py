@@ -55,6 +55,17 @@ def test_informal_tenancy_query_cites_the_lease_provisions(client):
     assert "fifteen days' notice" in c["text"]
 
 
+def test_rental_deposit_query_cites_the_model_tenancy_act(client):
+    c = first_citation(
+        client,
+        "My landlord will not refund my security deposit after I vacated. How many "
+        "months rent can a security deposit be and when must it be refunded?",
+    )
+    assert c["act"] == "Model Tenancy Act"
+    assert c["number"] == "11"
+    assert "refunded to the tenant on the date of" in c["text"]
+
+
 def test_consumer_query_cites_the_consumer_protection_act(client):
     c = first_citation(
         client,

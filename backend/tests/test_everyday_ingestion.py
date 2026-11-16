@@ -64,6 +64,7 @@ def test_every_act_has_an_exact_expected_count():
     assert {k: v.expected_count for k, v in EVERYDAY_ACTS.items()} == {
         "cpa": (107, 107),
         "tpa": (14, 14),
+        "mta": (47, 47),
         "wages": (69, 69),
         "ir": (104, 104),
         "ss": (164, 164),

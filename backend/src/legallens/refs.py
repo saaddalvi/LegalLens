@@ -15,6 +15,7 @@ ACT_ALIASES: dict[str, tuple[str, ...]] = {
     "Bharatiya Sakshya Adhiniyam": ("bharatiya sakshya adhiniyam", "bsa"),
     "Consumer Protection Act": ("consumer protection act",),
     "Transfer of Property Act": ("transfer of property act", "tpa"),
+    "Model Tenancy Act": ("model tenancy act", "mta"),
     "Code on Wages": ("code on wages",),
     "Industrial Relations Code": ("industrial relations code",),
     "Code on Social Security": ("code on social security",),

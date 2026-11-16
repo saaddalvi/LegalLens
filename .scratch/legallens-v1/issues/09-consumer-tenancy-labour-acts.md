@@ -13,6 +13,6 @@
 
 ## Notes
 
-- Approved Act list: Consumer Protection Act 2019; Transfer of Property Act 1882, Chapter V (leases) only; the four Labour Codes (Wages, Industrial Relations, Social Security, OSH). 6 Acts, 601 Chunks.
+- Approved Act list: Consumer Protection Act 2019; Transfer of Property Act 1882, Chapter V (leases) only; the four Labour Codes (Wages, Industrial Relations, Social Security, OSH). 7 Acts with the Model Tenancy Act added afterwards at the user's request, 648 Chunks.
 - "Per-Act counts reported and verified against India Code" is only partly met, so it stays unchecked. `backend/scripts/verify_everyday_acts.py` checks counts, numbering and chapter totals against the Acts' published totals, and the Code on Social Security's section numbers against the India Code index. India Code returned 504s for the other Acts, so their text has not been diffed against it. See `backend/sources/everyday_acts.json`.
-- The approved list has no security-deposit provision (the Transfer of Property Act says nothing on deposits), so a "my landlord won't return my deposit" Query retrieves poorly. The Model Tenancy Act 2021 or a state rent Act would cover it; add one to close that gap.
+- Rental deposits: the Model Tenancy Act 2021 (47 clauses; deposit cap and refund in clause 11) was added at the user's request, and a deposit Query now retrieves it. It is a template for States, not law in force by itself, but `Status` has no value for that, so it is stored as in_force under the name 'Model Tenancy Act'. Giving it a distinct Status (and telling the LLM and the frontend) is open.
