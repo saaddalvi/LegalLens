@@ -1,0 +1,417 @@
+[
+  {
+    "id": "en-const-arrest",
+    "category": "english",
+    "query": "What rights do I have if I am arrested?",
+    "expected_provisions": [
+      {
+        "act": "Constitution of India",
+        "number": "22"
+      }
+    ],
+    "reference": "A person arrested must be told the grounds of arrest, may consult a lawyer of their choice, and must be produced before a magistrate within 24 hours."
+  },
+  {
+    "id": "en-const-speech",
+    "category": "english",
+    "query": "Do I have a right to freedom of speech in India?",
+    "expected_provisions": [
+      {
+        "act": "Constitution of India",
+        "number": "19"
+      }
+    ],
+    "reference": "Citizens have the right to freedom of speech and expression under Article 19(1)(a), subject to reasonable restrictions."
+  },
+  {
+    "id": "en-const-education",
+    "category": "english",
+    "query": "Is education a fundamental right for children?",
+    "expected_provisions": [
+      {
+        "act": "Constitution of India",
+        "number": "21A"
+      }
+    ],
+    "reference": "The State must provide free and compulsory education to children aged six to fourteen."
+  },
+  {
+    "id": "en-bns-murder",
+    "category": "english",
+    "query": "What is the punishment for murder?",
+    "expected_provisions": [
+      {
+        "act": "Bharatiya Nyaya Sanhita",
+        "number": "103"
+      }
+    ],
+    "reference": "Murder is punishable with death or imprisonment for life, and fine (BNS 103)."
+  },
+  {
+    "id": "en-bns-theft",
+    "category": "english",
+    "query": "Someone stole my phone. What does the law say about theft?",
+    "expected_provisions": [
+      {
+        "act": "Bharatiya Nyaya Sanhita",
+        "number": "303"
+      }
+    ],
+    "reference": "Theft is dishonestly taking movable property without consent; punishable under BNS 303 with imprisonment and/or fine."
+  },
+  {
+    "id": "en-bnss-fir",
+    "category": "english",
+    "query": "How do I file an FIR for a cognizable offence?",
+    "expected_provisions": [
+      {
+        "act": "Bharatiya Nagarik Suraksha Sanhita",
+        "number": "173"
+      }
+    ],
+    "reference": "Information about a cognizable offence can be given orally or electronically to the police station and is recorded as an FIR (BNSS 173)."
+  },
+  {
+    "id": "en-bsa-electronic",
+    "category": "english",
+    "query": "Can an email or electronic record be used as evidence in court?",
+    "expected_provisions": [
+      {
+        "act": "Bharatiya Sakshya Adhiniyam",
+        "number": "63"
+      }
+    ],
+    "reference": "Electronic records are admissible as documents if the conditions and certificate under BSA 63 are met."
+  },
+  {
+    "id": "en-cpa-complaint",
+    "category": "english",
+    "query": "I bought a defective product. Where can I file a consumer complaint?",
+    "expected_provisions": [
+      {
+        "act": "Consumer Protection Act",
+        "number": "35"
+      }
+    ],
+    "reference": "A complaint can be filed with the District Consumer Disputes Redressal Commission (Consumer Protection Act 35)."
+  },
+  {
+    "id": "en-mta-deposit",
+    "category": "english",
+    "query": "My landlord won't return my security deposit. What does the law say?",
+    "expected_provisions": [
+      {
+        "act": "Model Tenancy Act",
+        "number": "11"
+      }
+    ],
+    "reference": "Under the Model Tenancy Act the deposit is capped (two months' rent for residential) and must be refunded on vacating; it is a model Act, not binding law until a State adopts it."
+  },
+  {
+    "id": "en-tpa-lease",
+    "category": "english",
+    "query": "How much notice is needed to end a monthly lease?",
+    "expected_provisions": [
+      {
+        "act": "Transfer of Property Act",
+        "number": "106"
+      }
+    ],
+    "reference": "A month-to-month lease can be ended by 15 days' notice (Transfer of Property Act 106)."
+  },
+  {
+    "id": "en-wages-payment",
+    "category": "english",
+    "query": "When must my employer pay my wages?",
+    "expected_provisions": [
+      {
+        "act": "Code on Wages",
+        "number": "17"
+      }
+    ],
+    "reference": "Wages must be paid on set schedules: end of shift for daily workers, weekly, fortnightly or by the seventh day for monthly (Code on Wages 17)."
+  },
+  {
+    "id": "en-wages-overtime",
+    "category": "english",
+    "query": "Am I entitled to extra pay for overtime?",
+    "expected_provisions": [
+      {
+        "act": "Code on Wages",
+        "number": "14"
+      },
+      {
+        "act": "Occupational Safety, Health and Working Conditions Code",
+        "number": "27"
+      }
+    ],
+    "reference": "Overtime must be paid at twice the normal rate of wages."
+  },
+  {
+    "id": "en-osh-hours",
+    "category": "english",
+    "query": "What is the maximum number of working hours in a day?",
+    "expected_provisions": [
+      {
+        "act": "Occupational Safety, Health and Working Conditions Code",
+        "number": "25"
+      }
+    ],
+    "reference": "No worker may be required to work more than eight hours in a day."
+  },
+  {
+    "id": "en-ss-gratuity",
+    "category": "english",
+    "query": "When am I eligible for gratuity?",
+    "expected_provisions": [
+      {
+        "act": "Code on Social Security",
+        "number": "53"
+      }
+    ],
+    "reference": "Gratuity is payable after five years of continuous service, on retirement, resignation, death or disablement."
+  },
+  {
+    "id": "en-ir-strike",
+    "category": "english",
+    "query": "Can workers go on strike without notice?",
+    "expected_provisions": [
+      {
+        "act": "Industrial Relations Code",
+        "number": "62"
+      }
+    ],
+    "reference": "No person employed in an industrial establishment may strike without giving notice (Industrial Relations Code 62)."
+  },
+  {
+    "id": "hi-const-arrest",
+    "category": "hindi",
+    "query": "अगर मुझे गिरफ्तार किया जाए तो मेरे क्या अधिकार हैं?",
+    "expected_provisions": [
+      {
+        "act": "Constitution of India",
+        "number": "22"
+      }
+    ],
+    "reference": "गिरफ्तारी के आधार बताए जाने, वकील से सलाह लेने और 24 घंटे में मजिस्ट्रेट के सामने पेश किए जाने का अधिकार।"
+  },
+  {
+    "id": "hi-mta-deposit",
+    "category": "hindi",
+    "query": "मेरा मकान मालिक सिक्योरिटी डिपॉज़िट वापस नहीं कर रहा है। कानून क्या कहता है?",
+    "expected_provisions": [
+      {
+        "act": "Model Tenancy Act",
+        "number": "11"
+      }
+    ],
+    "reference": "मॉडल टेनेंसी एक्ट में सिक्योरिटी डिपॉज़िट की सीमा (आवासीय के लिए दो माह का किराया) और वापसी का प्रावधान है; यह मॉडल एक्ट है, राज्य अपनाए तब ही लागू।"
+  },
+  {
+    "id": "hi-cpa-complaint",
+    "category": "hindi",
+    "query": "खराब सामान बेचने वाली दुकान के खिलाफ उपभोक्ता शिकायत कहाँ दर्ज करें?",
+    "expected_provisions": [
+      {
+        "act": "Consumer Protection Act",
+        "number": "35"
+      }
+    ],
+    "reference": "जिला उपभोक्ता विवाद निवारण आयोग में शिकायत दर्ज की जा सकती है।"
+  },
+  {
+    "id": "hi-wages",
+    "category": "hindi",
+    "query": "मेरी कंपनी समय पर वेतन नहीं दे रही है, कानून क्या कहता है?",
+    "expected_provisions": [
+      {
+        "act": "Code on Wages",
+        "number": "17"
+      }
+    ],
+    "reference": "मजदूरी भुगतान की समय-सीमा (दैनिक, साप्ताहिक, मासिक अगले माह की सातवीं तारीख तक) कोड ऑन वेजेज की धारा 17 में है।"
+  },
+  {
+    "id": "hi-bns-murder",
+    "category": "hindi",
+    "query": "हत्या की सज़ा क्या है?",
+    "expected_provisions": [
+      {
+        "act": "Bharatiya Nyaya Sanhita",
+        "number": "103"
+      }
+    ],
+    "reference": "हत्या पर मृत्युदंड या आजीवन कारावास और जुर्माना (BNS 103)।"
+  },
+  {
+    "id": "rep-ipc-302",
+    "category": "repealed_code",
+    "query": "What is IPC 302?",
+    "expected_provisions": [
+      {
+        "act": "Indian Penal Code",
+        "number": "302"
+      },
+      {
+        "act": "Bharatiya Nyaya Sanhita",
+        "number": "103"
+      }
+    ],
+    "reference": "IPC 302 (murder) was repealed on 1 July 2024 and replaced by BNS 103."
+  },
+  {
+    "id": "rep-ipc-420",
+    "category": "repealed_code",
+    "query": "What is the punishment for cheating under IPC 420?",
+    "expected_provisions": [
+      {
+        "act": "Indian Penal Code",
+        "number": "420"
+      },
+      {
+        "act": "Bharatiya Nyaya Sanhita",
+        "number": "318"
+      }
+    ],
+    "reference": "IPC 420 is repealed; cheating is now BNS 318."
+  },
+  {
+    "id": "rep-ipc-498a",
+    "category": "repealed_code",
+    "query": "What does Section 498A IPC say about cruelty by husband?",
+    "expected_provisions": [
+      {
+        "act": "Indian Penal Code",
+        "number": "498A"
+      },
+      {
+        "act": "Bharatiya Nyaya Sanhita",
+        "number": "85"
+      }
+    ],
+    "reference": "IPC 498A is repealed; the current provision is BNS 85 (and 86 defines cruelty)."
+  },
+  {
+    "id": "rep-crpc-154",
+    "category": "repealed_code",
+    "query": "How is an FIR registered under Section 154 CrPC?",
+    "expected_provisions": [
+      {
+        "act": "Code of Criminal Procedure",
+        "number": "154"
+      },
+      {
+        "act": "Bharatiya Nagarik Suraksha Sanhita",
+        "number": "173"
+      }
+    ],
+    "reference": "CrPC 154 is repealed; FIR registration is now BNSS 173."
+  },
+  {
+    "id": "rep-crpc-41",
+    "category": "repealed_code",
+    "query": "When can police arrest without a warrant under CrPC 41?",
+    "expected_provisions": [
+      {
+        "act": "Code of Criminal Procedure",
+        "number": "41"
+      },
+      {
+        "act": "Bharatiya Nagarik Suraksha Sanhita",
+        "number": "35"
+      }
+    ],
+    "reference": "CrPC 41 is repealed; the replacement is BNSS 35."
+  },
+  {
+    "id": "rep-iea-65b",
+    "category": "repealed_code",
+    "query": "What is Section 65B of the Indian Evidence Act?",
+    "expected_provisions": [
+      {
+        "act": "Indian Evidence Act",
+        "number": "65B"
+      },
+      {
+        "act": "Bharatiya Sakshya Adhiniyam",
+        "number": "63"
+      }
+    ],
+    "reference": "IEA 65B on electronic records is repealed and replaced by BSA 63."
+  },
+  {
+    "id": "oos-sue",
+    "category": "out_of_scope",
+    "query": "Should I sue my landlord for not returning my deposit?",
+    "expected_provisions": [],
+    "reference": "",
+    "expect_refusal": true
+  },
+  {
+    "id": "oos-sign",
+    "category": "out_of_scope",
+    "query": "Should I sign this employment contract my company gave me?",
+    "expected_provisions": [],
+    "reference": "",
+    "expect_refusal": true
+  },
+  {
+    "id": "oos-us-law",
+    "category": "out_of_scope",
+    "query": "What is the punishment for murder in Texas?",
+    "expected_provisions": [],
+    "reference": "",
+    "expect_refusal": true
+  },
+  {
+    "id": "oos-recipe",
+    "category": "out_of_scope",
+    "query": "How do I make butter chicken?",
+    "expected_provisions": [],
+    "reference": "",
+    "expect_refusal": true
+  },
+  {
+    "id": "oos-plead",
+    "category": "out_of_scope",
+    "query": "I have been charged with theft. Should I plead guilty?",
+    "expected_provisions": [],
+    "reference": "",
+    "expect_refusal": true
+  },
+  {
+    "id": "poor-rti",
+    "category": "poor_retrieval",
+    "query": "What is the fee for filing an RTI application?",
+    "expected_provisions": [],
+    "reference": "The Right to Information Rules set a fee of Rs 10 for central government applications."
+  },
+  {
+    "id": "poor-drunk-driving",
+    "category": "poor_retrieval",
+    "query": "What is the penalty for drunk driving in India?",
+    "expected_provisions": [],
+    "reference": "The Motor Vehicles Act penalises drunk driving with fine and/or imprisonment (Section 185), up to Rs 10,000 and 6 months for a first offence."
+  },
+  {
+    "id": "poor-divorce",
+    "category": "poor_retrieval",
+    "query": "On what grounds can a Hindu couple get a divorce?",
+    "expected_provisions": [],
+    "reference": "The Hindu Marriage Act 1955 Section 13 lists grounds such as adultery, cruelty, desertion, conversion, and mental disorder."
+  },
+  {
+    "id": "poor-dv",
+    "category": "poor_retrieval",
+    "query": "What protection does the Domestic Violence Act give a wife?",
+    "expected_provisions": [],
+    "reference": "The Protection of Women from Domestic Violence Act 2005 provides protection orders, residence orders and monetary relief."
+  },
+  {
+    "id": "poor-gst",
+    "category": "poor_retrieval",
+    "query": "Do I need to register for GST for a small business?",
+    "expected_provisions": [],
+    "reference": "GST registration is mandatory above the turnover threshold (Rs 40 lakh for goods, Rs 20 lakh for services in most States)."
+  }
+]
