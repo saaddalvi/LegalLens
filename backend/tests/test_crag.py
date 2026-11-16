@@ -90,3 +90,30 @@ def test_plain_rag_mode_never_grades_or_falls_back(tmp_path):
     assert fb.queries == []
     assert body["trust_label"] == "corpus"
     assert body["citations"]
+
+
+def test_incorrect_verdict_never_returns_citations_even_if_model_cites(tmp_path):
+    class CitingLLM(FakeLLM):
+        def generate(self, query, provisions, sources=()):
+            from legallens.llm import Generation, ProvisionRef
+
+            return Generation(
+                answer="x", language="en", citations=[ProvisionRef(act=ART_21.act, number="21")]
+            )
+
+    body = make_client(tmp_path, CitingLLM(score=0.1), RecordingFallback()).post(
+        "/ask", json={"query": QUERY}
+    ).json()
+    assert body["citations"] == []
+
+
+def test_rewrite_failure_degrades_like_a_fallback_failure(tmp_path):
+    class BrokenRewriteLLM(FakeLLM):
+        def rewrite(self, query):
+            raise RuntimeError("quota")
+
+    r = make_client(tmp_path, BrokenRewriteLLM(score=0.5), RecordingFallback()).post(
+        "/ask", json={"query": QUERY}
+    )
+    assert r.status_code == 200
+    assert r.json()["trust_label"] == "corpus"

@@ -49,9 +49,8 @@ def _search_fallback(
     query: str, *, llm: LLM, fallback: WebFallback
 ) -> list[FallbackSource]:
     """Rewrite the Query and run the Fallback; any provider failure yields no sources."""
-    rewritten = llm.rewrite(query)
     try:
-        return fallback.search(rewritten)
+        return fallback.search(llm.rewrite(query))
     except Exception:
         log.exception("web Fallback failed")
         return []
@@ -67,6 +66,16 @@ def _answer(
     trust_label: TrustLabel,
 ) -> AskResponse:
     """Generate, verifying Citations against the Corpus (one regeneration, then block)."""
+    if not provisions:
+        # Fallback-only answer: web sources are listed, never cited as Provisions.
+        gen = llm.generate(query, provisions, sources)
+        return AskResponse(
+            answer=gen.answer,
+            answer_language=gen.language,
+            trust_label=trust_label,
+            citations=[],
+            fallback_sources=sources,
+        )
     gen = llm.generate(query, provisions, sources)
     result = check_citations(gen.citations, corpus=corpus)
     if not result.all_valid:

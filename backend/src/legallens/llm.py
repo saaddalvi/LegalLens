@@ -42,10 +42,11 @@ class LLM(Protocol):
         ...
 
 
-_PROMPT = """You answer laypeople's questions about Indian law using ONLY the Provisions below.
-Reply in the language of the question (language code "en" or "hi"). Use plain language.
-Cite only Provisions listed below, by exact Act name and number. If they do not answer the
-question, say so and cite nothing. Do not give personal advice.
+_PROMPT = """You answer laypeople's questions about Indian law using ONLY the Provisions and
+web sources below. Reply in the language of the question (language code "en" or "hi").
+Use plain language. Cite only Provisions listed below, by exact Act name and number; never
+cite web sources as Provisions. If the material does not answer the question, say so and
+cite nothing. Do not give personal advice.
 
 Provisions:
 {provisions}
