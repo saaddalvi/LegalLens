@@ -63,7 +63,21 @@ def test_rental_deposit_query_cites_the_model_tenancy_act(client):
     )
     assert c["act"] == "Model Tenancy Act"
     assert c["number"] == "11"
+    assert c["status"] == "model"
     assert "refunded to the tenant on the date of" in c["text"]
+
+
+def test_model_act_provision_reaches_the_llm_with_its_status(tmp_path):
+    corpus = Corpus(tmp_path / "chroma", WideEmbedder())
+    build(corpus, CONSTITUTION, patches=[], everyday_acts=EVERYDAY)
+    llm = FakeLLM()
+    app_client = TestClient(create_app(corpus=corpus, llm=llm, fallback=FakeFallback()))
+    first_citation(
+        app_client,
+        "How many months rent can a security deposit be and when must it be refunded?",
+    )
+    assert llm.seen[0].act == "Model Tenancy Act"
+    assert llm.seen[0].status == "model"
 
 
 def test_consumer_query_cites_the_consumer_protection_act(client):

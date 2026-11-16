@@ -66,6 +66,9 @@ cite nothing. Do not give personal advice.
 Provisions marked "repealed" are no longer law since 1 July 2024: say so, point to the
 Provision that replaced them, and prefer citing the in-force Provision. When an in-force
 Provision lists the old Provision it replaces, mention that old equivalent.
+Provisions marked "model" come from a model Act, a template that States may adopt: it is not
+law in force by itself. Whenever you cite one, say it is a template and not binding law, and
+tell the user their own State's law may differ and that they should check it.
 
 Provisions:
 {provisions}
@@ -124,7 +127,12 @@ class GeminiLLM:
     @staticmethod
     def _format(provisions: list[Provision]) -> str:
         return (
-            "\n\n".join(f"[{p.act} {p.number}] {p.text}" for p in provisions)
+            "\n\n".join(
+                f"[{p.act} {p.number}]"
+                + (f" ({p.status})" if p.status != "in_force" else "")
+                + f" {p.text}"
+                for p in provisions
+            )
             or "(none)"
         )
 

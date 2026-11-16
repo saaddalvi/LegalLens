@@ -8,7 +8,7 @@ type Citation = {
   act: string;
   chapter: string;
   number: string;
-  status: "in_force" | "repealed";
+  status: "in_force" | "repealed" | "model";
   text: string;
   superseded_by: string | null;
   supersedes: string | null;
@@ -31,6 +31,12 @@ const TRUST_TEXT: Record<AskResponse["trust_label"], string> = {
   corpus: "From statute text",
   fallback: "From web sources (less reliable)",
   corpus_and_fallback: "From statute text and web sources",
+};
+
+const STATUS_TEXT: Record<Citation["status"], string> = {
+  in_force: "in force",
+  repealed: "repealed",
+  model: "model Act, not in force by itself",
 };
 
 export default function Home() {
@@ -136,7 +142,7 @@ export default function Home() {
                   <h3 className="text-sm font-semibold">
                     {c.act}, {c.number}{" "}
                     <span className="font-normal text-zinc-500">
-                      ({c.chapter}, {c.status === "repealed" ? "repealed" : "in force"})
+                      ({c.chapter}, {STATUS_TEXT[c.status]})
                     </span>
                   </h3>
                   {c.status === "repealed" && (
@@ -148,6 +154,15 @@ export default function Home() {
                       {c.superseded_by
                         ? `. The current law is ${c.superseded_by.split("; ").join(" and ")}.`
                         : "."}
+                    </p>
+                  )}
+                  {c.status === "model" && (
+                    <p
+                      role="note"
+                      className="mt-1 rounded bg-amber-50 p-2 text-sm text-amber-900"
+                    >
+                      This is a model Act, a template that States may adopt. It is not law
+                      in force by itself. Your State&apos;s own law may differ, so check it.
                     </p>
                   )}
                   {c.supersedes && (

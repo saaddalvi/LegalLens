@@ -15,7 +15,7 @@ A single numbered unit of an Act: a Section, or an Article in the Constitution.
 _Avoid_: Clause, rule, entry
 
 **Status**:
-Whether a Provision is in force or repealed.
+Whether a Provision is in force, repealed, or from a model Act (`model`): a template such as the Model Tenancy Act that States may adopt, not law in force by itself.
 _Avoid_: State, validity
 
 **Superseding provision**:

@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-Status = Literal["in_force", "repealed"]
+Status = Literal["in_force", "repealed", "model"]
 ResponseType = Literal["answer", "refusal"]
 TrustLabel = Literal["corpus", "fallback", "corpus_and_fallback"]
 

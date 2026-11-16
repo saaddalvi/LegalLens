@@ -29,7 +29,7 @@ def test_each_act_yields_one_in_force_chunk_per_section(key):
     chunks = provisions(key)
     assert [c.number for c in chunks] == [r["section"] for r in RAW[key]]
     assert {c.act for c in chunks} == {EVERYDAY_ACTS[key].name}
-    assert {c.status for c in chunks} == {"in_force"}
+    assert {c.status for c in chunks} == {"model" if key == "mta" else "in_force"}
     assert all(c.text and c.chapter.startswith("Chapter ") for c in chunks)
     assert all(c.superseded_by is None and c.supersedes is None for c in chunks)
 

@@ -4,7 +4,7 @@
 
 **Blocked by:** 09
 
-**Status:** ready-for-agent
+**Status:** ready-for-agent (frontend test pending: no test runner installed)
 
 Context: ticket 09 added the Model Tenancy Act 2021 for rental-deposit Queries. `Status` (`backend/src/legallens/models.py`) only allows `in_force` and `repealed`, so its Chunks are stored as `in_force` under the Act name "Model Tenancy Act" (`EVERYDAY_ACTS["mta"]` in `backend/src/legallens/ingestion/everyday_acts.py`). `backend/sources/everyday_acts.json` records this as a workaround.
 

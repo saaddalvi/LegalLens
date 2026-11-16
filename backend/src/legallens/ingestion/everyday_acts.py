@@ -16,7 +16,7 @@ EVERYDAY_ACTS: dict[str, CriminalAct] = {
     "tpa": CriminalAct("Transfer of Property Act", "in_force", (14, 14)),
     # A template for States to adopt, not law in force by itself (see sources/everyday_acts.json);
     # `Status` has no value for that, so it is stored as in_force under a name that says "Model".
-    "mta": CriminalAct("Model Tenancy Act", "in_force", (47, 47)),
+    "mta": CriminalAct("Model Tenancy Act", "model", (47, 47)),
     "wages": CriminalAct("Code on Wages", "in_force", (69, 69)),
     "ir": CriminalAct("Industrial Relations Code", "in_force", (104, 104)),
     "ss": CriminalAct("Code on Social Security", "in_force", (164, 164)),
