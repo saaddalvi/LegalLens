@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from ..models import Provision
 from .constitution import ACT
 from .criminal_codes import CRIMINAL_ACTS
+from .everyday_acts import EVERYDAY_ACTS
 
 # Plausible Chunk counts per Act (inclusive). A count outside the range usually means a
 # parser boundary bug. Each ingested Act adds its range here.
@@ -14,6 +15,7 @@ EXPECTED_COUNTS: dict[str, tuple[int, int]] = {
         520,
     ),  # 395 original Articles plus lettered insertions; the built Corpus has 499
     **{a.name: a.expected_count for a in CRIMINAL_ACTS.values()},
+    **{a.name: a.expected_count for a in EVERYDAY_ACTS.values()},
 }
 
 

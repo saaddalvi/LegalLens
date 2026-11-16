@@ -13,6 +13,15 @@ ACT_ALIASES: dict[str, tuple[str, ...]] = {
         "bnss",
     ),
     "Bharatiya Sakshya Adhiniyam": ("bharatiya sakshya adhiniyam", "bsa"),
+    "Consumer Protection Act": ("consumer protection act",),
+    "Transfer of Property Act": ("transfer of property act", "tpa"),
+    "Code on Wages": ("code on wages",),
+    "Industrial Relations Code": ("industrial relations code",),
+    "Code on Social Security": ("code on social security",),
+    "Occupational Safety, Health and Working Conditions Code": (
+        "occupational safety, health and working conditions code",
+        "osh code",
+    ),
 }
 
 _ALIAS_TO_ACT = {

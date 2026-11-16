@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .criminal_codes import CRIMINAL_ACTS
+from .everyday_acts import EVERYDAY_ACTS
 from .mapping_tables import (
     parse_bns_table,
     parse_bsa_table,
@@ -18,6 +19,7 @@ from .pdf_text import (
     iea_sections,
     kanoon_ipc_sections,
     pdf_pages,
+    tpa_lease_sections,
 )
 from .record_patches import apply_record_patches
 
@@ -124,9 +126,12 @@ CRIMINAL_PDFS: dict[str, PinnedPdf] = {
 
 
 def read_pinned_pdf_pages(raw_dir: Path, key: str) -> list[str]:
-    """The text of a pinned source PDF, page by page, after checking its hash."""
-    pdf = CRIMINAL_PDFS[key]
-    path = raw_dir / "criminal" / pdf.filename
+    """The text of a pinned criminal-law source PDF, page by page, after checking its hash."""
+    return _read_pinned(raw_dir / "criminal", CRIMINAL_PDFS[key])
+
+
+def _read_pinned(folder: Path, pdf: PinnedPdf) -> list[str]:
+    path = folder / pdf.filename
     if not path.exists():
         raise FileNotFoundError(
             f"{pdf.filename} ({pdf.description}) is missing: put it at {path}"
@@ -135,6 +140,63 @@ def read_pinned_pdf_pages(raw_dir: Path, key: str) -> list[str]:
     if digest != pdf.sha256:
         raise RuntimeError(f"{path} has sha256 {digest}, expected {pdf.sha256}")
     return pdf_pages(path)
+
+
+# Texts of the consumer, tenancy and labour Acts, in backend/data/raw/everyday/, pinned by hash.
+# The CPA and the four Labour Codes are the Gazette of India Extraordinary prints as enacted.
+# India Code serves 504s, so the Transfer of Property Act is an unofficial print instead.
+EVERYDAY_PDFS: dict[str, PinnedPdf] = {
+    "cpa": PinnedPdf(
+        "cpa_prs.pdf",
+        "0ae7f82ab5b77d50087cd4cd2dd2dbc12755c0bdb31371fdefd042b020d50756",
+        "Consumer Protection Act, 2019 (No. 35 of 2019): Gazette print, via PRS India",
+    ),
+    "wages": PinnedPdf(
+        "wages_gaz.pdf",
+        "0819c6b8942ce380ecd9c2bc31daf6c0d441034cde020fb499c57dfcbab451bd",
+        "Code on Wages, 2019 (No. 29 of 2019): egazette.gov.in 210356",
+    ),
+    "ir": PinnedPdf(
+        "ir_prs.pdf",
+        "43cadbd9ed08dd00dfba43571253eaf63d655f9fc411df5b9a1059de8d40ce09",
+        "Industrial Relations Code, 2020 (No. 35 of 2020): Gazette print CG-DL-E-29092020-222118, via PRS India",
+    ),
+    "ss": PinnedPdf(
+        "ss_prs.pdf",
+        "975235e57b8b8c3f4a09f6c9f0dbb2bfc663c15faf3715108ea33113ef565be7",
+        "Code on Social Security, 2020 (No. 36 of 2020): Gazette print CG-DL-E-29092020-222111, via PRS India",
+    ),
+    "osh": PinnedPdf(
+        "osh_prs.pdf",
+        "9ce8f68b88f725fbce4fadfb45d9ddc3ed7a5f59d92a2ebd3d5bd7ebb1c83891",
+        "Occupational Safety, Health and Working Conditions Code, 2020 (No. 37 of 2020): Gazette print CG-DL-E-29092020-222112, via PRS India",
+    ),
+    "tpa": PinnedPdf(
+        "tpa_ila.pdf",
+        "56a363929cefe94696f890eb3240bcfb4aa64527e30ecfed7a8d3a1dfede1646",
+        "Transfer of Property Act, 1882: International Insolvency Institute print (unofficial); only Chapter V is used",
+    ),
+    "ss_ic": PinnedPdf(
+        "ss_ic.pdf",
+        "53ad67f75fbc874fd837274e9e887fac7a21cc55c7454398b2cdb96046fd7967",
+        "Code on Social Security, 2020: India Code text as on 21 November 2025, kept to check the Gazette print",
+    ),
+}
+
+
+def read_everyday_pdf_pages(raw_dir: Path, key: str) -> list[str]:
+    return _read_pinned(raw_dir / "everyday", EVERYDAY_PDFS[key])
+
+
+def load_everyday_acts(raw_dir: Path) -> dict[str, list[dict]]:
+    """Section records for the six consumer, tenancy and labour Acts, by `EVERYDAY_ACTS` key."""
+    gazette = ("cpa", "wages", "ir", "ss", "osh")
+    records = {
+        key: gazette_sections(read_everyday_pdf_pages(raw_dir, key)) for key in gazette
+    }
+    records["tpa"] = tpa_lease_sections(read_everyday_pdf_pages(raw_dir, "tpa"))
+    assert set(records) == set(EVERYDAY_ACTS)
+    return records
 
 
 # Fixes to the Indian Kanoon IPC text, each checked against the other IPC copies.

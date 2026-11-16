@@ -2,7 +2,7 @@
 
 Downloads the pinned Constitution dataset (checking its hash), applies the recorded patches,
 reads the pinned criminal-law PDFs from `<raw-dir>/criminal/` (all six Acts and the three
-old-to-new mappings), reports Chunk counts per Act, and writes a fresh vector store. Exits
+old-to-new mappings) and the consumer, tenancy and labour PDFs from `<raw-dir>/everyday/`, reports Chunk counts per Act, and writes a fresh vector store. Exits
 non-zero if any count or Chunk looks wrong, so a bad parse is not silently shipped.
 """
 
@@ -20,10 +20,17 @@ from .ingestion import (
     build_report,
     parse_constitution,
     parse_criminal_code,
+    parse_everyday_act,
 )
 from .ingestion.constitution import ACT as CONSTITUTION
 from .ingestion.criminal_codes import CRIMINAL_ACTS
-from .ingestion.sources import fetch_constitution, load_criminal_codes, load_patches
+from .ingestion.everyday_acts import EVERYDAY_ACTS
+from .ingestion.sources import (
+    fetch_constitution,
+    load_criminal_codes,
+    load_everyday_acts,
+    load_patches,
+)
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -35,11 +42,16 @@ def build(
     criminal_codes: dict[str, list[dict]] | None = None,
     mappings: list[dict] | None = None,
     required_acts: list[str] | None = None,
+    everyday_acts: dict[str, list[dict]] | None = None,
 ) -> Report:
-    """`criminal_codes` maps an Act key (ipc, crpc, iea, bns, bnss, bsa) to section records."""
+    """`criminal_codes` maps an Act key (ipc, crpc, iea, bns, bnss, bsa) to section records;
+    `everyday_acts` does the same for the consumer, tenancy and labour Acts (cpa, tpa, wages,
+    ir, ss, osh)."""
     provisions = parse_constitution(constitution_records, patches)
     for key, records in (criminal_codes or {}).items():
         provisions += parse_criminal_code(key, records)
+    for key, records in (everyday_acts or {}).items():
+        provisions += parse_everyday_act(key, records)
     provisions = apply_mappings(provisions, mappings or [])
     corpus.add(provisions)
     return build_report(provisions, required=required_acts or [])
@@ -68,6 +80,7 @@ def main() -> int:
     records = fetch_constitution(args.raw_dir / "constitution_of_india.json")
     try:
         criminal_codes, mappings = load_criminal_codes(args.raw_dir)
+        everyday_acts = load_everyday_acts(args.raw_dir)
     except FileNotFoundError as e:
         print(e, file=sys.stderr)
         return 2
@@ -82,7 +95,12 @@ def main() -> int:
         load_patches(args.patches),
         criminal_codes,
         mappings,
-        required_acts=[CONSTITUTION, *(a.name for a in CRIMINAL_ACTS.values())],
+        required_acts=[
+            CONSTITUTION,
+            *(a.name for a in CRIMINAL_ACTS.values()),
+            *(a.name for a in EVERYDAY_ACTS.values()),
+        ],
+        everyday_acts=everyday_acts,
     )
 
     for act, n in sorted(report.counts.items()):

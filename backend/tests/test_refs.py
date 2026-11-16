@@ -27,3 +27,22 @@ def test_find_references(query, expected):
 def test_split_refs_round_trips_multiple_references():
     assert split_refs(f"{BNS} 103; {BNS} 64") == [(BNS, "103"), (BNS, "64")]
     assert split_refs(None) == []
+
+
+@pytest.mark.parametrize(
+    "query, expected",
+    [
+        (
+            "section 106 of the Transfer of Property Act",
+            [("Transfer of Property Act", "106")],
+        ),
+        ("Consumer Protection Act section 35", [("Consumer Protection Act", "35")]),
+        ("section 17 of the Code on Wages", [("Code on Wages", "17")]),
+        (
+            "section 25 of the OSH Code",
+            [("Occupational Safety, Health and Working Conditions Code", "25")],
+        ),
+    ],
+)
+def test_find_references_to_everyday_acts(query, expected):
+    assert find_references(query) == expected

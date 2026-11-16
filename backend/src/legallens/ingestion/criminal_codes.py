@@ -17,6 +17,8 @@ _NUMBER = re.compile(r"^\d+[A-Z]{0,3}$")
 
 @dataclass(frozen=True)
 class CriminalAct:
+    """An Act parsed from section records; also used for the everyday-law Acts."""
+
     name: str
     status: Status  # the old codes are repealed, the new ones in force
     expected_count: tuple[int, int]  # plausible Chunk range, for the ingestion report
@@ -54,7 +56,11 @@ def _clean(text: str) -> str:
 
 
 def parse_criminal_code(act_key: str, records: list[dict]) -> list[Provision]:
-    act = CRIMINAL_ACTS[act_key]
+    return parse_section_records(CRIMINAL_ACTS[act_key], records)
+
+
+def parse_section_records(act: CriminalAct, records: list[dict]) -> list[Provision]:
+    """One Provision per `{"section", "chapter", "text"}` record, in section order."""
     provisions = [
         Provision(
             act=act.name,

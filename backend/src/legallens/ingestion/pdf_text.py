@@ -18,9 +18,14 @@ _SUBHEADING = re.compile(
 _CHAPTER = re.compile(r"^CHAPTER\s+([IVXL]+[A-Z]{0,2})\s*$")
 _DEVANAGARI = re.compile(r"[ऀ-ॿ]")
 _FOOTER = re.compile(r"^THE GAZETTE OF INDIA")
+_ASSENT = "MINISTRY OF LAW AND JUSTICE"  # starts the assent block on page 1
+_TRAILING_ACT_NOTE = re.compile(
+    r"(?<=[.;:,])\d{1,3} of \d{4}\.$"
+)  # "...enactments.10 of 1897.": a margin note run onto the line before it
 _RUNNING_HEAD = re.compile(
-    r"^\d+ THE GAZETTE OF INDIA"
-)  # the last page puts it on top, on one line
+    r"^(?:\d+|SEC\. \d+\]) THE GAZETTE OF INDIA"
+)  # one line on top: "2 THE GAZETTE ..." (even pages), "SEC. 1] THE GAZETTE ..." (odd pages
+# of the CPA and Labour Codes); the BNS prints put it last, as a footer
 _END = re.compile(
     r"^(?:[—–-]{4,}|(?:THE (?:FIRST )?)?SCHEDULE\.?)$"
 )  # end of the Act proper
@@ -97,7 +102,16 @@ def _strip_cover(lines: list[str]) -> list[str]:
             if _COVER_END in line:
                 skipping = False
             continue
-        if _DEVANAGARI.search(line) or "xxxGID" in line or line.startswith("CG-DL-"):
+        if line.strip() == _ASSENT:
+            skipping = True
+            _pop_marginals(out)
+            continue
+        if (
+            _DEVANAGARI.search(line)
+            or "xxxGID" in line
+            or line.startswith(("CG-DL-", "jftLV"))
+            or "REGISTERED NO" in line
+        ):
             continue
         out.append(line)
     return out
@@ -106,6 +120,7 @@ def _strip_cover(lines: list[str]) -> list[str]:
 def _gazette_page_body(page: str) -> tuple[list[str], bool]:
     """The page's body lines, and whether the Act proper ended on this page."""
     lines = [l.rstrip() for l in _strip_cover(page.splitlines())]
+    lines = [_TRAILING_ACT_NOTE.sub("", l) for l in lines]
     lines = [l for l in lines if l.strip() and not re.fullmatch(r"_{5,}", l.strip())]
     lines = [l for l in lines if not _RUNNING_HEAD.match(l) and not l.strip().isdigit()]
     end = next((i for i, l in enumerate(lines) if _END.match(l.strip())), None)
@@ -116,7 +131,18 @@ def _gazette_page_body(page: str) -> tuple[list[str], bool]:
         lines = lines[:footer]
         while lines and re.fullmatch(r"Sec\. \d+\]", lines[-1].strip()):
             lines.pop()
-    _pop_marginals(lines)  # page 1 of BNSS and the last page have no footer
+    if end is not None:
+        # A short last body line such as "the effect of repeal." looks like a side-heading.
+        # A real run of side-headings is several lines, so a trailing run shorter than that
+        # stays (the BNS's own run still goes, as before).
+        while lines and _ACT_NOTE.match(lines[-1].strip()):
+            lines.pop()
+        trailing = lines[:]
+        _pop_marginals(trailing)
+        if len(lines) - len(trailing) >= _MIN_RUN:
+            lines = trailing
+    else:
+        _pop_marginals(lines)  # page 1 of BNSS has no footer
     lines = _drop_marginal_runs(lines)
     return lines, end is not None
 
@@ -544,3 +570,109 @@ def _kanoon_heading(lines: list[str], i: int, first: str) -> tuple[str, str, int
                 title = " ".join([first, *lines[i + 1 : i + k + 1]])
                 return title.rstrip("— ").strip(), "", k + 1
     return title.rstrip("— ").strip(), "", 1
+
+
+_TPA_FURNITURE = re.compile(r"International\s+Insolvency\s+Institute")
+_TPA_HEAD = re.compile(r"^(?:\d+\[)?(\d+)([A-Z]?)\.\s+\S")
+_TPA_FOOTNOTE = re.compile(
+    r"^\d{1,2} (?:Subs?\.|Ins\.|Added|Omitted|Rep\.|The words?\b|As to\b)"
+)
+_TPA_FOOTNOTE_END = (
+    ".",
+    "¨",
+    ")",
+    '"',
+)  # a footnote line not ending so wraps onto the next
+_TPA_SUBHEADING_MAX = 60
+_TPA_BODY_STARTS = ("Illustration", "Provided", "Explanation", "Exception", "Nothing")
+_TPA_PUNCT_END = (".", ";", ":", ",", "—", "-")
+_DELETED = re.compile(r"\s*\d*\[\*+\]")  # "5[***]": words the amendments deleted
+
+
+def _drop_tpa_footnotes(lines: list[str]) -> list[str]:
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        if _TPA_FOOTNOTE.match(lines[i]):
+            while not lines[i].endswith(_TPA_FOOTNOTE_END) and i + 1 < len(lines):
+                i += 1
+        else:
+            out.append(lines[i])
+        i += 1
+    return out
+
+
+def _is_tpa_subheading(prev: str | None, line: str, nxt: str | None) -> bool:
+    return bool(
+        prev
+        and nxt
+        and prev.endswith(_TPA_PUNCT_END)
+        and len(line) <= _TPA_SUBHEADING_MAX
+        and line[0].isupper()
+        and not line.endswith(_TPA_PUNCT_END)
+        and not line.startswith(_TPA_BODY_STARTS)
+        and (nxt[0].isupper() or nxt[0] == "(")
+    )
+
+
+def tpa_lease_sections(pages: list[str]) -> list[dict]:
+    """Sections 105-117 (Chapter V, leases) of the Transfer of Property Act, in order.
+
+    Source is the International Insolvency Institute's print of the Act: an unofficial text
+    with its amendment footnotes dropped into the middle of sections, a footnote number glued
+    onto some section numbers ("2107." is section 107), and sub-headings run into the body.
+    The footnotes, sub-headings and amendment markers are removed.
+    """
+    lines = [
+        l.strip()
+        for page in pages
+        for l in page.splitlines()
+        if l.strip() and not _TPA_FURNITURE.search(l)
+    ]
+    start = next(i for i, l in enumerate(lines) if re.fullmatch(r"CHAPTER V", l))
+    end = next(
+        (
+            i
+            for i, l in enumerate(lines)
+            if i > start and re.fullmatch(r"CHAPTER VI", l)
+        ),
+        len(lines),
+    )
+    lines = _drop_tpa_footnotes(lines[start + 1 : end])
+    lines = [l for l in lines if not re.fullmatch(r"OF LEASES.*", l)]
+    records: list[dict] = []
+    bodies: list[list[str]] = []
+    prev: tuple[int, str] = (104, "")  # the chapter's first section is 105
+    for line in lines:
+        m = _TPA_HEAD.match(line)
+        if m:
+            digits, suffix = m.group(1), m.group(2)
+            # drop leading digits until the number fits: "2107." is footnote 2 and section 107
+            number = next(
+                (
+                    int(digits[k:])
+                    for k in range(len(digits))
+                    if follows(prev, int(digits[k:]), suffix, gap=3)
+                ),
+                None,
+            )
+            if number is not None:
+                prev = (number, suffix)
+                records.append({"section": f"{number}{suffix}", "chapter": "Chapter V"})
+                bodies.append([])
+                continue
+        if bodies:
+            bodies[-1].append(line)
+    for rec, body in zip(records, bodies):
+        kept = [
+            l
+            for i, l in enumerate(body)
+            if not _is_tpa_subheading(
+                body[i - 1] if i else None,
+                l,
+                body[i + 1] if i + 1 < len(body) else None,
+            )
+        ]
+        text = _DELETED.sub("", "\n".join(kept))
+        rec["text"] = _AMENDMENT_MARK.sub("", text).replace("]", "").strip()
+    return records
