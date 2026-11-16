@@ -98,7 +98,7 @@ def test_incorrect_verdict_never_returns_citations_even_if_model_cites(tmp_path)
             from legallens.llm import Generation, ProvisionRef
 
             return Generation(
-                answer="x", language="en", citations=[ProvisionRef(act=ART_21.act, number="21")]
+                answer="x", citations=[ProvisionRef(act=ART_21.act, number="21")]
             )
 
     body = make_client(tmp_path, CitingLLM(score=0.1), RecordingFallback()).post(

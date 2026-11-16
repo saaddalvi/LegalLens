@@ -16,22 +16,36 @@ INCORRECT_THRESHOLD = 0.3
 
 Verdict = Literal["correct", "ambiguous", "incorrect"]
 
-CANNOT_ANSWER_RELIABLY = (
-    "LegalLens cannot answer reliably: it could not confirm this answer's citations "
-    "against the Corpus. Please try rephrasing your question."
-)
-CANNOT_ANSWER_NO_SOURCES = (
-    "LegalLens cannot answer this question: the Corpus does not cover it and the web "
-    "search could not supply reliable sources. Please try rephrasing your question."
-)
+CANNOT_ANSWER_RELIABLY: dict[Language, str] = {
+    "en": (
+        "LegalLens cannot answer reliably: it could not confirm this answer's citations "
+        "against the Corpus. Please try rephrasing your question."
+    ),
+    "hi": (
+        "LegalLens भरोसेमंद उत्तर नहीं दे सकता: यह उत्तर के उद्धरणों की पुष्टि Corpus से "
+        "नहीं कर सका। कृपया अपना प्रश्न दूसरे शब्दों में पूछें।"
+    ),
+}
+CANNOT_ANSWER_NO_SOURCES: dict[Language, str] = {
+    "en": (
+        "LegalLens cannot answer this question: the Corpus does not cover it and the web "
+        "search could not supply reliable sources. Please try rephrasing your question."
+    ),
+    "hi": (
+        "LegalLens इस प्रश्न का उत्तर नहीं दे सकता: Corpus में यह विषय नहीं है और वेब खोज से "
+        "भरोसेमंद स्रोत नहीं मिले। कृपया अपना प्रश्न दूसरे शब्दों में पूछें।"
+    ),
+}
 
-DEFAULT_REFUSAL_REASON = (
-    "LegalLens only explains Indian law and cannot advise on personal decisions."
-)
+DEFAULT_REFUSAL_REASON: dict[Language, str] = {
+    "en": "LegalLens only explains Indian law and cannot advise on personal decisions.",
+    "hi": "LegalLens केवल भारतीय कानून समझाता है और निजी फैसलों पर सलाह नहीं दे सकता।",
+}
 
-DEFAULT_REFORMULATION = (
-    "What does Indian law say about the situation you are asking about?"
-)
+DEFAULT_REFORMULATION: dict[Language, str] = {
+    "en": "What does Indian law say about the situation you are asking about?",
+    "hi": "आप जिस स्थिति के बारे में पूछ रहे हैं, उसके बारे में भारतीय कानून क्या कहता है?",
+}
 
 log = logging.getLogger(__name__)
 
@@ -44,10 +58,10 @@ def verdict_for(score: float) -> Verdict:
     return "ambiguous"
 
 
-def _refusal(message: str) -> AskResponse:
+def _refusal(message: dict[Language, str], language: Language) -> AskResponse:
     return AskResponse(
-        answer=message,
-        answer_language="en",
+        answer=message[language],
+        answer_language=language,
         trust_label="corpus",
         citations=[],
         fallback_sources=[],
@@ -92,7 +106,7 @@ def _answer(
         gen = llm.generate(query, provisions, sources, language=language)
         result = check_citations(gen.citations, corpus=corpus)
     if not result.all_valid:
-        return _refusal(CANNOT_ANSWER_RELIABLY)
+        return _refusal(CANNOT_ANSWER_RELIABLY, language)
     return AskResponse(
         answer=gen.answer,
         answer_language=language,
@@ -120,7 +134,7 @@ def answer_query(
     language = detect_language(query)
     scope = llm.classify(query)
     if scope.category != "in_scope":
-        reason = scope.reason or DEFAULT_REFUSAL_REASON
+        reason = scope.reason or DEFAULT_REFUSAL_REASON[language]
         return AskResponse(
             response_type="refusal",
             answer=reason,
@@ -130,7 +144,7 @@ def answer_query(
             fallback_sources=[],
             refusal_reason=reason,
             suggested_reformulation=scope.suggested_reformulation
-            or DEFAULT_REFORMULATION,
+            or DEFAULT_REFORMULATION[language],
         )
 
     provisions = corpus.search(query, TOP_K)
@@ -179,7 +193,7 @@ def answer_query(
             language=language,
         )
     if not sources:
-        return _refusal(CANNOT_ANSWER_NO_SOURCES)
+        return _refusal(CANNOT_ANSWER_NO_SOURCES, language)
     return _answer(
         query,
         [],

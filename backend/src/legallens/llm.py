@@ -14,7 +14,6 @@ class ProvisionRef(BaseModel):
 
 class Generation(BaseModel):
     answer: str
-    language: str  # "en" or "hi"
     citations: list[ProvisionRef]
 
 
@@ -61,7 +60,7 @@ class LLM(Protocol):
 _PROMPT = """You answer laypeople's questions about Indian law using ONLY the Provisions and
 web sources below. Write the answer in {language_name}. Provision text is English: refer to
 Provisions by Act name and number exactly as listed, and do not translate the Act names.
-Set the language field to "{language}". Use plain language. Cite only Provisions listed below, by exact Act name and number; never
+Use plain language. Cite only Provisions listed below, by exact Act name and number; never
 cite web sources as Provisions. If the material does not answer the question, say so and
 cite nothing. Do not give personal advice.
 
@@ -145,7 +144,6 @@ class GeminiLLM:
                 provisions=self._format(provisions),
                 web=web,
                 query=query,
-                language=language,
                 language_name=LANGUAGE_NAMES[language],
             )
         )

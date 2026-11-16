@@ -36,7 +36,6 @@ class LanguageAwareLLM(FakeLLM):
         )
         return Generation(
             answer=answer,
-            language=language,
             citations=[ProvisionRef(act=top.act, number=top.number)],
         )
 
@@ -101,3 +100,40 @@ def test_detect_language(query, expected):
     from legallens.language import detect_language
 
     assert detect_language(query) == expected
+
+
+def _devanagari(text):
+    return bool(re.search(r"[ऀ-ॿ]", text))
+
+
+def test_hindi_cannot_answer_messages_are_hindi(tmp_path):
+    corpus = Corpus(tmp_path / "chroma", MultilingualFakeEmbedder())
+    corpus.add([ART_21])
+    c = TestClient(create_app(corpus=corpus, llm=LanguageAwareLLM(score=0.0), fallback=FakeFallback()))
+    body = c.post("/ask", json={"query": HINDI_LIBERTY}).json()
+    assert body["answer_language"] == "hi"
+    assert _devanagari(body["answer"])
+
+
+def test_hindi_default_refusal_reason_and_reformulation_are_hindi(tmp_path):
+    class Refusing(LanguageAwareLLM):
+        def classify(self, query):
+            return ScopeDecision(category="personal_advice")
+
+    corpus = Corpus(tmp_path / "chroma", MultilingualFakeEmbedder())
+    corpus.add([ART_21])
+    c = TestClient(create_app(corpus=corpus, llm=Refusing(), fallback=FakeFallback()))
+    body = c.post("/ask", json={"query": "क्या मुझे मुकदमा करना चाहिए?"}).json()
+    assert _devanagari(body["refusal_reason"])
+    assert _devanagari(body["suggested_reformulation"])
+
+
+def test_hindi_unreliable_citations_message_is_hindi(tmp_path):
+    from test_ask import AlwaysHallucinatingLLM
+
+    corpus = Corpus(tmp_path / "chroma", MultilingualFakeEmbedder())
+    corpus.add([ART_21])
+    c = TestClient(create_app(corpus=corpus, llm=AlwaysHallucinatingLLM(), fallback=FakeFallback()))
+    body = c.post("/ask", json={"query": HINDI_LIBERTY}).json()
+    assert body["answer_language"] == "hi"
+    assert _devanagari(body["answer"])

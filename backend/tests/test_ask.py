@@ -67,11 +67,10 @@ class FakeLLM(GradingStub):
         self.seen = provisions
         self.sources_seen = sources
         if not provisions:
-            return Generation(answer="Web-based summary.", language="en", citations=[])
+            return Generation(answer="Web-based summary.", citations=[])
         top = provisions[0]
         return Generation(
             answer=f"Plain-language summary of {top.act} {top.number}.",
-            language="en",
             citations=[ProvisionRef(act=top.act, number=top.number)],
         )
 
@@ -92,13 +91,11 @@ class HallucinatingThenValidLLM(GradingStub):
         if self.calls == 1:
             return Generation(
                 answer="Ghost citation answer.",
-                language="en",
                 citations=[ProvisionRef(act="Indian Penal Code", number="420")],
             )
         top = provisions[0]
         return Generation(
             answer=f"Plain-language summary of {top.act} {top.number}.",
-            language="en",
             citations=[ProvisionRef(act=top.act, number=top.number)],
         )
 
@@ -113,7 +110,6 @@ class AlwaysHallucinatingLLM(GradingStub):
         self.calls += 1
         return Generation(
             answer="Ghost citation answer.",
-            language="en",
             citations=[ProvisionRef(act="Indian Penal Code", number="420")],
         )
 
