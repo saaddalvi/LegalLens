@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { TRUST_TEXT } from "@/lib/trust-labels";
+import { TRUST_TEXT, type TrustLabel } from "@/lib/trust-labels";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -24,11 +24,10 @@ type AskResponse = {
   suggested_reformulation: string | null;
   answer: string;
   answer_language: string;
-  trust_label: "corpus" | "fallback" | "corpus_and_fallback" | "none";
+  trust_label: TrustLabel;
   citations: Citation[];
   fallback_sources: FallbackSource[];
 };
-
 
 function detectedLang(q: string): string {
   const letters = [...q].filter((c) => /\p{L}/u.test(c));

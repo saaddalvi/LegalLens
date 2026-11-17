@@ -24,7 +24,7 @@ export const EXAMPLE_QUERIES = {
     "What rights do I have if I am arrested?",
     "What is the punishment for murder?",
     "I bought a defective product. Where can I file a consumer complaint?",
-    "What is IPC 302?",
+    "What is the punishment for cheating under IPC 420?",
   ],
   hi: [
     "अगर मुझे गिरफ्तार किया जाए तो मेरे क्या अधिकार हैं?",
@@ -32,3 +32,6 @@ export const EXAMPLE_QUERIES = {
     "मेरी कंपनी समय पर वेतन नहीं दे रही है, कानून क्या कहता है?",
   ],
 };
+
+// The address that starts an answer to a Query on the asking screen.
+export const askHref = (q: string) => `/ask?${new URLSearchParams({ q })}`;

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { askHref } from "@/lib/corpus";
 
 export default function AskBox() {
   const router = useRouter();
@@ -11,7 +12,7 @@ export default function AskBox() {
     e.preventDefault();
     const q = query.trim();
     if (!q) return;
-    router.push(`/ask?${new URLSearchParams({ q })}`);
+    router.push(askHref(q));
   }
 
   return (

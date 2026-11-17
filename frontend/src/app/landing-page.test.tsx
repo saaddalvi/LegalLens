@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import LandingPage from "./landing-page";
-import { CORPUS_ACTS, EXAMPLE_QUERIES, REPEAL_NOTE } from "@/lib/corpus";
+import { CORPUS_ACTS, askHref, EXAMPLE_QUERIES, REPEAL_NOTE } from "@/lib/corpus";
 import { TRUST_TEXT } from "@/lib/trust-labels";
 
 const push = vi.fn();
@@ -20,7 +20,7 @@ describe("LandingPage", () => {
     render(<LandingPage />);
     for (const q of [...EXAMPLE_QUERIES.en, ...EXAMPLE_QUERIES.hi]) {
       const link = screen.getByRole("link", { name: q });
-      expect(link).toHaveAttribute("href", `/ask?q=${encodeURIComponent(q)}`);
+      expect(link).toHaveAttribute("href", askHref(q));
     }
     const hi = screen.getByRole("link", { name: EXAMPLE_QUERIES.hi[0] });
     expect(hi).toHaveAttribute("lang", "hi");

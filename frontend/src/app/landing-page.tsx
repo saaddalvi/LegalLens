@@ -1,6 +1,6 @@
 import Link from "next/link";
 import AskBox from "./ask-box";
-import { CORPUS_ACTS, EXAMPLE_QUERIES, REPEAL_NOTE } from "@/lib/corpus";
+import { CORPUS_ACTS, askHref, EXAMPLE_QUERIES, REPEAL_NOTE } from "@/lib/corpus";
 import { TRUST_EXPLANATION, TRUST_TEXT, type TrustLabel } from "@/lib/trust-labels";
 
 const STEPS = [
@@ -44,14 +44,14 @@ export default function LandingPage() {
             <ul className="grid gap-2 sm:grid-cols-2">
               {EXAMPLE_QUERIES.en.map((q) => (
                 <li key={q}>
-                  <Link href={`/ask?q=${encodeURIComponent(q)}`} className={exampleLink}>
+                  <Link href={askHref(q)} className={exampleLink}>
                     {q}
                   </Link>
                 </li>
               ))}
               {EXAMPLE_QUERIES.hi.map((q) => (
                 <li key={q}>
-                  <Link href={`/ask?q=${encodeURIComponent(q)}`} lang="hi" className={exampleLink}>
+                  <Link href={askHref(q)} lang="hi" className={exampleLink}>
                     {q}
                   </Link>
                 </li>
