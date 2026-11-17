@@ -31,6 +31,13 @@ def default_corpus() -> Corpus:
     return corpus
 
 
+KEEPALIVE_SECONDS = 10
+
+
+class _ClientGone(Exception):
+    """Raised inside the pipeline thread when the streaming client disconnected."""
+
+
 def create_app(
     *,
     corpus: Corpus | None = None,
@@ -77,12 +84,21 @@ def create_app(
 
     @app.post("/ask/stream")
     def ask_stream(req: AskRequest) -> StreamingResponse:
-        c, l, f = deps()
+        try:
+            c, l, f = deps()
+        except Exception as exc:
+            logging.getLogger(__name__).exception("dependencies unavailable")
+            raise HTTPException(
+                503, "The service is unavailable. Please retry shortly."
+            ) from exc
         language = detect_language(req.query)
         events: queue.Queue[tuple[str, dict] | None] = queue.Queue()
         current: list[str] = []
+        cancelled = threading.Event()
 
         def on_stage(stage_id: str) -> None:
+            if cancelled.is_set():
+                raise _ClientGone()
             current[:] = [stage_id]
             events.put(
                 ("stage", {"id": stage_id, "label": STAGE_LABELS[stage_id][language]})
@@ -94,6 +110,8 @@ def create_app(
                     req.query, corpus=c, llm=l, fallback=f, crag=crag, on_stage=on_stage
                 )
                 events.put(("answer", result.model_dump(mode="json")))
+            except _ClientGone:
+                pass
             except Exception:
                 logging.getLogger(__name__).exception("answer generation failed")
                 events.put(
@@ -111,9 +129,20 @@ def create_app(
         threading.Thread(target=work, daemon=True).start()
 
         def frames():
-            while (event := events.get()) is not None:
-                name, data = event
-                yield f"event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+            try:
+                while True:
+                    try:
+                        event = events.get(timeout=KEEPALIVE_SECONDS)
+                    except queue.Empty:
+                        yield ": keepalive\n\n"  # keeps proxies from idling out
+                        continue
+                    if event is None:
+                        return
+                    name, data = event
+                    yield f"event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+            finally:
+                # Client left: stop the pipeline at its next Stage.
+                cancelled.set()
 
         return StreamingResponse(
             frames(),

@@ -260,6 +260,25 @@ describe("AskScreen", () => {
     expect(await screen.findByText("From statute text")).toBeInTheDocument();
   });
 
+  it("skips a malformed frame, ignores keepalives and keeps a final frame with no blank line", async () => {
+    const text =
+      ": keepalive\n\n" +
+      "event: stage\ndata: {oops\n\n" +
+      stageFrame("scope_check", "Checking your question") +
+      frame("answer", base).trimEnd();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(sseResponse([text])));
+    await ask();
+    expect(await screen.findByText("From statute text")).toBeInTheDocument();
+  });
+
+  it("shows a starting message before the first Stage arrives", async () => {
+    const live = controlledResponse();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(live.res));
+    await ask();
+    expect(await screen.findByText("Starting…")).toBeInTheDocument();
+    live.close();
+  });
+
   it("shows the existing message when the stream reports an error or drops", async () => {
     vi.stubGlobal(
       "fetch",

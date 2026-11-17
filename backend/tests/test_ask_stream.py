@@ -1,4 +1,5 @@
 import json
+import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -92,13 +93,12 @@ def test_hindi_query_gets_hindi_labels(tmp_path):
 
 
 def test_labels_never_show_verdict_words(tmp_path):
-    for make_llm, fb, _ in CASES.values():
-        events = stream(make_client(tmp_path / str(id(make_llm)), make_llm(), fb))
+    for i, (make_llm, fb, _) in enumerate(CASES.values()):
+        events = stream(make_client(tmp_path / str(i), make_llm(), fb))
         for n, d in events:
             if n == "stage":
-                assert not {"correct", "ambiguous", "incorrect", "verdict"} & set(
-                    d["label"].lower().split()
-                )
+                words = set(re.findall(r"\w+", d["label"].lower()))
+                assert not {"correct", "ambiguous", "incorrect", "verdict"} & words
 
 
 def test_exception_emits_error_naming_the_running_stage(tmp_path):
@@ -107,3 +107,19 @@ def test_exception_emits_error_naming_the_running_stage(tmp_path):
     assert events[-1][1]["stage"] == "grading"
     assert "unavailable" in events[-1][1]["message"]
     assert "answer" not in [n for n, _ in events]
+
+
+def test_unavailable_dependencies_give_503_before_the_stream(tmp_path):
+    def broken_llm():
+        raise RuntimeError("no api key")
+
+    app = create_app(corpus=Corpus(tmp_path / "c", FakeEmbedder()), fallback=RecordingFallback())
+    import legallens.main as m
+
+    original = m.GeminiLLM
+    m.GeminiLLM = broken_llm
+    try:
+        r = TestClient(app).post("/ask/stream", json={"query": QUERY})
+    finally:
+        m.GeminiLLM = original
+    assert r.status_code == 503

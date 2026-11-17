@@ -124,9 +124,7 @@ async function readEvents(
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  for (;;) {
-    const { done, value } = await reader.read();
-    buffer += decoder.decode(value, { stream: !done }).replace(/\r\n/g, "\n");
+  const flush = () => {
     let end: number;
     while ((end = buffer.indexOf("\n\n")) !== -1) {
       const frame = buffer.slice(0, end);
@@ -137,9 +135,29 @@ async function readEvents(
         if (line.startsWith("event:")) name = line.slice(6).trim();
         else if (line.startsWith("data:")) data.push(line.slice(5).replace(/^ /, ""));
       }
-      if (data.length) onEvent(name, JSON.parse(data.join("\n")));
+      if (!data.length) continue; // comment or keepalive
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(data.join("\n"));
+      } catch {
+        continue; // skip a malformed frame rather than failing the stream
+      }
+      onEvent(name, parsed);
     }
-    if (done) return;
+  };
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (value) buffer += decoder.decode(value, { stream: !done }).replace(/\r\n/g, "\n");
+      if (done) {
+        buffer += "\n\n"; // a body ending without a blank line still has a last frame
+        flush();
+        return;
+      }
+      flush();
+    }
+  } finally {
+    reader.cancel().catch(() => {});
   }
 }
 
@@ -253,6 +271,7 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
 
       {loading && (
         <div role="status" aria-label="Progress">
+          {stages.length === 0 && <p className="text-muted">Starting…</p>}
           <ol className="flex flex-col gap-1 text-muted">
             {stages.map((stage, i) => {
               const active = i === stages.length - 1;
