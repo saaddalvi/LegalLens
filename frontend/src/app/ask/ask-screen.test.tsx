@@ -27,12 +27,41 @@ const base = {
   fallback_sources: [],
 };
 
+const enc = new TextEncoder();
+const frame = (name: string, data: unknown) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`;
+const stageFrame = (id: string, label: string) => frame("stage", { id, label });
+
+// A Response whose body streams the given SSE text, one chunk at a time.
+function sseResponse(chunks: string[]) {
+  return {
+    ok: true,
+    status: 200,
+    body: new ReadableStream<Uint8Array>({
+      start(c) {
+        chunks.forEach((t) => c.enqueue(enc.encode(t)));
+        c.close();
+      },
+    }),
+  };
+}
+
+// A response whose chunks the test pushes by hand.
+function controlledResponse() {
+  let ctrl!: ReadableStreamDefaultController<Uint8Array>;
+  const body = new ReadableStream<Uint8Array>({ start: (c) => (ctrl = c) });
+  return {
+    res: { ok: true, status: 200, body },
+    push: (t: string) => ctrl.enqueue(enc.encode(t)),
+    close: () => ctrl.close(),
+  };
+}
+
 function mockFetch(res: { ok: boolean; status: number; body?: unknown }) {
-  const fn = vi.fn().mockResolvedValue({
-    ok: res.ok,
-    status: res.status,
-    json: async () => res.body,
-  });
+  const fn = vi.fn().mockImplementation(async () =>
+    res.ok
+      ? sseResponse([stageFrame("scope_check", "Checking your question"), frame("answer", res.body)])
+      : { ok: false, status: res.status },
+  );
   vi.stubGlobal("fetch", fn);
   return fn;
 }
@@ -124,7 +153,7 @@ describe("AskScreen", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
     await ask();
     expect(screen.getByRole("button", { name: /thinking/i })).toBeDisabled();
-    expect(screen.getByRole("status", { name: /loading/i })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: /progress/i })).toBeInTheDocument();
   });
 
   it("explains rate limits", async () => {
@@ -173,8 +202,8 @@ describe("AskScreen", () => {
     const answer = (text: string) => ({ ...base, answer: text });
     const fn = vi
       .fn()
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => answer("First answer.") })
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => answer("Second answer.") });
+      .mockResolvedValueOnce(sseResponse([frame("answer", answer("First answer."))]))
+      .mockResolvedValueOnce(sseResponse([frame("answer", answer("Second answer."))]));
     vi.stubGlobal("fetch", fn);
     const { rerender } = render(<AskScreen initialQuery="first" />);
     expect(await screen.findByText("First answer.")).toBeInTheDocument();
@@ -202,5 +231,68 @@ describe("AskScreen", () => {
     rerender(<AskScreen />);
     expect(screen.queryByText("From statute text")).not.toBeInTheDocument();
     expect(screen.getByLabelText(/ask a question/i)).toHaveValue("");
+  });
+
+  it("posts to the stream endpoint and shows Stages in order with the active one marked", async () => {
+    const live = controlledResponse();
+    const fn = vi.fn().mockResolvedValue(live.res);
+    vi.stubGlobal("fetch", fn);
+    await ask();
+    expect(fn.mock.calls[0][0]).toMatch(/\/ask\/stream$/);
+    live.push(stageFrame("scope_check", "Checking your question"));
+    live.push(stageFrame("retrieval", "Searching the statutes"));
+    await waitFor(() => expect(screen.getAllByRole("listitem")).toHaveLength(2));
+    const [first, second] = screen.getAllByRole("listitem");
+    expect(first).toHaveTextContent("Checking your question (done)");
+    expect(second).toHaveTextContent("Searching the statutes (in progress)");
+    live.push(frame("answer", base));
+    live.close();
+    expect(await screen.findByText("From statute text")).toBeInTheDocument();
+    expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
+    expect(screen.getByText(/not legal advice/i)).toBeInTheDocument();
+  });
+
+  it("handles frames split across chunks", async () => {
+    const text = stageFrame("scope_check", "Checking your question") + frame("answer", base);
+    const mid = Math.floor(text.length / 2);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(sseResponse([text.slice(0, mid), text.slice(mid)])));
+    await ask();
+    expect(await screen.findByText("From statute text")).toBeInTheDocument();
+  });
+
+  it("shows the existing message when the stream reports an error or drops", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(sseResponse([frame("error", { stage: "grading", message: "x" })])),
+    );
+    await ask();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/unavailable/i);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(sseResponse([stageFrame("scope_check", "Checking")])));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/could not reach/i);
+  });
+
+  it("shows only the new Query's Stages and answer when another Query replaces one in flight", async () => {
+    const first = controlledResponse();
+    const fn = vi
+      .fn()
+      .mockResolvedValueOnce(first.res)
+      .mockResolvedValueOnce(
+        sseResponse([
+          stageFrame("scope_check", "Second stage"),
+          frame("answer", { ...base, answer: "Second answer." }),
+        ]),
+      );
+    vi.stubGlobal("fetch", fn);
+    const { rerender } = render(<AskScreen initialQuery="first" />);
+    first.push(stageFrame("scope_check", "First stage"));
+    await screen.findByText("First stage");
+    rerender(<AskScreen initialQuery="second" />);
+    expect(await screen.findByText("Second answer.")).toBeInTheDocument();
+    first.push(frame("answer", { ...base, answer: "First answer." }));
+    await Promise.resolve();
+    expect(screen.queryByText("First stage")).not.toBeInTheDocument();
+    expect(screen.queryByText("First answer.")).not.toBeInTheDocument();
   });
 });

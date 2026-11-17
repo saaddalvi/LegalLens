@@ -1,18 +1,22 @@
 import json
 import logging
 import os
+import queue
+import threading
 from functools import lru_cache
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from .corpus import Corpus
 from .embeddings import LocalEmbedder
 from .fallback import WebFallback, default_fallback
+from .language import detect_language
 from .llm import LLM, GeminiLLM
 from .models import AskRequest, AskResponse, Provision
-from .pipeline import answer_query
+from .pipeline import STAGE_LABELS, answer_query
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 FIXTURE = BACKEND_DIR / "fixtures" / "sample_provisions.json"
@@ -70,6 +74,52 @@ def create_app(
             raise HTTPException(
                 503, "The service is unavailable. Please retry shortly."
             ) from exc
+
+    @app.post("/ask/stream")
+    def ask_stream(req: AskRequest) -> StreamingResponse:
+        c, l, f = deps()
+        language = detect_language(req.query)
+        events: queue.Queue[tuple[str, dict] | None] = queue.Queue()
+        current: list[str] = []
+
+        def on_stage(stage_id: str) -> None:
+            current[:] = [stage_id]
+            events.put(
+                ("stage", {"id": stage_id, "label": STAGE_LABELS[stage_id][language]})
+            )
+
+        def work() -> None:
+            try:
+                result = answer_query(
+                    req.query, corpus=c, llm=l, fallback=f, crag=crag, on_stage=on_stage
+                )
+                events.put(("answer", result.model_dump(mode="json")))
+            except Exception:
+                logging.getLogger(__name__).exception("answer generation failed")
+                events.put(
+                    (
+                        "error",
+                        {
+                            "stage": current[0] if current else None,
+                            "message": "The service is unavailable. Please retry shortly.",
+                        },
+                    )
+                )
+            finally:
+                events.put(None)
+
+        threading.Thread(target=work, daemon=True).start()
+
+        def frames():
+            while (event := events.get()) is not None:
+                name, data = event
+                yield f"event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+        return StreamingResponse(
+            frames(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     return app
 

@@ -35,6 +35,12 @@ const TRUST_TEXT: Record<AskResponse["trust_label"], string> = {
   none: "No supporting source found",
 };
 
+function detectedLang(q: string): string {
+  const letters = [...q].filter((c) => /\p{L}/u.test(c));
+  const deva = letters.filter((c) => /[\u0900-\u097F]/.test(c)).length;
+  return deva * 2 > letters.length ? "hi" : "en";
+}
+
 function errorMessage(status: number | null): string {
   if (status === null)
     return "We could not reach the LegalLens service. Check your connection and try again.";
@@ -107,6 +113,35 @@ function CitationCard({ c }: { c: Citation }) {
 
 type Asked = { q: string };
 type Outcome = { for: Asked; result: AskResponse | null; error: string | null };
+type Stage = { id: string; label: string };
+type Progress = { for: Asked; stages: Stage[] };
+
+// Reads a Server-Sent Events body, calling onEvent for each complete frame.
+async function readEvents(
+  body: ReadableStream<Uint8Array>,
+  onEvent: (name: string, data: unknown) => void,
+) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done }).replace(/\r\n/g, "\n");
+    let end: number;
+    while ((end = buffer.indexOf("\n\n")) !== -1) {
+      const frame = buffer.slice(0, end);
+      buffer = buffer.slice(end + 2);
+      let name = "message";
+      const data: string[] = [];
+      for (const line of frame.split("\n")) {
+        if (line.startsWith("event:")) name = line.slice(6).trim();
+        else if (line.startsWith("data:")) data.push(line.slice(5).replace(/^ /, ""));
+      }
+      if (data.length) onEvent(name, JSON.parse(data.join("\n")));
+    }
+    if (done) return;
+  }
+}
 
 export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
   const router = useRouter();
@@ -117,6 +152,7 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
     initialQuery ? { q: initialQuery } : null,
   );
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [progress, setProgress] = useState<Progress | null>(null);
   const [addressQuery, setAddressQuery] = useState(initialQuery);
 
   // The address is the source of truth: when it changes to another Query (a
@@ -136,14 +172,31 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
     };
     (async () => {
       try {
-        const res = await fetch(`${API_URL}/ask`, {
+        const res = await fetch(`${API_URL}/ask/stream`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ query: asked.q }),
           signal: controller.signal,
         });
         if (!res.ok) return done(null, errorMessage(res.status));
-        done(await res.json(), null);
+        if (!res.body) return done(null, errorMessage(null));
+        let finished = false;
+        await readEvents(res.body, (name, data) => {
+          if (controller.signal.aborted) return;
+          if (name === "stage") {
+            setProgress((p) => ({
+              for: asked,
+              stages: [...(p?.for === asked ? p.stages : []), data as Stage],
+            }));
+          } else if (name === "answer") {
+            finished = true;
+            done(data as AskResponse, null);
+          } else if (name === "error") {
+            finished = true;
+            done(null, errorMessage(503));
+          }
+        });
+        if (!finished) done(null, errorMessage(null));
       } catch {
         done(null, errorMessage(null));
       }
@@ -155,6 +208,7 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
   const loading = asked !== null && current === null;
   const result = current?.result ?? null;
   const error = current?.error ?? null;
+  const stages = progress?.for === asked ? progress.stages : [];
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -198,9 +252,24 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
       </form>
 
       {loading && (
-        <p role="status" aria-label="Loading" className="animate-pulse text-muted">
-          Looking through the statutes…
-        </p>
+        <div role="status" aria-label="Progress">
+          <ol className="flex flex-col gap-1 text-muted">
+            {stages.map((stage, i) => {
+              const active = i === stages.length - 1;
+              return (
+                <li
+                  key={stage.id}
+                  className={active ? "font-medium text-ink" : undefined}
+                  aria-current={active ? "step" : undefined}
+                >
+                  <span aria-hidden="true">{active ? "…" : "✓"} </span>
+                  <span lang={detectedLang(asked?.q ?? "")}>{stage.label}</span>
+                  <span className="text-sm"> ({active ? "in progress" : "done"})</span>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
       )}
 
       {error && (
