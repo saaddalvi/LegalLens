@@ -435,3 +435,87 @@ describe("answer reveal", () => {
     expect(section.querySelector("[aria-live]")).toBeNull();
   });
 });
+
+describe("Provision mentions in answers", () => {
+  const bns = {
+    ...base.citations[0],
+    act: "Bharatiya Nyaya Sanhita",
+    chapter: "Offences affecting the human body",
+    number: "103",
+    text: "Whoever commits murder shall be punished with death or imprisonment for life.",
+  };
+  const withAnswer = (answer: string, extra: Partial<typeof base> = {}) =>
+    mockFetch({
+      ok: true,
+      status: 200,
+      body: { ...base, answer, citations: [base.citations[0], bns], ...extra },
+    });
+
+  it("turns a mention of a cited Provision into a chip that opens its Citation card", async () => {
+    withAnswer("Murder is punished under BNS 103. Equality is in Article 14.");
+    const user = await ask();
+    const chip = await screen.findByRole("button", { name: "BNS 103" });
+    const toggle = screen.getByRole("button", { name: /Bharatiya Nyaya Sanhita, 103/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(chip);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText(/commits murder/)).toBeVisible();
+    // Clicking again keeps the card open rather than toggling it shut.
+    await user.click(chip);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("matches 'Article 14' and 'section 103 of the Bharatiya Nyaya Sanhita'", async () => {
+    withAnswer("See Article 14 and section 103 of the Bharatiya Nyaya Sanhita.");
+    await ask();
+    expect(await screen.findByRole("button", { name: "Article 14" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "section 103 of the Bharatiya Nyaya Sanhita" }),
+    ).toBeInTheDocument();
+  });
+
+  it("matches mentions in Hindi answer text", async () => {
+    withAnswer("हत्या की सज़ा BNS 103 में है। देखें अनुच्छेद 14 और धारा 103 BNS।", {
+      answer_language: "hi",
+    });
+    await ask();
+    expect(await screen.findAllByRole("button", { name: /BNS 103|धारा 103 BNS/ })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "अनुच्छेद 14" })).toBeInTheDocument();
+  });
+
+  it("does not link a Provision that was not cited", async () => {
+    withAnswer("Murder was IPC 302 and theft is BNS 303.");
+    await ask();
+    await screen.findByText("From statute text");
+    expect(screen.queryByRole("button", { name: /IPC 302|BNS 303/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/Murder was IPC 302 and theft is BNS 303\./)).toBeInTheDocument();
+  });
+
+  it("keeps the answer text whole around chips", async () => {
+    withAnswer("Murder is punished under BNS 103, which is serious.");
+    await ask();
+    await screen.findByRole("button", { name: "BNS 103" });
+    expect(screen.getByLabelText("Answer").textContent).toContain(
+      "Murder is punished under BNS 103, which is serious.",
+    );
+  });
+});
+
+describe("chip case handling", () => {
+  it("opens and focuses the card when the answer's number differs in case", async () => {
+    mockFetch({
+      ok: true,
+      status: 200,
+      body: {
+        ...base,
+        answer: "See BNS 103a.",
+        citations: [{ ...base.citations[0], act: "Bharatiya Nyaya Sanhita", number: "103A" }],
+      },
+    });
+    const user = await ask();
+    await user.click(await screen.findByRole("button", { name: "BNS 103a" }));
+    const toggle = screen.getByRole("button", { name: /Bharatiya Nyaya Sanhita, 103A/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(toggle).toHaveFocus();
+  });
+});

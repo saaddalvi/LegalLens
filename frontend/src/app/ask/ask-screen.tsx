@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { provisionKey, splitMentions } from "@/lib/mentions";
 import { TRUST_TEXT, type TrustLabel } from "@/lib/trust-labels";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -53,17 +54,27 @@ const STATUS_TEXT: Record<Citation["status"], string> = {
   model: "model Act, not in force by itself",
 };
 
-function CitationCard({ c }: { c: Citation }) {
-  const [open, setOpen] = useState(false);
-  const panelId = `citation-${c.act}-${c.number}`.replace(/\W+/g, "-");
+const cardId = (c: { act: string; number: string }) =>
+  `citation-${c.act}-${c.number}`.replace(/\W+/g, "-");
+
+function CitationCard({
+  c,
+  open,
+  onToggle,
+}: {
+  c: Citation;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const panelId = `${cardId(c)}-text`;
   return (
-    <article className="rounded border border-border border-l-4 border-l-accent bg-surface">
+    <article id={cardId(c)} className="rounded border border-border border-l-4 border-l-accent bg-surface">
       <h3 className="font-serif text-sm font-semibold">
         <button
           type="button"
           aria-expanded={open}
           aria-controls={panelId}
-          onClick={() => setOpen(!open)}
+          onClick={onToggle}
           className="flex w-full items-start justify-between gap-2 p-3 text-left"
         >
           <span className="min-w-0 break-words">
@@ -151,7 +162,20 @@ function useReveal(text: string) {
 
 // Plain-text paragraphs; while revealing, each word fades in after the last.
 // All the text is in the page from the start, so screen readers get it whole.
-function RevealedParagraphs({ text, animate, delay }: { text: string; animate: boolean; delay: number }) {
+function RevealedParagraphs({
+  text,
+  animate,
+  delay,
+  citations = [],
+  onMention,
+}: {
+  text: string;
+  animate: boolean;
+  delay: number;
+  // When the text has settled, mentions of these Provisions become chips.
+  citations?: Citation[];
+  onMention?: (c: { act: string; number: string }) => void;
+}) {
   let offset = 0; // words in the paragraphs before this one
   return paragraphsOf(text).map((para, i) => {
     const words = wordsOf(para);
@@ -169,7 +193,22 @@ function RevealedParagraphs({ text, animate, delay }: { text: string; animate: b
                 {w}
               </span>
             ))
-          : para}
+          : onMention
+            ? splitMentions(para, citations).map((seg, j) =>
+                "act" in seg ? (
+                  <button
+                    key={j}
+                    type="button"
+                    onClick={() => onMention(seg)}
+                    className="rounded border border-border bg-surface px-1 text-primary underline decoration-accent underline-offset-2"
+                  >
+                    {seg.text}
+                  </button>
+                ) : (
+                  seg.text
+                ),
+              )
+            : para}
       </p>
     );
   });
@@ -234,6 +273,21 @@ async function readEvents(
 function Answer({ result }: { result: AskResponse }) {
   const { delay, instant, settled, skip } = useReveal(result.answer);
   const fade = instant ? "" : "reveal-in";
+  const [opened, setOpened] = useState<Set<string>>(new Set());
+  // The cards are already on the page once the text has settled, so a chip
+  // click opens its card, then scrolls to it and moves focus there.
+  const goToCitation = (m: { act: string; number: string }) => {
+    setOpened((o) => new Set(o).add(provisionKey(m)));
+    const card = document.getElementById(cardId(m));
+    card?.scrollIntoView?.({ behavior: instant ? "auto" : "smooth", block: "center" });
+    card?.querySelector("button")?.focus({ preventScroll: true });
+  };
+  const toggle = (key: string) =>
+    setOpened((o) => {
+      const next = new Set(o);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
   return (
     <section className="flex flex-col gap-4" aria-label="Answer">
       {/* Clicking is a shortcut for pointer users; reduced motion and the
@@ -243,7 +297,13 @@ function Answer({ result }: { result: AskResponse }) {
         onClick={skip}
         className="flex flex-col gap-4 break-words font-serif text-lg leading-relaxed"
       >
-        <RevealedParagraphs text={result.answer} animate={!settled} delay={delay} />
+        <RevealedParagraphs
+          text={result.answer}
+          animate={!settled}
+          delay={delay}
+          citations={result.citations}
+          onMention={goToCitation}
+        />
       </div>
 
       {settled && (
@@ -256,7 +316,12 @@ function Answer({ result }: { result: AskResponse }) {
             <div className={`${fade} flex flex-col gap-2`}>
               <h2 className="font-serif text-lg font-semibold">Citations</h2>
               {result.citations.map((c) => (
-                <CitationCard key={`${c.act}-${c.number}`} c={c} />
+                <CitationCard
+                  key={`${c.act}-${c.number}`}
+                  c={c}
+                  open={opened.has(provisionKey(c))}
+                  onToggle={() => toggle(provisionKey(c))}
+                />
               ))}
             </div>
           )}
