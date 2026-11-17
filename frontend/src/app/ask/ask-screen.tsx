@@ -111,6 +111,76 @@ function CitationCard({ c }: { c: Citation }) {
   );
 }
 
+// Reveal timing: the whole reveal finishes within REVEAL_MS however long the
+// text is. Short texts use a gentler per-word delay.
+const REVEAL_MS = 1500;
+const FADE_MS = 300;
+const MAX_WORD_DELAY_MS = 80;
+
+function prefersReducedMotion(): boolean {
+  return typeof window.matchMedia !== "function"
+    || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+// Splits on whitespace only, so a word is never broken mid-grapheme (Hindi
+// included). Trailing whitespace stays with its word.
+function wordsOf(paragraph: string): string[] {
+  return paragraph.match(/\S+\s*/g) ?? [];
+}
+
+function paragraphsOf(text: string): string[] {
+  return text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+}
+
+// Drives one reveal: `settled` once the text is fully shown (so the rest can
+// appear), `instant` when nothing should animate (reduced motion, or the
+// reader clicked to skip).
+function useReveal(text: string) {
+  const [reduced] = useState(prefersReducedMotion);
+  const [finished, setFinished] = useState(false);
+  const [skipped, setSkipped] = useState(false);
+  const count = paragraphsOf(text).reduce((n, p) => n + wordsOf(p).length, 0);
+  const delay = Math.min(MAX_WORD_DELAY_MS, (REVEAL_MS - FADE_MS) / Math.max(count - 1, 1));
+  const total = Math.max(count - 1, 0) * delay + FADE_MS;
+  useEffect(() => {
+    if (reduced) return;
+    const t = setTimeout(() => setFinished(true), total);
+    return () => clearTimeout(t);
+  }, [reduced, total]);
+  const instant = reduced || skipped;
+  return { delay, instant, settled: instant || finished, skip: () => {
+      // A click that ends a text selection is the reader copying, not skipping.
+      if (!window.getSelection()?.toString()) setSkipped(true);
+    },
+  };
+}
+
+// Plain-text paragraphs; while revealing, each word fades in after the last.
+// All the text is in the page from the start, so screen readers get it whole.
+function RevealedParagraphs({ text, animate, delay }: { text: string; animate: boolean; delay: number }) {
+  let offset = 0; // words in the paragraphs before this one
+  return paragraphsOf(text).map((para, i) => {
+    const words = wordsOf(para);
+    const start = offset;
+    offset += words.length;
+    return (
+      <p key={i} className="whitespace-pre-line">
+        {animate
+          ? words.map((w, j) => (
+              <span
+                key={j}
+                className="reveal-word"
+                style={{ "--reveal-delay": `${(start + j) * delay}ms` } as React.CSSProperties}
+              >
+                {w}
+              </span>
+            ))
+          : para}
+      </p>
+    );
+  });
+}
+
 type Asked = { q: string };
 type Outcome = {
   for: Asked;
@@ -165,6 +235,89 @@ async function readEvents(
   } finally {
     reader.cancel().catch(() => {});
   }
+}
+
+function Answer({ result }: { result: AskResponse }) {
+  const { delay, instant, settled, skip } = useReveal(result.answer);
+  const fade = instant ? "" : "reveal-in";
+  return (
+    <section className="flex flex-col gap-4" aria-label="Answer">
+      {/* Clicking is a shortcut for pointer users; reduced motion and the
+          finished state need no action, and the text is readable throughout. */}
+      <div
+        lang={result.answer_language}
+        onClick={skip}
+        className="flex flex-col gap-4 break-words font-serif text-lg leading-relaxed"
+      >
+        <RevealedParagraphs text={result.answer} animate={!settled} delay={delay} />
+      </div>
+
+      {settled && (
+        <>
+          <span className={`${fade} self-start rounded-full border border-border bg-surface px-3 py-1 text-xs text-ink`}>
+            {TRUST_TEXT[result.trust_label]}
+          </span>
+
+          {result.citations.length > 0 && (
+            <div className={`${fade} flex flex-col gap-2`}>
+              <h2 className="font-serif text-lg font-semibold">Citations</h2>
+              {result.citations.map((c) => (
+                <CitationCard key={`${c.act}-${c.number}`} c={c} />
+              ))}
+            </div>
+          )}
+
+          {result.fallback_sources.length > 0 && (
+            <div className={`${fade} flex flex-col gap-1`}>
+              <h2 className="font-serif text-lg font-semibold">Web sources</h2>
+              <ul className="list-disc break-words pl-5 text-sm">
+                {result.fallback_sources.map((s) => (
+                  <li key={s.url}>
+                    <a href={s.url} className="underline">{s.title}</a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function Refusal({
+  result,
+  onReformulate,
+}: {
+  result: AskResponse;
+  onReformulate: (q: string) => void;
+}) {
+  const reason = result.refusal_reason ?? result.answer;
+  const { delay, instant, settled, skip } = useReveal(reason);
+  return (
+    <section
+      role="status"
+      aria-label="Refusal"
+      className="flex flex-col gap-2 rounded border border-danger-border bg-danger-bg p-4 text-danger"
+    >
+      <h2 className="font-serif text-lg font-semibold">LegalLens can&apos;t help with that question</h2>
+      <div lang={result.answer_language} onClick={skip} className="flex flex-col gap-2">
+        <RevealedParagraphs text={reason} animate={!settled} delay={delay} />
+      </div>
+      {settled && result.suggested_reformulation && (
+        <p className={instant ? "" : "reveal-in"}>
+          <span className="font-medium">Try asking instead: </span>
+          <button
+            type="button"
+            onClick={() => onReformulate(result.suggested_reformulation ?? "")}
+            className="text-left underline"
+          >
+            {result.suggested_reformulation}
+          </button>
+        </p>
+      )}
+    </section>
+  );
 }
 
 export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
@@ -331,67 +484,14 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
       )}
 
       {result?.response_type === "refusal" && (
-        <section
-          role="status"
-          aria-label="Refusal"
-          className="flex flex-col gap-2 rounded border border-danger-border bg-danger-bg p-4 text-danger"
-        >
-          <h2 className="font-serif text-lg font-semibold">LegalLens can&apos;t help with that question</h2>
-          <p lang={result.answer_language}>{result.refusal_reason ?? result.answer}</p>
-          {result.suggested_reformulation && (
-            <p>
-              <span className="font-medium">Try asking instead: </span>
-              <button
-                type="button"
-                onClick={() => setQuery(result.suggested_reformulation ?? "")}
-                className="text-left underline"
-              >
-                {result.suggested_reformulation}
-              </button>
-            </p>
-          )}
-        </section>
+        <Refusal
+          key={`${asked?.q}-${result.refusal_reason}`}
+          result={result}
+          onReformulate={setQuery}
+        />
       )}
 
-      {result?.response_type === "answer" && (
-        <section className="flex flex-col gap-4" aria-label="Answer">
-          <span className="self-start rounded-full border border-border bg-surface px-3 py-1 text-xs text-ink">
-            {TRUST_TEXT[result.trust_label]}
-          </span>
-          <div lang={result.answer_language} className="flex flex-col gap-4 break-words font-serif text-lg leading-relaxed">
-            {result.answer
-              .split(/\n\s*\n/)
-              .filter((para) => para.trim())
-              .map((para, i) => (
-                <p key={i} className="whitespace-pre-line">
-                  {para.trim()}
-                </p>
-              ))}
-          </div>
-
-          {result.citations.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <h2 className="font-serif text-lg font-semibold">Citations</h2>
-              {result.citations.map((c) => (
-                <CitationCard key={`${c.act}-${c.number}`} c={c} />
-              ))}
-            </div>
-          )}
-
-          {result.fallback_sources.length > 0 && (
-            <div className="flex flex-col gap-1">
-            <h2 className="font-serif text-lg font-semibold">Web sources</h2>
-            <ul className="list-disc break-words pl-5 text-sm">
-              {result.fallback_sources.map((s) => (
-                <li key={s.url}>
-                  <a href={s.url} className="underline">{s.title}</a>
-                </li>
-              ))}
-            </ul>
-            </div>
-          )}
-        </section>
-      )}
+      {result?.response_type === "answer" && <Answer key={`${asked?.q}-${result.answer}`} result={result} />}
     </main>
   );
 }

@@ -4,7 +4,7 @@
 
 **Blocked by:** 03 (Stage streaming end to end)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] With reduced motion set, the answer, Trust label and Citations appear at once (the existing component tests run in this mode)
 - [ ] Component test with fake timers: a long answer is fully revealed within the cap, and the Trust label and Citations appear only after the text

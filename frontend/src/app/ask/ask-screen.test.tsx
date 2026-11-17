@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import AskScreen from "./ask-screen";
@@ -350,5 +350,88 @@ describe("AskScreen", () => {
     await Promise.resolve();
     expect(screen.queryByText("First stage")).not.toBeInTheDocument();
     expect(screen.queryByText("First answer.")).not.toBeInTheDocument();
+  });
+});
+
+describe("answer reveal", () => {
+  const longAnswer = Array.from({ length: 200 }, (_, i) => `word${i}`).join(" ");
+  const hindiAnswer = "अनुच्छेद 14 के अनुसार कानून के समक्ष सभी व्यक्ति समान हैं।\n\nयह अधिकार सभी को मिलता है।";
+
+  function allowMotion() {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+  }
+
+  async function startAnswering(body: object) {
+    allowMotion();
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(sseResponse([frame("answer", body)])));
+    render(<AskScreen initialQuery="What is Article 14?" />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("reveals a long answer within the cap, then shows the Trust label and Citations", async () => {
+    await startAnswering({ ...base, answer: longAnswer });
+    const section = screen.getByRole("region", { name: "Answer" });
+    expect(section).toHaveTextContent(longAnswer);
+    expect(screen.queryByText("From statute text")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Constitution of India/)).not.toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(screen.queryByText("From statute text")).not.toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(screen.getByText("From statute text")).toBeInTheDocument();
+    expect(screen.getByText(/Constitution of India/)).toBeInTheDocument();
+  });
+
+  it("shows everything at once when the answer is clicked", async () => {
+    await startAnswering({ ...base, answer: longAnswer });
+    expect(screen.queryByText("From statute text")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText(/word0/));
+    expect(screen.getByText("From statute text")).toBeInTheDocument();
+    expect(screen.getByText(/Constitution of India/)).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Answer" })).toHaveTextContent(longAnswer);
+  });
+
+  it("reveals a refusal the same way", async () => {
+    await startAnswering({
+      ...base,
+      response_type: "refusal",
+      refusal_reason: "This is outside Indian law.",
+      suggested_reformulation: "What does Article 14 say?",
+      answer: "",
+      citations: [],
+    });
+    const refusal = screen.getByRole("status", { name: "Refusal" });
+    expect(refusal).toHaveTextContent("This is outside Indian law.");
+    expect(screen.queryByRole("button", { name: "What does Article 14 say?" })).not.toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(screen.getByRole("button", { name: "What does Article 14 say?" })).toBeInTheDocument();
+  });
+
+  it("keeps Hindi words whole and the complete text readable during the reveal", async () => {
+    await startAnswering({ ...base, answer: hindiAnswer, answer_language: "hi" });
+    const section = screen.getByRole("region", { name: "Answer" });
+    expect(section.textContent).toContain("अनुच्छेद 14 के अनुसार कानून के समक्ष सभी व्यक्ति समान हैं।");
+    expect(section.textContent).toContain("यह अधिकार सभी को मिलता है।");
+    expect(section.querySelector("[aria-hidden='true']")).toBeNull();
+    expect(section.querySelector("[aria-live]")).toBeNull();
   });
 });
