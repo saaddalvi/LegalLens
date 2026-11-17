@@ -51,7 +51,10 @@ class Metrics(BaseModel):
     cases: int
     retrieval_hit_rate: float | None  # None when no case has expected Provisions
     answer_accuracy: float
-    citation_validity: float
+    citation_validity: float  # after the endpoint blocks Hallucinated citations
+    # Share of generated answers whose first generation cited a Provision missing from the Corpus
+    # (before the endpoint's block); None when no case reached a checked generation.
+    hallucinated_before_block_rate: float | None
 
 
 class CaseOutcome(BaseModel):
@@ -63,6 +66,7 @@ class CaseOutcome(BaseModel):
     retrieval_hit: bool | None
     accurate: bool
     citations_valid: bool
+    hallucinated_before_block: bool | None = None  # None: no checked generation
     trust_label: str
     response_type: str
 
@@ -80,7 +84,7 @@ log = logging.getLogger(__name__)
 RETRIES = 4
 
 
-def _with_retries(fn, *, sleep=time.sleep):
+def _with_retries(fn, *, sleep=None):
     """Call fn, retrying transient provider failures (e.g. Gemini 503s) with growing waits."""
     for attempt in range(RETRIES):
         try:
@@ -89,7 +93,7 @@ def _with_retries(fn, *, sleep=time.sleep):
             if attempt == RETRIES - 1:
                 raise
             log.warning("evaluation call failed, retrying", exc_info=True)
-            sleep(5 * (attempt + 1))
+            (sleep or time.sleep)(5 * (attempt + 1))
 
 
 def _ratio(flags: list[bool]) -> float | None:
@@ -104,11 +108,46 @@ def _metrics(outcomes: list[CaseOutcome]) -> Metrics:
         retrieval_hit_rate=_ratio(hits),
         answer_accuracy=_ratio([o.accurate for o in outcomes]) or 0.0,
         citation_validity=_ratio([o.citations_valid for o in outcomes]) or 0.0,
+        hallucinated_before_block_rate=_ratio(
+            [
+                o.hallucinated_before_block
+                for o in outcomes
+                if o.hallucinated_before_block is not None
+            ]
+        ),
     )
 
 
+class _GenerationRecorder:
+    """Wraps an LLM, recording whether the first generation of each Query that had Provisions
+    cited a Provision missing from the Corpus: what the endpoint's block hides from the response."""
+
+    def __init__(self, llm: LLM, corpus: Corpus):
+        self._llm, self._corpus = llm, corpus
+        self.first_hallucinated: bool | None = None
+
+    def reset(self) -> None:
+        self.first_hallucinated = None
+
+    def generate(self, query, provisions, *args, **kwargs):
+        gen = self._llm.generate(query, provisions, *args, **kwargs)
+        if provisions and self.first_hallucinated is None:
+            self.first_hallucinated = not check_citations(
+                gen.citations, corpus=self._corpus
+            ).all_valid
+        return gen
+
+    def __getattr__(self, name):
+        return getattr(self._llm, name)
+
+
 def _evaluate_case(
-    case: GoldenCase, response: AskResponse, *, corpus: Corpus, judge: Judge
+    case: GoldenCase,
+    response: AskResponse,
+    *,
+    corpus: Corpus,
+    judge: Judge,
+    hallucinated_before_block: bool | None = None,
 ) -> CaseOutcome:
     cited = [ProvisionRef(act=c.act, number=c.number) for c in response.citations]
     hit = None
@@ -128,6 +167,7 @@ def _evaluate_case(
         retrieval_hit=hit,
         accurate=accurate,
         citations_valid=check_citations(cited, corpus=corpus).all_valid,
+        hallucinated_before_block=hallucinated_before_block,
         trust_label=response.trust_label,
         response_type=response.response_type,
     )
@@ -150,14 +190,24 @@ def run_evaluation(
     """Ask every case through the endpoint in both modes and score the responses."""
     modes: dict[str, ModeResult] = {}
     for mode, crag in (("plain", False), ("crag", True)):
+        recorder = _GenerationRecorder(llm, corpus)
         client = TestClient(
-            create_app(corpus=corpus, llm=llm, fallback=fallback, crag=crag)
+            create_app(corpus=corpus, llm=recorder, fallback=fallback, crag=crag)
         )
         outcomes = []
         for case in cases:
             try:
+                recorder.reset()
                 r = _with_retries(partial(_ask, client, case.query))
-                outcomes.append(_evaluate_case(case, r, corpus=corpus, judge=judge))
+                outcomes.append(
+                    _evaluate_case(
+                        case,
+                        r,
+                        corpus=corpus,
+                        judge=judge,
+                        hallucinated_before_block=recorder.first_hallucinated,
+                    )
+                )
             except Exception as exc:
                 log.exception("case %s failed in %s mode", case.id, mode)
                 outcomes.append(
@@ -193,12 +243,16 @@ def render_report(result: EvaluationResult) -> str:
     metrics = (
         ("Retrieval hit-rate", "retrieval_hit_rate"),
         ("Answer accuracy", "answer_accuracy"),
-        ("Citation validity", "citation_validity"),
+        ("Citation validity (after blocking)", "citation_validity"),
+        (
+            "Hallucinated citations before blocking",
+            "hallucinated_before_block_rate",
+        ),
     )
 
     def table(title: str, a: Metrics, b: Metrics) -> list[str]:
         lines = [
-            f"## {title} ({a.cases} cases)",
+            f"## {title} (cases: {MODE_NAMES['plain']}: {a.cases}, {MODE_NAMES['crag']}: {b.cases})",
             "",
             f"| Metric | {MODE_NAMES['plain']} | {MODE_NAMES['crag']} |",
             "|---|---|---|",

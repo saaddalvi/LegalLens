@@ -1,15 +1,20 @@
 import os
 from typing import Literal, Protocol
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .language import LANGUAGE_NAMES, Language
 from .models import FallbackSource, Provision
 
 
 class ProvisionRef(BaseModel):
-    act: str
-    number: str
+    act: str = Field(
+        description="The Act name exactly as listed after 'Act:', without the number"
+    )
+    number: str = Field(
+        description="Exactly one Provision number as listed after 'Section:' (e.g. 35 or 498A); "
+        "one Citation per Provision, never a list"
+    )
 
 
 class Generation(BaseModel):
@@ -60,7 +65,8 @@ class LLM(Protocol):
 _PROMPT = """You answer laypeople's questions about Indian law using ONLY the Provisions and
 web sources below. Write the answer in {language_name}. Provision text is English: refer to
 Provisions by Act name and number exactly as listed, and do not translate the Act names.
-Use plain language. Cite only Provisions listed below, by exact Act name and number; never
+Use plain language. Cite only Provisions listed below, by exact Act name and number, with
+the Act name and the number in separate fields and one Citation per Provision; never
 cite web sources as Provisions. If the material does not answer the question, say so and
 cite nothing. When there are no Provisions, answer from the web sources, say plainly that the
 answer rests on less reliable web sources and not on statute text, and still cite nothing.
@@ -130,7 +136,7 @@ class GeminiLLM:
     def _format(provisions: list[Provision]) -> str:
         return (
             "\n\n".join(
-                f"[{p.act} {p.number}]"
+                f"[Act: {p.act} | Section: {p.number}]"
                 + (f" ({p.status})" if p.status != "in_force" else "")
                 + f" {p.text}"
                 for p in provisions

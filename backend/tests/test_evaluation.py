@@ -115,3 +115,46 @@ def test_report_shows_plain_versus_crag_on_every_metric(tmp_path):
         assert "Plain RAG" not in row and row.count("%") >= 2
     assert "Plain RAG" in report and "CRAG" in report
     assert "poor_retrieval" in report
+
+
+def test_report_shows_case_counts_per_mode_when_modes_error_on_different_cases(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr("time.sleep", lambda s: None)
+
+    class GraderDown(EvalLLM):
+        def grade(self, query, provisions):  # only CRAG calls the Grader
+            if "liberty?" in query and "ghost" not in query:
+                raise RuntimeError("503")
+            return super().grade(query, provisions)
+
+    corpus = Corpus(tmp_path / "chroma", FakeEmbedder())
+    corpus.add([ART_21, IPC_302])
+    result = run_evaluation(
+        CASES,
+        corpus=corpus,
+        llm=GraderDown(),
+        fallback=StubFallback(),
+        judge=ReferenceJudge(),
+    )
+    assert result.modes["plain"].cases == 4
+    assert result.modes["crag"].cases == 3
+    report = render_report(result)
+    overall = next(line for line in report.splitlines() if line.startswith("## Overall"))
+    assert "Plain RAG: 4" in overall and "CRAG: 3" in overall
+
+
+def test_report_shows_hallucinated_citation_rate_before_the_endpoint_blocks_them(
+    tmp_path,
+):
+    result = run(tmp_path)
+    plain, crag = result.modes["plain"], result.modes["crag"]
+    # en-miss ("ghost") hallucinates on both attempts and is blocked. Plain RAG checks three
+    # generations (en-liberty, en-miss, poor-obscure); CRAG answers poor-obscure from the web
+    # alone, where no Citations are checked, so it checks two.
+    assert plain.hallucinated_before_block_rate == 1 / 3
+    assert crag.hallucinated_before_block_rate == 0.5
+    assert plain.citation_validity == crag.citation_validity == 1.0
+    report = render_report(result)
+    row = next(l for l in report.splitlines() if "Hallucinated citations before" in l)
+    assert "33%" in row and "50%" in row

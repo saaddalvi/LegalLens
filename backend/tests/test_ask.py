@@ -8,6 +8,7 @@ from legallens.corpus import Corpus
 from legallens.llm import Generation, ProvisionRef, ScopeDecision
 from legallens.main import create_app
 from legallens.models import Provision
+from legallens.pipeline import TOP_K
 
 ART_21 = Provision(
     act="Constitution of India",
@@ -183,3 +184,26 @@ def test_llm_failure_returns_503(tmp_path):
     c = TestClient(create_app(corpus=corpus, llm=BrokenLLM(), fallback=FakeFallback()))
     r = c.post("/ask", json={"query": "liberty"})
     assert r.status_code == 503
+
+
+def test_the_llm_sees_the_ten_best_matches_so_lower_ranked_provisions_are_not_lost(
+    tmp_path,
+):
+    # Real-Corpus ranks of the expected Provisions for "When must my employer pay my wages?" (8)
+    # and the working-hours Query (10) were just outside the old top five.
+    wages = [
+        Provision(
+            act="Code on Wages",
+            chapter="Chapter II",
+            number=str(n),
+            status="in_force",
+            text=f"employer pays wages {n}",
+        )
+        for n in range(1, 11)
+    ]
+    corpus = Corpus(tmp_path / "chroma", FakeEmbedder())
+    corpus.add(wages)
+    llm = FakeLLM()
+    client = TestClient(create_app(corpus=corpus, llm=llm, fallback=FakeFallback()))
+    client.post("/ask", json={"query": "employer pays wages"})
+    assert len(llm.seen) == TOP_K == 10

@@ -9,7 +9,7 @@ from .llm import LLM
 from .models import AskResponse, Citation, FallbackSource, Provision, TrustLabel
 from .refs import find_references, split_refs
 
-TOP_K = 5
+TOP_K = 10  # the evaluation found expected Provisions ranked 6th-10th by the embeddings
 
 # Verdict thresholds on the Grader's relevance score (recorded in ADR 0004).
 CORRECT_THRESHOLD = 0.7
