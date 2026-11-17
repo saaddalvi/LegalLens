@@ -4,9 +4,9 @@
 
 **Blocked by:** 14: Fix evaluation quality problems found in the first runs
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The full golden set runs in both modes with no case runs excluded for Gemini errors, or every exclusion is explained
-- [ ] The README results table and notes are replaced with the new figures, including the pre-block Hallucinated-citation rate
-- [ ] The README says honestly where CRAG is ahead, level or behind plain RAG
-- [ ] Ticket 11 is marked done
+- [x] The full golden set runs in both modes with no case runs excluded for Gemini errors, or every exclusion is explained
+- [x] The README results table and notes are replaced with the new figures, including the pre-block Hallucinated-citation rate
+- [x] The README says honestly where CRAG is ahead, level or behind plain RAG
+- [x] Ticket 11 is marked done

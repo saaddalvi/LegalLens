@@ -72,29 +72,38 @@ The report shows case counts per mode, because a mode that hit Gemini errors on 
 
 ### Results
 
-Latest run (2026-11-17, `gemini-3.1-flash-lite`, Tavily Fallback, full Corpus of 3,501 Chunks).
-10 of 72 case runs failed on Gemini 503 "high demand" errors after retries and are excluded from the
-metrics, so the figures cover 31 cases and are indicative, not definitive.
+Latest run (2026-11-17, `gemini-3.5-flash-lite`, Tavily Fallback, full Corpus of 3,501 Chunks, retrieval top 10).
+70 of 72 case runs completed. Two failed on Gemini 503 "high demand" errors after retries and are excluded
+from the metrics: `en-bns-murder` (plain RAG only) and `hi-mta-deposit` (CRAG only). The figures cover 35 cases per
+mode, but those two modes are not scored on exactly the same 35, and with so few cases per category one case moves a figure by 7 to 25 points.
 
 | Metric | Plain RAG | CRAG |
 |---|---|---|
-| Retrieval hit-rate | 57% | 52% |
-| Answer accuracy | 55% | 52% |
-| Citation validity | 100% | 100% |
+| Retrieval hit-rate | 80% | 80% |
+| Answer accuracy | 63% | 71% |
+| Citation validity (after blocking) | 100% | 100% |
+| Hallucinated citations before blocking | 0% | 0% |
 
-| Category (answer accuracy) | Plain RAG | CRAG |
-|---|---|---|
-| English | 64% | 54% |
-| Hindi | 20% | 20% |
-| Repealed-code | 80% | 100% |
-| Out-of-scope | 100% | 100% |
-| Poor-retrieval | 0% | 0% |
+| Category (answer accuracy) | Cases (plain / CRAG) | Plain RAG | CRAG |
+|---|---|---|---|
+| English | 14 / 15 | 57% | 67% |
+| Hindi | 5 / 4 | 60% | 50% |
+| Repealed-code | 6 / 6 | 100% | 100% |
+| Out-of-scope | 5 / 5 | 100% | 100% |
+| Poor-retrieval | 5 / 5 | 0% | 40% |
 
-Read these with care:
+Does CRAG beat plain RAG?
 
-- CRAG did **not** beat plain RAG overall in this run. Its only clear gain is on repealed-code Queries. An earlier run on `gemini-3.5-flash-lite` (6 case runs lost to errors) showed CRAG ahead on poor-retrieval Queries (0% to 40%), so the result is sensitive to the model and to Gemini availability.
-- CRAG scored 0% on poor-retrieval Queries in that run. Diagnosis: with only web sources the generation prompt made the model decline ("no Provisions provided"), and a transient Fallback failure was labelled `corpus`. After fixing the prompt and giving "cannot answer" messages their own `none` Trust label, a rerun of only the poor-retrieval cases (same model) gave plain RAG 0% and CRAG 80% (4 of 5). The table above predates that fix and the other categories have not been rerun.
-- Hindi accuracy of 20% in both modes, and the many English misses on labour and criminal-procedure cases, need a look at retrieval and at the golden set's expected Provisions before drawing conclusions.
-- Citation validity is 100% by construction: the endpoint blocks Hallucinated citations before they reach the response.
+- **Ahead:** poor-retrieval Queries (0% to 40%, 2 of 5), where the Fallback to web sources answers what the Corpus cannot (RTI, domestic violence). It also leads on English accuracy (57% to 67%, one extra case, `en-ir-strike`, and the plain RAG run of `en-bns-murder` is missing) and so overall (63% to 71%).
+- **Level:** retrieval hit-rate (80% each), repealed-code (100%), out-of-scope (100%) and Citation validity. Both modes retrieve identically from the Corpus, so CRAG cannot help where the Corpus ranks the right Provision outside the top 10.
+- **Behind:** Hindi (60% to 50%), but this is one case, because `hi-mta-deposit` errored in CRAG only. On the 4 Hindi cases both modes ran, the two modes score the same.
+- The overall gap of 8 points is within the noise of a 35-case set. Treat CRAG as clearly better only on poor-retrieval Queries, and as no worse elsewhere.
+
+Other notes:
+
+- Real retrieval gaps remain. The expected Provision is not in the top 10 for theft (BNS 303), FIR (BNSS 173), electronic evidence (BSA 63), overtime wages and Hindi wages, in both modes. A larger embedding model (ADR 0003) is the likely fix and was not tried.
+- Three poor-retrieval Queries (drunk driving, divorce, GST) are still answered "cannot answer" (`none`) by CRAG, which the judge scores as wrong because the Fallback found nothing usable.
+- Hallucinated citations before blocking are 0% in both modes. The earlier 60-75% on Hindi came from Gemini merging the number into the Act field and went away once Provisions were listed as separate Act and Section fields. The block still protects against it, but nothing was blocked in this run. CRAG answers that rely on web sources alone are not in this rate.
+- The previous preliminary figures (`gemini-3.1-flash-lite`, 31 cases, CRAG behind) are replaced. The model default has changed to `gemini-3.5-flash-lite`, so the two runs are not directly comparable.
 
 Per-case detail is in `backend/evaluation/report.md`.

@@ -4,10 +4,10 @@
 
 **Blocked by:** 05, 07, 08, 09
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] The golden set includes English, Hindi, repealed-code, out-of-scope and poor-retrieval cases across all Acts in the Corpus
 - [x] One command runs the evaluation and writes a readable report
 - [x] Citation validity uses the Hallucinated-citation check from ticket 04
 - [x] The report shows plain RAG versus CRAG on every metric
-- [ ] Results are summarised in the README (results are in, with caveats noted there)
+- [x] Results are summarised in the README
