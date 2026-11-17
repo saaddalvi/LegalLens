@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .corpus import Corpus
-from .embeddings import E5Embedder
+from .embeddings import LocalEmbedder
 from .fallback import WebFallback, default_fallback
 from .llm import LLM, GeminiLLM
 from .models import AskRequest, AskResponse, Provision
@@ -21,7 +21,7 @@ FIXTURE = BACKEND_DIR / "fixtures" / "sample_provisions.json"
 def default_corpus() -> Corpus:
     """Persistent local store, seeded from the fixture Corpus when empty."""
     path = os.environ.get("CHROMA_PATH", str(BACKEND_DIR / "data" / "chroma"))
-    corpus = Corpus(path, E5Embedder())
+    corpus = Corpus(path, LocalEmbedder())
     if corpus.count() == 0:
         corpus.add([Provision(**p) for p in json.loads(FIXTURE.read_text())])
     return corpus

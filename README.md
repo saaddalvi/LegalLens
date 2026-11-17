@@ -15,7 +15,8 @@ pip install -e ".[dev]"
 pytest
 ```
 
-The first embedding run downloads `intfloat/multilingual-e5-small` from Hugging Face.
+The first embedding run downloads `Qwen/Qwen3-Embedding-0.6B` (about 1.1 GB) from Hugging Face.
+A Corpus built with another embedding model must be rebuilt (`python -m legallens.build_corpus`); vectors from different models do not mix.
 The torch wheel alone is ~140 MB, so the first install can be slow on a slow connection.
 
 ## Build the Corpus
@@ -72,39 +73,38 @@ The report shows case counts per mode, because a mode that hit Gemini errors on 
 
 ### Results
 
-Latest run (2026-11-17, `gemini-3.5-flash-lite`, Tavily Fallback, full Corpus of 3,501 Chunks, retrieval top 10).
-70 of 72 case runs completed. Two failed on Gemini 503 "high demand" errors after retries and are excluded
-from the metrics: `en-bns-murder` (plain RAG only) and `hi-mta-deposit` (CRAG only). The figures cover 35 cases per
-mode, but those two modes are not scored on exactly the same 35, and with so few cases per category one case moves a figure by 7 to 25 points.
+Latest run (2026-11-17, `gemini-3.1-flash-lite`, Tavily Fallback, full Corpus of 3,501 Chunks embedded with `Qwen/Qwen3-Embedding-0.6B`, retrieval top 10).
+69 of 72 case runs completed. Three CRAG runs failed on Gemini 503 errors after retries and are excluded from the metrics:
+`en-mta-deposit`, `en-wages-overtime` and `rep-ipc-302`. Plain RAG is scored on all 36 cases and CRAG on 33, so the modes are
+not scored on exactly the same cases, and with so few cases per category one case moves a figure by 7 to 25 points.
+The model is not the one used in the previous run (`gemini-3.5-flash-lite`, whose free daily quota ran out), so the two runs are not directly comparable.
 
 | Metric | Plain RAG | CRAG |
 |---|---|---|
-| Retrieval hit-rate | 80% | 80% |
-| Answer accuracy | 63% | 71% |
+| Retrieval hit-rate | 96% | 91% |
+| Answer accuracy | 86% | 97% |
 | Citation validity (after blocking) | 100% | 100% |
 | Hallucinated citations before blocking | 0% | 0% |
 
 | Category (answer accuracy) | Cases (plain / CRAG) | Plain RAG | CRAG |
 |---|---|---|---|
-| English | 14 / 15 | 57% | 67% |
-| Hindi | 5 / 4 | 60% | 50% |
-| Repealed-code | 6 / 6 | 100% | 100% |
+| English | 15 / 13 | 100% | 100% |
+| Hindi | 5 / 5 | 100% | 100% |
+| Repealed-code | 6 / 5 | 100% | 100% |
 | Out-of-scope | 5 / 5 | 100% | 100% |
-| Poor-retrieval | 5 / 5 | 0% | 40% |
+| Poor-retrieval | 5 / 5 | 0% | 80% |
 
 Does CRAG beat plain RAG?
 
-- **Ahead:** poor-retrieval Queries (0% to 40%, 2 of 5), where the Fallback to web sources answers what the Corpus cannot (RTI, domestic violence). It also leads on English accuracy (57% to 67%, one extra case, `en-ir-strike`, and the plain RAG run of `en-bns-murder` is missing) and so overall (63% to 71%).
-- **Level:** retrieval hit-rate (80% each), repealed-code (100%), out-of-scope (100%) and Citation validity. Both modes retrieve identically from the Corpus, so CRAG cannot help where the Corpus ranks the right Provision outside the top 10.
-- **Behind:** nowhere that is a real difference. Hindi shows 60% to 50%, but only because `hi-mta-deposit` errored in CRAG. On the 4 Hindi cases both modes ran, they score the same.
-- The overall gap of 8 points is within the noise of a 35-case set. Treat CRAG as clearly better only on poor-retrieval Queries; elsewhere the evidence shows no difference, either way.
+- **Ahead:** poor-retrieval Queries (0% to 80%, 4 of 5), where the Fallback to web sources answers what the Corpus cannot (divorce, domestic violence, GST, drunk driving). This is the only clear difference.
+- **Level:** answer accuracy on English, Hindi, repealed-code and out-of-scope Queries (100% each). The overall gap (86% to 97%) comes entirely from the poor-retrieval category.
+- **Behind on retrieval hit-rate (96% to 91%):** only because CRAG retrieves identically but its Grader sent `en-ir-strike` to the web Fallback, so the answer cited no expected Provision, although it was still correct. Not a real retrieval difference.
+- Still wrong in CRAG: `poor-rti` (the Fallback returned something the judge scored as wrong; the report does not say why).
 
 Other notes:
 
-- The two excluded case runs show as `HTTPStatusError` in `backend/evaluation/report.md`; the 503 "high demand" cause is from the run log, which is not kept in the repo.
-- Real retrieval gaps remain (ticket 14). The figures above were measured before long Provisions were split into pieces (ADR 0002 amendment); that change moved the expected Provision into the top 10 for theft (BNS 303), and a rerun is needed to update this table. Still outside the top 10 afterwards: FIR (BNSS 173), electronic evidence (BSA 63) and Hindi wages. A larger embedding model was tried and did not help (ADR 0003 note).
-- Three poor-retrieval Queries (drunk driving, divorce, GST) are still answered "cannot answer" (`none`) by CRAG, which the judge scores as wrong. The report shows only the `none` label, not why (the Fallback may have returned nothing usable or the model declined).
-- Hallucinated-citation rate before blocking is 0% in both modes. The earlier 60-75% on Hindi came from Gemini merging the number into the Act field and went away once Provisions were listed as separate Act and Section fields. The block still protects against it, but nothing was blocked in this run. CRAG answers that rely on web sources alone are not in this rate.
-- The previous preliminary figures (`gemini-3.1-flash-lite`, 31 cases, CRAG behind) are replaced. The model default has changed to `gemini-3.5-flash-lite`, so the two runs are not directly comparable.
+- The three excluded case runs show as `HTTPStatusError` in `backend/evaluation/report.md`; the cause (503) is from the run log, which is not kept in the repo.
+- Retrieval with Qwen3-Embedding-0.6B puts the expected Provision in the top 10 for 23 of the 26 retrieval cases (20 with `multilingual-e5-small`; ADR 0003). FIR (BNSS 173), electronic evidence (BSA 63) and Hindi wages are now found. Still missed: Hindi tenancy deposit (`hi-mta-deposit`, which e5 found) and two repealed-code cases that rely on naming a section (IPC 302, IEA 65B). The report's hit-rate counts what the response cites, so it can differ from this retrieval count.
+- Hallucinated-citation rate before blocking is 0% in both modes: nothing was blocked in this run. CRAG answers that rely on web sources alone are not in this rate.
 
 Per-case detail is in `backend/evaluation/report.md`.

@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 from .corpus import Corpus
-from .embeddings import E5Embedder
+from .embeddings import LocalEmbedder
 from .ingestion import (
     Report,
     apply_mappings,
@@ -88,7 +88,7 @@ def main() -> int:
     # build never destroys a good store.
     staging = out.with_name(out.name + ".building")
     shutil.rmtree(staging, ignore_errors=True)
-    corpus = Corpus(staging, E5Embedder())
+    corpus = Corpus(staging, LocalEmbedder())
     report = build(
         corpus,
         records,

@@ -63,7 +63,7 @@ def main() -> int:
     )
     elapsed = time.time() - t0
 
-    cases = [c for c in json.load(open(BACKEND / "evaluation/golden_set.json")) if c["category"] in CASES and c["expected_provisions"]]
+    cases = [c for c in json.loads((BACKEND / "evaluation/golden_set.json").read_text()) if c["category"] in CASES and c["expected_provisions"]]
     qtexts = [("query: " if is_e5 else "") + c["query"] for c in cases]
     qkw = {"prompt_name": "query"} if is_qwen else {}
     qvecs = model.encode(qtexts, normalize_embeddings=True, **qkw)

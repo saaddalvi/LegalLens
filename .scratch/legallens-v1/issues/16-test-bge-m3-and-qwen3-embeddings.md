@@ -4,14 +4,14 @@
 
 **Blocked by:** None (can start immediately). Follows ticket 14, whose findings and the ADR 0002 and 0003 notes give the baseline.
 
-**Status:** ready-for-human (measurements done; adoption of Qwen3-Embedding-0.6B awaits a decision on deployed-app memory and startup cost)
+**Status:** done (Qwen3-Embedding-0.6B adopted on 800-character pieces)
 
-- [ ] Each model is scored on the 26 English, Hindi and repealed-code cases with expected Provisions, counting a hit when an expected Provision is in the top 10
-- [ ] Each model is run two ways: whole Provisions up to its longest input, and 800-character pieces (as the Corpus now stores them)
-- [ ] Results are recorded beside the baseline: per-case rank of the expected Provision, hit count, embedding time for the Corpus, and model size on disk
-- [ ] Qwen3 query handling is checked (it expects an instruction prompt on Queries) and its support in the installed `sentence-transformers` is confirmed before scoring
-- [ ] The three remaining gaps are reported explicitly: FIR (BNSS 173), electronic evidence (BSA 63) and Hindi wages
-- [ ] If a model is adopted: it beats 20 of 26 clearly, the Corpus is rebuilt, the embedding change is covered at the existing endpoint seam, ADR 0003 is updated and the README results are rerun. If none is adopted: the findings go in ADR 0003 and the ticket closes
+- [x] Each model is scored on the 26 English, Hindi and repealed-code cases with expected Provisions, counting a hit when an expected Provision is in the top 10
+- [x] Each model is run two ways: whole Provisions up to its longest input, and 800-character pieces (as the Corpus now stores them)
+- [x] Results are recorded beside the baseline: per-case rank of the expected Provision, hit count, embedding time for the Corpus, and model size on disk
+- [x] Qwen3 query handling is checked (it expects an instruction prompt on Queries) and its support in the installed `sentence-transformers` is confirmed before scoring
+- [x] The three remaining gaps are reported explicitly: FIR (BNSS 173), electronic evidence (BSA 63) and Hindi wages
+- [x] If a model is adopted: it beats 20 of 26 clearly, the Corpus is rebuilt, the embedding change is covered at the existing endpoint seam, ADR 0003 is updated and the README results are rerun. If none is adopted: the findings go in ADR 0003 and the ticket closes
 
 ## Notes
 
@@ -22,4 +22,8 @@
 
 ## Findings
 
-See the ADR 0003 note "Long-input models". Qwen3-Embedding-0.6B scores 23 of 26 (e5-small: 20), bge-m3 22. Qwen3 fixes FIR, electronic evidence and Hindi wages but regresses Hindi tenancy deposit; bge-m3 still misses electronic evidence. Pieces and whole Provisions give the same hit counts. Cost: Qwen3 is about 8 times slower to embed the Corpus than e5-small (189 s vs 24 s) and 1.1 GB vs 449 MB on disk. Not adopted yet: the README does not state the deployed app's memory limit.
+See the ADR 0003 note "Long-input models". Qwen3-Embedding-0.6B scores 23 of 26 (e5-small: 20), bge-m3 22. Qwen3 fixes FIR, electronic evidence and Hindi wages but regresses Hindi tenancy deposit; bge-m3 still misses electronic evidence. Pieces and whole Provisions give the same hit counts. Cost: Qwen3 is about 8 times slower to embed the Corpus than e5-small (189 s vs 24 s) and 1.1 GB vs 449 MB on disk. Adopted on the user's decision; the deployed app's memory limit is not documented in the README, so the 1.1 GB load at startup is unchecked on the real host.
+
+Adopted: `LocalEmbedder` (test: `tests/test_embeddings.py`), Corpus rebuilt, ADR 0003 updated, README results rerun on `gemini-3.1-flash-lite` (the 3.5 daily quota ran out).
+
+Test seam note: endpoint tests inject a fake `Embedder`, so the embedding change itself is covered at `LocalEmbedder` (instruction prompt on Queries only); real retrieval was verified through `Corpus.search` on the 26 cases (23 hits).
