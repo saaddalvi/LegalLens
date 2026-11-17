@@ -112,7 +112,13 @@ function CitationCard({ c }: { c: Citation }) {
 }
 
 type Asked = { q: string };
-type Outcome = { for: Asked; result: AskResponse | null; error: string | null };
+type Outcome = {
+  for: Asked;
+  result: AskResponse | null;
+  error: string | null;
+  // The Stage that was running when answering failed, when there was one.
+  failedStage?: string | null;
+};
 type Stage = { id: string; label: string };
 type Progress = { for: Asked; stages: Stage[] };
 
@@ -185,8 +191,14 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
   useEffect(() => {
     if (!asked) return;
     const controller = new AbortController();
-    const done = (result: AskResponse | null, error: string | null) => {
-      if (!controller.signal.aborted) setOutcome({ for: asked, result, error });
+    let running: string | null = null; // the latest Stage to start
+    const done = (
+      result: AskResponse | null,
+      error: string | null,
+      failedStage: string | null = null,
+    ) => {
+      if (!controller.signal.aborted)
+        setOutcome({ for: asked, result, error, failedStage });
     };
     (async () => {
       try {
@@ -202,6 +214,7 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
         await readEvents(res.body, (name, data) => {
           if (controller.signal.aborted) return;
           if (name === "stage") {
+            running = (data as Stage).id;
             setProgress((p) => ({
               for: asked,
               stages: [...(p?.for === asked ? p.stages : []), data as Stage],
@@ -211,12 +224,12 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
             done(data as AskResponse, null);
           } else if (name === "error") {
             finished = true;
-            done(null, errorMessage(503));
+            done(null, errorMessage(503), (data as { stage?: string }).stage ?? running);
           }
         });
-        if (!finished) done(null, errorMessage(null));
+        if (!finished) done(null, errorMessage(null), running);
       } catch {
-        done(null, errorMessage(null));
+        done(null, errorMessage(null), running);
       }
     })();
     return () => controller.abort();
@@ -227,6 +240,12 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
   const result = current?.result ?? null;
   const error = current?.error ?? null;
   const stages = progress?.for === asked ? progress.stages : [];
+  const failedStage = current?.failedStage ?? null;
+  const showStages = loading || (error !== null && stages.length > 0);
+
+  function tryAgain() {
+    if (asked) setAsked({ q: asked.q });
+  }
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -269,21 +288,25 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
         </button>
       </form>
 
-      {loading && (
+      {showStages && (
         <div role="status" aria-label="Progress">
           {stages.length === 0 && <p className="text-muted">Starting…</p>}
           <ol className="flex flex-col gap-1 text-muted">
             {stages.map((stage, i) => {
-              const active = i === stages.length - 1;
+              const last = i === stages.length - 1;
+              const failed = !loading && last && failedStage !== null;
+              const active = loading && last;
               return (
                 <li
                   key={stage.id}
-                  className={active ? "font-medium text-ink" : undefined}
+                  className={
+                    failed ? "font-medium text-danger" : active ? "font-medium text-ink" : undefined
+                  }
                   aria-current={active ? "step" : undefined}
                 >
-                  <span aria-hidden="true">{active ? "…" : "✓"} </span>
+                  <span aria-hidden="true">{failed ? "✗" : active ? "…" : "✓"} </span>
                   <span lang={detectedLang(asked?.q ?? "")}>{stage.label}</span>
-                  <span className="text-sm"> ({active ? "in progress" : "done"})</span>
+                  <span className="text-sm"> ({failed ? "failed" : active ? "in progress" : "done"})</span>
                 </li>
               );
             })}
@@ -292,12 +315,19 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
       )}
 
       {error && (
-        <p
+        <div
           role="alert"
-          className="rounded border border-danger-border bg-danger-bg p-3 text-danger"
+          className="flex flex-col items-start gap-3 rounded border border-danger-border bg-danger-bg p-3 text-danger"
         >
-          {error}
-        </p>
+          <p>{error}</p>
+          <button
+            type="button"
+            onClick={tryAgain}
+            className="rounded bg-primary px-4 py-2 font-medium text-primary-contrast"
+          >
+            Try again
+          </button>
+        </div>
       )}
 
       {result?.response_type === "refusal" && (

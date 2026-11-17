@@ -109,6 +109,36 @@ def test_exception_emits_error_naming_the_running_stage(tmp_path):
     assert "answer" not in [n for n, _ in events]
 
 
+class GenerationFailsLLM(FakeLLM):
+    def generate(self, *args, **kwargs):
+        raise RuntimeError("gemini 503")
+
+
+class ScopeFailsLLM(FakeLLM):
+    def classify(self, query):
+        raise RuntimeError("gemini 503")
+
+
+def test_failure_in_generation_streams_stages_then_error_and_ends(tmp_path):
+    events = stream(make_client(tmp_path, GenerationFailsLLM(score=0.9)))
+    assert stage_ids(events) == ["scope_check", "retrieval", "grading", "generation"]
+    assert [n for n, _ in events][-1] == "error"
+    assert [n for n, _ in events].count("error") == 1
+    assert events[-1][1]["stage"] == "generation"
+    assert "unavailable" in events[-1][1]["message"]
+
+
+def test_failure_in_scope_check_names_scope_check(tmp_path):
+    events = stream(make_client(tmp_path, ScopeFailsLLM()))
+    assert [n for n, _ in events] == ["stage", "error"]
+    assert events[-1][1]["stage"] == "scope_check"
+
+
+def test_ask_still_returns_503_when_generation_fails(tmp_path):
+    client = make_client(tmp_path, GenerationFailsLLM(score=0.9))
+    assert client.post("/ask", json={"query": QUERY}).status_code == 503
+
+
 def test_unavailable_dependencies_give_503_before_the_stream(tmp_path):
     def broken_llm():
         raise RuntimeError("no api key")

@@ -292,6 +292,43 @@ describe("AskScreen", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/could not reach/i);
   });
 
+  it("marks the running Stage failed after an error event and Try again resubmits the Query", async () => {
+    const fn = vi
+      .fn()
+      .mockResolvedValueOnce(
+        sseResponse([
+          stageFrame("scope_check", "Checking your question"),
+          stageFrame("generation", "Writing the answer"),
+          frame("error", { stage: "generation", message: "x" }),
+        ]),
+      )
+      .mockResolvedValueOnce(sseResponse([frame("answer", base)]));
+    vi.stubGlobal("fetch", fn);
+    const user = await ask();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/unavailable/i);
+    const failed = screen.getByText("Writing the answer").closest("li")!;
+    expect(failed).toHaveTextContent(/failed/i);
+    expect(screen.getByText("Checking your question").closest("li")).toHaveTextContent(/done/i);
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText(/Equality before the law/)).toBeInTheDocument();
+    expect(fn).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fn.mock.calls[1][1].body)).toEqual({ query: "What is Article 14?" });
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+  });
+
+  it("treats a stream that ends without an answer or error as a failure of the running Stage", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        sseResponse([stageFrame("scope_check", "Checking"), stageFrame("retrieval", "Searching")]),
+      ),
+    );
+    await ask();
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText("Searching").closest("li")).toHaveTextContent(/failed/i);
+    expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+  });
+
   it("shows only the new Query's Stages and answer when another Query replaces one in flight", async () => {
     const first = controlledResponse();
     const fn = vi
