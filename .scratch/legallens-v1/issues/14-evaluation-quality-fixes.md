@@ -18,5 +18,5 @@
 - **English misses**: 8 of 26 English, Hindi and repealed-code cases missed their expected Provision in retrieval.
   - Wrong expectation (1 English, 1 Hindi): arrest rights. BNSS 47 and 48 are correct answers; added to the golden set next to Constitution Art. 22.
   - Rank 6-10 (2 cases): wages payment, working hours. `TOP_K` raised from 5 to 10.
-  - Real gaps remaining (4: theft BNS 303, FIR BNSS 173, electronic evidence BSA 63, Hindi wages): the expected Provision ranks 11 to beyond 100 under `multilingual-e5-small`. A hybrid dense + BM25 search was tried and did not move any of them, so it was not kept. A larger embedding model (ADR 0003) is the likely fix; left for ticket 15 to re-measure, or a new ticket.
+  - Real gaps remaining (4; ticket 15's rerun also missed overtime wages `en-wages-overtime` in both modes, so 5 in total: theft BNS 303, FIR BNSS 173, electronic evidence BSA 63, Hindi wages): the expected Provision ranks 11 to beyond 100 under `multilingual-e5-small`. A hybrid dense + BM25 search was tried and did not move any of them, so it was not kept. A larger embedding model (ADR 0003) is the likely fix; left for ticket 15 to re-measure, or a new ticket.
 - Report: case counts per mode in each table heading; new "Hallucinated citations before blocking" row, measured by wrapping the LLM at the `run_evaluation()` seam.
