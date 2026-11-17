@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { TRUST_TEXT } from "@/lib/trust-labels";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -28,12 +29,6 @@ type AskResponse = {
   fallback_sources: FallbackSource[];
 };
 
-const TRUST_TEXT: Record<AskResponse["trust_label"], string> = {
-  corpus: "From statute text",
-  fallback: "From web sources (less reliable)",
-  corpus_and_fallback: "From statute text and web sources",
-  none: "No supporting source found",
-};
 
 function detectedLang(q: string): string {
   const letters = [...q].filter((c) => /\p{L}/u.test(c));

@@ -1,10 +1,12 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import LandingPage from "./landing-page";
 
-// Temporary: the landing page replaces this redirect (ticket 06).
-// The redirect depends on the request, so the route may block instead of
-// prerendering an instant shell.
-export const instant = false;
+export const metadata: Metadata = {
+  title: "LegalLens: plain-language answers about Indian law",
+  description:
+    "Ask about Indian law in English or Hindi. Answers are grounded in statute text, with every Citation verified against it.",
+};
 
 export default function Home() {
-  redirect("/ask");
+  return <LandingPage />;
 }

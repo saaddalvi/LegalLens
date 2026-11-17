@@ -12,7 +12,7 @@ The example Queries link to `/ask?q=…`, and the ask box submits to `/ask?q=…
 
 **Blocked by:** 01 (Move the asking screen to `/ask`), 02 (Editorial design system)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] `/` renders the landing page and no longer redirects
 - [ ] Component test: the disclaimer is present
