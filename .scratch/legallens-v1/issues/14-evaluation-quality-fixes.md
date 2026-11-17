@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent (remaining: the 4 real retrieval gaps below)
+**Status:** ready-for-agent (remaining: 3 gaps just outside the top 10: FIR BNSS 173, electronic evidence BSA 63, Hindi wages)
 
 - [x] Hindi: the cause of the low accuracy is found (retrieval of English Provisions from a Hindi Query, the judge, or the golden-set expectations) and fixed; the Hindi golden cases improve measurably
 - [ ] English: every case that missed its expected Provision in both modes is classified as a real retrieval gap or a wrong expectation; wrong expectations are corrected in the golden set and real gaps are fixed in retrieval
@@ -20,3 +20,5 @@
   - Rank 6-10 (2 cases): wages payment, working hours. `TOP_K` raised from 5 to 10.
   - Real gaps remaining (4; ticket 15's rerun also missed overtime wages `en-wages-overtime` in both modes, so 5 in total: theft BNS 303, FIR BNSS 173, electronic evidence BSA 63, Hindi wages): the expected Provision ranks 11 to beyond 100 under `multilingual-e5-small`. A hybrid dense + BM25 search was tried and did not move any of them, so it was not kept. A larger embedding model (ADR 0003) is the likely fix; left for ticket 15 to re-measure, or a new ticket.
 - Report: case counts per mode in each table heading; new "Hallucinated citations before blocking" row, measured by wrapping the LLM at the `run_evaluation()` seam.
+- **Retrieval gaps, second pass.** Measured the rank of each expected Provision over the 26 English, Hindi and repealed-code cases (hit = in the top 10): `multilingual-e5-small` 18, `-base` 17, `-large` 18, hybrid search no change, Act name added to the chunk text 18. Gemini embeddings were not measured (free tier cannot embed the Corpus in a day, and the user chose not to use them). The cause is the chunk length: the model reads about 512 tokens and BNS 303, BNSS 173 and BSA 63 are 3.5-6 KB. Fix: Provisions over 800 characters are split at line ends into pieces, searched by best piece, returned whole (ADR 0002 amendment). Result: 20 of 26 (windows of 500 also gave 20, 300 gave 17, 1500 gave 19). Theft BNS 303 went from rank 15 to 2. Tests: `tests/test_long_provisions.py`, at the `/ask` endpoint.
+- **Still missing (not fixed here):** FIR (BNSS 173, rank 25), electronic evidence (BSA 63, rank 17) and Hindi wages (rank 13) are just outside the top 10, as are three repealed-code cases that rely on naming a section. Raising `TOP_K` further or re-ranking could reach them; left as known limitations. The full Gemini evaluation was not rerun; ticket 15's figures predate this change.
