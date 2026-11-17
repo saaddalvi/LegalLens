@@ -57,8 +57,8 @@ function CitationCard({ c }: { c: Citation }) {
   const [open, setOpen] = useState(false);
   const panelId = `citation-${c.act}-${c.number}`.replace(/\W+/g, "-");
   return (
-    <article className="rounded border border-zinc-300">
-      <h3 className="text-sm font-semibold">
+    <article className="rounded border border-border border-l-4 border-l-accent bg-surface">
+      <h3 className="font-serif text-sm font-semibold">
         <button
           type="button"
           aria-expanded={open}
@@ -68,7 +68,7 @@ function CitationCard({ c }: { c: Citation }) {
         >
           <span className="min-w-0 break-words">
             {c.act}, {c.number}{" "}
-            <span className="font-normal text-zinc-500">
+            <span className="font-normal text-muted">
               ({c.chapter}, {STATUS_TEXT[c.status]})
             </span>
           </span>
@@ -76,7 +76,7 @@ function CitationCard({ c }: { c: Citation }) {
         </button>
       </h3>
       {c.status === "repealed" && (
-        <p role="note" className="mx-3 mb-3 rounded bg-red-50 p-2 text-sm text-red-800">
+        <p role="note" className="mx-3 mb-3 rounded border border-danger-border bg-danger-bg p-2 text-sm text-danger">
           This Provision has been repealed
           {c.superseded_by
             ? `. The current law is ${c.superseded_by.split("; ").join(" and ")}.`
@@ -84,7 +84,7 @@ function CitationCard({ c }: { c: Citation }) {
         </p>
       )}
       {c.status === "model" && (
-        <p role="note" className="mx-3 mb-3 rounded bg-amber-50 p-2 text-sm text-amber-900">
+        <p role="note" className="mx-3 mb-3 rounded border border-warn-border bg-warn-bg p-2 text-sm text-warn">
           This is a model Act, a template that States may adopt. It is not law in force by
           itself. Your State&apos;s own law may differ, so check it.
         </p>
@@ -92,11 +92,11 @@ function CitationCard({ c }: { c: Citation }) {
       {open && (
         <div id={panelId} className="px-3 pb-3">
           {c.supersedes && (
-            <p className="text-sm text-zinc-600">
+            <p className="text-sm text-muted">
               Replaces {c.supersedes.split("; ").join(" and ")}.
             </p>
           )}
-          <blockquote lang="en" className="mt-1 break-words text-sm">
+          <blockquote lang="en" className="mt-1 break-words border-l-2 border-border pl-3 font-serif text-base leading-relaxed italic">
             {c.text}
           </blockquote>
         </div>
@@ -168,10 +168,10 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-8">
-      <h1 className="text-2xl font-semibold">LegalLens</h1>
+      <h1 className="font-serif text-3xl font-semibold">LegalLens</h1>
       <p
         role="note"
-        className="rounded border border-amber-400 bg-amber-50 p-3 text-sm text-amber-900"
+        className="rounded border-2 border-warn-border bg-warn-bg p-3 text-sm font-medium text-warn"
       >
         LegalLens is for information only and is not legal advice. Consult a
         qualified lawyer about your situation.
@@ -186,19 +186,19 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           rows={3}
-          className="w-full rounded border border-zinc-300 p-2 text-base text-black"
+          className="w-full rounded border border-border bg-surface p-2 text-base text-ink"
         />
         <button
           type="submit"
           disabled={loading}
-          className="rounded bg-zinc-900 px-4 py-3 text-white disabled:opacity-50 sm:self-start"
+          className="rounded bg-primary px-4 py-3 font-medium text-primary-contrast disabled:opacity-50 sm:self-start"
         >
           {loading ? "Thinking…" : "Ask"}
         </button>
       </form>
 
       {loading && (
-        <p role="status" aria-label="Loading" className="animate-pulse text-zinc-600">
+        <p role="status" aria-label="Loading" className="animate-pulse text-muted">
           Looking through the statutes…
         </p>
       )}
@@ -206,7 +206,7 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
       {error && (
         <p
           role="alert"
-          className="rounded border border-red-300 bg-red-50 p-3 text-red-800"
+          className="rounded border border-danger-border bg-danger-bg p-3 text-danger"
         >
           {error}
         </p>
@@ -216,9 +216,9 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
         <section
           role="status"
           aria-label="Refusal"
-          className="flex flex-col gap-2 rounded border border-red-300 bg-red-50 p-4 text-red-900"
+          className="flex flex-col gap-2 rounded border border-danger-border bg-danger-bg p-4 text-danger"
         >
-          <h2 className="font-semibold">LegalLens can&apos;t help with that question</h2>
+          <h2 className="font-serif text-lg font-semibold">LegalLens can&apos;t help with that question</h2>
           <p lang={result.answer_language}>{result.refusal_reason ?? result.answer}</p>
           {result.suggested_reformulation && (
             <p>
@@ -237,16 +237,23 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
 
       {result?.response_type === "answer" && (
         <section className="flex flex-col gap-4" aria-label="Answer">
-          <span className="self-start rounded-full bg-zinc-200 px-3 py-1 text-xs text-black">
+          <span className="self-start rounded-full border border-border bg-surface px-3 py-1 text-xs text-ink">
             {TRUST_TEXT[result.trust_label]}
           </span>
-          <p lang={result.answer_language} className="whitespace-pre-wrap break-words">
-            {result.answer}
-          </p>
+          <div lang={result.answer_language} className="flex flex-col gap-4 break-words font-serif text-lg leading-relaxed">
+            {result.answer
+              .split(/\n\s*\n/)
+              .filter((para) => para.trim())
+              .map((para, i) => (
+                <p key={i} className="whitespace-pre-line">
+                  {para.trim()}
+                </p>
+              ))}
+          </div>
 
           {result.citations.length > 0 && (
             <div className="flex flex-col gap-2">
-              <h2 className="font-medium">Citations</h2>
+              <h2 className="font-serif text-lg font-semibold">Citations</h2>
               {result.citations.map((c) => (
                 <CitationCard key={`${c.act}-${c.number}`} c={c} />
               ))}
@@ -255,7 +262,7 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
 
           {result.fallback_sources.length > 0 && (
             <div className="flex flex-col gap-1">
-            <h2 className="font-medium">Web sources</h2>
+            <h2 className="font-serif text-lg font-semibold">Web sources</h2>
             <ul className="list-disc break-words pl-5 text-sm">
               {result.fallback_sources.map((s) => (
                 <li key={s.url}>
