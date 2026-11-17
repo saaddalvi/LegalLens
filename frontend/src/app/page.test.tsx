@@ -66,6 +66,35 @@ describe("Home", () => {
     expect(screen.queryByText(/shall not deny to any person/)).not.toBeInTheDocument();
   });
 
+  it("shows a model Act Citation as not in force by itself", async () => {
+    mockFetch({
+      ok: true,
+      status: 200,
+      body: {
+        ...base,
+        citations: [
+          {
+            ...base.citations[0],
+            act: "Model Tenancy Act",
+            chapter: "Security deposit",
+            number: "11",
+            status: "model",
+            text: "The security deposit shall not exceed two months' rent.",
+          },
+        ],
+      },
+    });
+    const user = await ask();
+    const toggle = await screen.findByRole("button", { name: /Model Tenancy Act, 11/ });
+    expect(toggle).toHaveTextContent(/model Act, not in force by itself/);
+    expect(toggle).not.toHaveTextContent(/\bin force\)/);
+    await user.click(toggle);
+    const note = screen
+      .getAllByRole("note")
+      .find((n) => /model Act, a template/.test(n.textContent ?? ""));
+    expect(note).toHaveTextContent(/State's own law may differ/);
+  });
+
   it("labels Fallback answers as lower trust and lists sources", async () => {
     mockFetch({
       ok: true,
