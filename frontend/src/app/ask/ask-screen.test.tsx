@@ -1,7 +1,10 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import Home from "./page";
+import AskScreen from "./ask-screen";
+
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 
 const base = {
   response_type: "answer",
@@ -36,15 +39,18 @@ function mockFetch(res: { ok: boolean; status: number; body?: unknown }) {
 
 async function ask() {
   const user = userEvent.setup();
-  render(<Home />);
+  render(<AskScreen />);
   await user.type(screen.getByLabelText(/ask a question/i), "What is Article 14?");
   await user.click(screen.getByRole("button", { name: "Ask" }));
   return user;
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  push.mockReset();
+});
 
-describe("Home", () => {
+describe("AskScreen", () => {
   it("shows the disclaimer, Trust label and Citations", async () => {
     mockFetch({ ok: true, status: 200, body: base });
     await ask();
@@ -139,5 +145,62 @@ describe("Home", () => {
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent(/could not reach/i),
     );
+  });
+
+  it("submits the initial Query at once and fills the ask box", async () => {
+    const fn = mockFetch({ ok: true, status: 200, body: base });
+    render(<AskScreen initialQuery="What is Article 14?" />);
+    expect(await screen.findByText("From statute text")).toBeInTheDocument();
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fn.mock.calls[0][1].body)).toEqual({ query: "What is Article 14?" });
+    expect(screen.getByLabelText(/ask a question/i)).toHaveValue("What is Article 14?");
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("submits nothing without an initial Query", () => {
+    const fn = mockFetch({ ok: true, status: 200, body: base });
+    render(<AskScreen />);
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("puts a submitted Query in the address as a new history entry", async () => {
+    mockFetch({ ok: true, status: 200, body: base });
+    await ask();
+    expect(push).toHaveBeenCalledWith("/ask?q=What+is+Article+14%3F", expect.anything());
+  });
+
+  it("shows the earlier Query's answer again when the address goes back to it", async () => {
+    const answer = (text: string) => ({ ...base, answer: text });
+    const fn = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => answer("First answer.") })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => answer("Second answer.") });
+    vi.stubGlobal("fetch", fn);
+    const { rerender } = render(<AskScreen initialQuery="first" />);
+    expect(await screen.findByText("First answer.")).toBeInTheDocument();
+    rerender(<AskScreen initialQuery="second" />);
+    expect(await screen.findByText("Second answer.")).toBeInTheDocument();
+    expect(screen.getByLabelText(/ask a question/i)).toHaveValue("second");
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not submit twice when the address catches up with a typed Query", async () => {
+    const fn = mockFetch({ ok: true, status: 200, body: base });
+    const user = userEvent.setup();
+    const { rerender } = render(<AskScreen />);
+    await user.type(screen.getByLabelText(/ask a question/i), "What is Article 14?");
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    await screen.findByText("From statute text");
+    rerender(<AskScreen initialQuery="What is Article 14?" />);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears the screen when the address goes back to /ask without a Query", async () => {
+    mockFetch({ ok: true, status: 200, body: base });
+    const { rerender } = render(<AskScreen initialQuery="What is Article 14?" />);
+    await screen.findByText("From statute text");
+    rerender(<AskScreen />);
+    expect(screen.queryByText("From statute text")).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/ask a question/i)).toHaveValue("");
   });
 });
