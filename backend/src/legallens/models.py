@@ -4,7 +4,8 @@ from pydantic import BaseModel, Field, field_validator
 
 Status = Literal["in_force", "repealed", "model"]
 ResponseType = Literal["answer", "refusal"]
-TrustLabel = Literal["corpus", "fallback", "corpus_and_fallback"]
+# "none": the answer is a "cannot answer" message that no source supports.
+TrustLabel = Literal["corpus", "fallback", "corpus_and_fallback", "none"]
 
 
 class Provision(BaseModel):

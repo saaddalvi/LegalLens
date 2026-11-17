@@ -80,6 +80,7 @@ def test_incorrect_with_failed_fallback_says_it_cannot_answer(tmp_path, fb):
     assert r.status_code == 200
     body = r.json()
     assert "cannot answer" in body["answer"].lower()
+    assert body["trust_label"] == "none"  # neither the Corpus nor the Fallback supports it
     assert body["citations"] == []
     assert body["fallback_sources"] == []
 

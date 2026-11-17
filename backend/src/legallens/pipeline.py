@@ -60,10 +60,11 @@ def verdict_for(score: float) -> Verdict:
 
 
 def _refusal(message: dict[Language, str], language: Language) -> AskResponse:
+    """A "cannot answer" message: no source supports it, so its Trust label is "none"."""
     return AskResponse(
         answer=message[language],
         answer_language=language,
-        trust_label="corpus",
+        trust_label="none",
         citations=[],
         fallback_sources=[],
     )

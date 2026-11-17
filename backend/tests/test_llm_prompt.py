@@ -20,3 +20,7 @@ def test_in_force_provision_is_left_unmarked():
 
 def test_prompt_tells_the_llm_a_model_act_is_a_template_to_check_against_state_law():
     assert '"model"' in _PROMPT and "template" in _PROMPT and "State" in _PROMPT
+
+
+def test_prompt_tells_the_llm_to_answer_from_web_sources_when_there_are_no_provisions():
+    assert "no Provisions" in _PROMPT and "web sources" in _PROMPT

@@ -22,7 +22,7 @@ type AskResponse = {
   suggested_reformulation: string | null;
   answer: string;
   answer_language: string;
-  trust_label: "corpus" | "fallback" | "corpus_and_fallback";
+  trust_label: "corpus" | "fallback" | "corpus_and_fallback" | "none";
   citations: Citation[];
   fallback_sources: FallbackSource[];
 };
@@ -31,6 +31,7 @@ const TRUST_TEXT: Record<AskResponse["trust_label"], string> = {
   corpus: "From statute text",
   fallback: "From web sources (less reliable)",
   corpus_and_fallback: "From statute text and web sources",
+  none: "No supporting source found",
 };
 
 function errorMessage(status: number | null): string {

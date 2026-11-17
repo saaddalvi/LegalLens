@@ -33,6 +33,9 @@ def main() -> int:
     ap.add_argument(
         "--per-minute", type=int, default=15, help="Gemini requests per minute"
     )
+    ap.add_argument(
+        "--category", action="append", help="run only these categories (repeatable)"
+    )
     args = ap.parse_args()
 
     corpus = default_corpus()
@@ -44,7 +47,11 @@ def main() -> int:
         return 1
     limiter = RateLimiter(args.per_minute)  # one quota shared by the LLM and the judge
     result = run_evaluation(
-        load_golden_set(args.golden),
+        [
+            c
+            for c in load_golden_set(args.golden)
+            if not args.category or c.category in args.category
+        ],
         corpus=corpus,
         llm=ThrottledLLM(GeminiLLM(), limiter),
         fallback=default_fallback(),

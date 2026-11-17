@@ -62,7 +62,9 @@ web sources below. Write the answer in {language_name}. Provision text is Englis
 Provisions by Act name and number exactly as listed, and do not translate the Act names.
 Use plain language. Cite only Provisions listed below, by exact Act name and number; never
 cite web sources as Provisions. If the material does not answer the question, say so and
-cite nothing. Do not give personal advice.
+cite nothing. When there are no Provisions, answer from the web sources, say plainly that the
+answer rests on less reliable web sources and not on statute text, and still cite nothing.
+Do not give personal advice.
 Provisions marked "repealed" are no longer law since 1 July 2024: say so, point to the
 Provision that replaced them, and prefer citing the in-force Provision. When an in-force
 Provision lists the old Provision it replaces, mention that old equivalent.

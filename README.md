@@ -90,7 +90,7 @@ metrics, so the figures cover 31 cases and are indicative, not definitive.
 Read these with care:
 
 - CRAG did **not** beat plain RAG overall in this run. Its only clear gain is on repealed-code Queries. An earlier run on `gemini-3.5-flash-lite` (6 case runs lost to errors) showed CRAG ahead on poor-retrieval Queries (0% to 40%), so the result is sensitive to the model and to Gemini availability.
-- CRAG scored 0% on poor-retrieval Queries here, and its responses were labelled `corpus`, not `fallback`. The Grader scored retrieval as good enough or the Fallback returned nothing; this has not been diagnosed yet.
+- CRAG scored 0% on poor-retrieval Queries in that run. Diagnosis: with only web sources the generation prompt made the model decline ("no Provisions provided"), and a transient Fallback failure was labelled `corpus`. After fixing the prompt and giving "cannot answer" messages their own `none` Trust label, a rerun of only the poor-retrieval cases (same model) gave plain RAG 0% and CRAG 80% (4 of 5). The table above predates that fix and the other categories have not been rerun.
 - Hindi accuracy of 20% in both modes, and the many English misses on labour and criminal-procedure cases, need a look at retrieval and at the golden set's expected Provisions before drawing conclusions.
 - Citation validity is 100% by construction: the endpoint blocks Hallucinated citations before they reach the response.
 
