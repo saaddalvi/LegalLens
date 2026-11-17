@@ -4,7 +4,7 @@
 
 **Blocked by:** 05
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] Light component checks with a mocked API response: disclaimer, Trust label and Citations render
 - [x] Citations expand and collapse
