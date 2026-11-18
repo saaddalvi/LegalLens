@@ -95,6 +95,23 @@ All are environment variables for the backend (`backend/.env.example` has them w
 `GET /health` says the process is up. `GET /ready` says the Corpus loads, how many Provisions it has,
 and whether it is only the sample (`"fixture": true`). Use `/ready` as a deployment health probe.
 
+### Logs
+
+Each question writes one JSON line to the server's log (a Space's Logs tab shows it), for seeing where
+time and Gemini quota go:
+
+```json
+{"event": "request", "endpoint": "ask_stream", "outcome": "answer", "language": "en", "query_chars": 38,
+ "cache_hit": false, "total_ms": 6120, "stages_ms": {"scope_check": 900, "retrieval": 410, "grading": 1100,
+ "generation": 3300, "citation_check": 2}, "grader_score": 0.82, "verdict": "correct",
+ "response_type": "answer", "trust_label": "corpus"}
+```
+
+It also records the Fallback's source count, `citation_recheck` and `citation_blocked` when they happen, and
+`error_stage` when a request fails. The Grader's score and Verdict are there to tune the 0.7 and 0.3
+thresholds against real questions. A line never holds the Query or the answer, only the Query's length and
+language, because Queries can describe people's personal situations.
+
 ## Deploy
 
 The frontend goes on Vercel and the backend on a Hugging Face Docker Space (free CPU tier, 16 GB RAM).

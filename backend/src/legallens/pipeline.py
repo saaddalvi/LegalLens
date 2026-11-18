@@ -161,9 +161,11 @@ def _answer(
     trust_label: TrustLabel,
     language: Language,
     on_stage: StageCallback | None = None,
+    trace: dict | None = None,
 ) -> AskResponse:
     """Generate, verifying Citations against the Corpus (one regeneration, then block)."""
     stage = on_stage or (lambda _id: None)
+    note = trace if trace is not None else {}
     if not provisions:
         # Fallback-only answer: web sources are listed, never cited as Provisions.
         stage("generation")
@@ -181,9 +183,12 @@ def _answer(
     result = check_citations(gen.citations, corpus=corpus)
     if not result.all_valid:
         stage("citation_recheck")
+        note["citation_recheck"] = True
         gen = llm.generate(query, provisions, sources, language=language)
         result = check_citations(gen.citations, corpus=corpus)
     if not result.all_valid:
+        note["citation_blocked"] = True
+        log.warning("answer blocked: a Citation could not be verified after a rewrite")
         return _refusal(CANNOT_ANSWER_RELIABLY, language)
     return AskResponse(
         answer=gen.answer,
@@ -202,8 +207,13 @@ def answer_query(
     fallback: WebFallback,
     crag: bool = True,
     on_stage: StageCallback | None = None,
+    trace: dict | None = None,
 ) -> AskResponse:
     """Corrective RAG (ADR 0001); with crag=False, the plain-RAG baseline.
+
+    `trace`, when given, is filled in with what the pipeline decided (the Grader's score and
+    Verdict, how many Fallback sources came back, whether a Citation forced a rewrite or
+    blocked the answer), for the request log.
 
     Out-of-scope queries are refused first, before any retrieval. The Grader scores retrieved Chunks into a Verdict. Correct: answer from Chunks.
     Ambiguous: Chunks plus Fallback results. Incorrect: Fallback results only. A
@@ -211,6 +221,7 @@ def answer_query(
     "cannot answer" (incorrect).
     """
     stage = on_stage or (lambda _id: None)
+    note = trace if trace is not None else {}
     language = detect_language(query)
     stage("scope_check")
     scope = llm.classify(query)
@@ -240,10 +251,13 @@ def answer_query(
             trust_label="corpus",
             language=language,
             on_stage=on_stage,
+            trace=note,
         )
 
     stage("grading")
-    verdict = verdict_for(llm.grade(query, provisions))
+    score = llm.grade(query, provisions)
+    verdict = verdict_for(score)
+    note.update(grader_score=round(score, 2), verdict=verdict)
     if verdict == "correct":
         return _answer(
             query,
@@ -254,10 +268,12 @@ def answer_query(
             trust_label="corpus",
             language=language,
             on_stage=on_stage,
+            trace=note,
         )
 
     stage("fallback")
     sources = _search_fallback(query, llm=llm, fallback=fallback)
+    note["fallback_sources"] = len(sources)
     if verdict == "ambiguous":
         if not sources:
             return _answer(
@@ -269,6 +285,7 @@ def answer_query(
                 trust_label="corpus",
                 language=language,
                 on_stage=on_stage,
+                trace=note,
             )
         return _answer(
             query,
@@ -279,6 +296,7 @@ def answer_query(
             trust_label="corpus_and_fallback",
             language=language,
             on_stage=on_stage,
+            trace=note,
         )
     if not sources:
         return _refusal(CANNOT_ANSWER_NO_SOURCES, language)
@@ -291,4 +309,5 @@ def answer_query(
         trust_label="fallback",
         language=language,
         on_stage=on_stage,
+        trace=note,
     )

@@ -28,6 +28,7 @@ from .models import (
 )
 from .pipeline import STAGE_LABELS, answer_query
 from .rate_limit import RateLimiter
+from .request_log import RequestLog
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 FIXTURE = BACKEND_DIR / "fixtures" / "sample_provisions.json"
@@ -211,24 +212,38 @@ def create_app(
 
     @app.post("/ask", response_model=AskResponse, dependencies=[Depends(limit)])
     def ask(req: AskRequest) -> AskResponse:
+        rlog = RequestLog("ask", req.query)
         if cache and (hit := cache.get(req.query, crag)):
+            rlog.finish("answer", hit, cache_hit=True)
             return hit
         try:
             c, l, f = deps()
-            result = answer_query(req.query, corpus=c, llm=l, fallback=f, crag=crag)
+            result = answer_query(
+                req.query,
+                corpus=c,
+                llm=l,
+                fallback=f,
+                crag=crag,
+                on_stage=rlog.stage,
+                trace=rlog.trace,
+            )
             if cache:
                 cache.put(req.query, crag, result)
-            return result
         except Exception as exc:
             logging.getLogger(__name__).exception("answer generation failed")
+            rlog.finish("error")
             raise HTTPException(
                 503, "The service is unavailable. Please retry shortly."
             ) from exc
+        rlog.finish("answer", result)
+        return result
 
     @app.post("/ask/stream", dependencies=[Depends(limit)])
     def ask_stream(req: AskRequest) -> StreamingResponse:
+        rlog = RequestLog("ask_stream", req.query)
         if cache and (hit := cache.get(req.query, crag)):
             # No Stages to show: the verified answer is already known.
+            rlog.finish("answer", hit, cache_hit=True)
             return StreamingResponse(
                 iter([_frame("answer", hit.model_dump(mode="json"))]),
                 media_type="text/event-stream",
@@ -238,6 +253,7 @@ def create_app(
             c, l, f = deps()
         except Exception as exc:
             logging.getLogger(__name__).exception("dependencies unavailable")
+            rlog.finish("error")
             raise HTTPException(
                 503, "The service is unavailable. Please retry shortly."
             ) from exc
@@ -250,6 +266,7 @@ def create_app(
             if cancelled.is_set():
                 raise _ClientGone()
             current[:] = [stage_id]
+            rlog.stage(stage_id)
             events.put(
                 ("stage", {"id": stage_id, "label": STAGE_LABELS[stage_id][language]})
             )
@@ -257,15 +274,23 @@ def create_app(
         def work() -> None:
             try:
                 result = answer_query(
-                    req.query, corpus=c, llm=l, fallback=f, crag=crag, on_stage=on_stage
+                    req.query,
+                    corpus=c,
+                    llm=l,
+                    fallback=f,
+                    crag=crag,
+                    on_stage=on_stage,
+                    trace=rlog.trace,
                 )
                 if cache:
                     cache.put(req.query, crag, result)
                 events.put(("answer", result.model_dump(mode="json")))
+                rlog.finish("answer", result)
             except _ClientGone:
-                pass
+                rlog.finish("client_gone")
             except Exception:
                 logging.getLogger(__name__).exception("answer generation failed")
+                rlog.finish("error")
                 events.put(
                     (
                         "error",
