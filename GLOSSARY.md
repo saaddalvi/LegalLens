@@ -51,7 +51,7 @@ One step of answering a Query, shown to the user while they wait, such as the sc
 _Avoid_: Step, phase, status (Status is a Provision's in-force state)
 
 **Trust label**:
-The marker on an answer saying whether its support came from the Corpus, the Fallback or both, or `none` for a "cannot answer" message that no source supports.
+The marker on an answer saying whether its support came from the Corpus, the Fallback or both, or `none` for a "cannot answer" message or a refusal of an Out-of-scope query, which no source supports.
 _Avoid_: Confidence, source tag
 
 ### Answer

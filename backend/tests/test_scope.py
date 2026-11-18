@@ -39,6 +39,7 @@ def test_non_indian_law_query_is_refused_with_reason_and_reformulation(tmp_path)
     assert body["refusal_reason"] == decision.reason
     assert body["suggested_reformulation"] == decision.suggested_reformulation
     assert body["citations"] == []
+    assert body["trust_label"] == "none"  # no source supports a refusal
     assert not fake.generated
 
 

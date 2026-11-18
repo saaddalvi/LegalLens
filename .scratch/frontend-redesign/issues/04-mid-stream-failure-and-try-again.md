@@ -4,12 +4,12 @@
 
 **Blocked by:** 03 (Stage streaming end to end)
 
-**Status:** ready-for-agent
+**Status:** done (landed in `ee03978`)
 
-- [ ] Endpoint test: an LLM that raises during generation produces `stage` events up to `generation`, then an `error` event naming `generation`, and the stream ends
-- [ ] Endpoint test: an LLM that raises during the scope check produces an `error` event naming `scope_check`
-- [ ] `/ask` still returns HTTP 503 on the same failures (existing tests pass)
-- [ ] Component test: after an `error` event, the running Stage is shown as failed, the friendly message is shown, and Try again resubmits the same Query
-- [ ] Component test: a stream that ends without an `answer` or `error` event is treated as a failure of the running Stage
-- [ ] The Try again button is keyboard reachable and the failure is announced to screen readers
-- [ ] Lint, typecheck and tests (backend and frontend) pass
+- [x] Endpoint test: an LLM that raises during generation produces `stage` events up to `generation`, then an `error` event naming `generation`, and the stream ends
+- [x] Endpoint test: an LLM that raises during the scope check produces an `error` event naming `scope_check`
+- [x] `/ask` still returns HTTP 503 on the same failures (existing tests pass)
+- [x] Component test: after an `error` event, the running Stage is shown as failed, the friendly message is shown, and Try again resubmits the same Query
+- [x] Component test: a stream that ends without an `answer` or `error` event is treated as a failure of the running Stage
+- [x] The Try again button is keyboard reachable and the failure is announced to screen readers
+- [x] Lint, typecheck and tests (backend and frontend) pass

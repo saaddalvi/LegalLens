@@ -7,3 +7,4 @@ node_modules/
 backend/data/chroma/
 backend/data/raw/
 .DS_Store
+.playwright-mcp/

@@ -220,7 +220,7 @@ def answer_query(
             response_type="refusal",
             answer=reason,
             answer_language=language,
-            trust_label="corpus",
+            trust_label="none",
             citations=[],
             fallback_sources=[],
             refusal_reason=reason,
