@@ -23,3 +23,18 @@ export type AskResponse = {
   citations: Citation[];
   fallback_sources: FallbackSource[];
 };
+
+// A Provision as the backend stores it. A Citation is one, quoted in an answer.
+export type Provision = Citation;
+
+// What /acts, /acts/{act} and /provision/{act}/{number} return.
+export type ActSummary = { act: string; provisions: number };
+
+export type ProvisionSummary = {
+  number: string;
+  chapter: string;
+  status: Citation["status"];
+  snippet: string;
+};
+
+export type ActIndex = { act: string; provisions: ProvisionSummary[] };

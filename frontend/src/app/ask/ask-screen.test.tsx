@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import AskScreen from "./ask-screen";
@@ -570,5 +570,52 @@ describe("Copy answer", () => {
     await ask();
     await screen.findByRole("status", { name: "Refusal" });
     expect(screen.queryByRole("button", { name: "Copy answer" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Citation links to the law", () => {
+  it("links each Citation card to the full Provision", async () => {
+    mockFetch({ ok: true, status: 200, body: base });
+    await ask();
+    const link = await screen.findByRole("link", { name: /Open full Provision: Constitution of India, 14/ });
+    expect(link).toHaveAttribute("href", "/law/Constitution%20of%20India/14");
+  });
+
+  it("links a repealed Citation to the law that replaced it, and a replacing one to its predecessor", async () => {
+    mockFetch({
+      ok: true,
+      status: 200,
+      body: {
+        ...base,
+        citations: [
+          {
+            ...base.citations[0],
+            act: "Indian Penal Code",
+            number: "302",
+            status: "repealed",
+            superseded_by: "Bharatiya Nyaya Sanhita 103",
+          },
+          {
+            ...base.citations[0],
+            act: "Bharatiya Nyaya Sanhita",
+            number: "103",
+            supersedes: "Indian Penal Code 302",
+          },
+        ],
+      },
+    });
+    const user = await ask();
+    const note = (await screen.findAllByRole("note")).find((n) => /has been repealed/.test(n.textContent ?? ""))!;
+    expect(note).toHaveTextContent("The current law is Bharatiya Nyaya Sanhita 103.");
+    expect(within(note).getByRole("link", { name: "Bharatiya Nyaya Sanhita 103" })).toHaveAttribute(
+      "href",
+      "/law/Bharatiya%20Nyaya%20Sanhita/103",
+    );
+    await user.click(screen.getByRole("button", { name: /Bharatiya Nyaya Sanhita, 103/ }));
+    expect(screen.getByText(/^Replaces/)).toHaveTextContent("Replaces Indian Penal Code 302.");
+    expect(screen.getByRole("link", { name: "Indian Penal Code 302" })).toHaveAttribute(
+      "href",
+      "/law/Indian%20Penal%20Code/302",
+    );
   });
 });

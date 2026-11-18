@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import LandingPage from "./landing-page";
-import { CORPUS_ACTS, askHref, EXAMPLE_QUERIES, REPEAL_NOTE, SPECIMEN } from "@/lib/corpus";
+import { CORPUS_ACTS, askHref, EXAMPLE_QUERIES, lawHref, REPEAL_NOTE, SPECIMEN } from "@/lib/corpus";
 import { TRUST_TEXT } from "@/lib/trust-labels";
 
 const push = vi.fn();
@@ -51,6 +51,15 @@ describe("LandingPage", () => {
     const section = screen.getByRole("region", { name: /what the corpus covers/i });
     for (const act of CORPUS_ACTS) expect(within(section).getByText(act)).toBeInTheDocument();
     expect(within(section).getByText(REPEAL_NOTE)).toBeInTheDocument();
+  });
+
+  it("links each Act to its Provisions", () => {
+    render(<LandingPage />);
+    const section = screen.getByRole("region", { name: /what the corpus covers/i });
+    for (const act of CORPUS_ACTS) {
+      const link = within(section).getByText(act).closest("a");
+      expect(link).toHaveAttribute("href", lawHref(act));
+    }
   });
 
   it("explains each Trust label with the wording used on answers", () => {

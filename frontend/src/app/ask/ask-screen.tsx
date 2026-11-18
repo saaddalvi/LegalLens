@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { BUTTON_CLASS, FIELD_CLASS } from "../ask-box";
+import { ProvisionNotes, ReplacesNote, STATUS_TEXT } from "../provision-notes";
 import Stamp from "../stamp";
 import ThemeToggle from "../theme-toggle";
 import { DISCLAIMER, answerAsText } from "@/lib/answer-text";
 import type { AskResponse, Citation } from "@/lib/ask-types";
+import { lawHref } from "@/lib/corpus";
 import { provisionKey, splitMentions } from "@/lib/mentions";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -29,12 +31,6 @@ function errorMessage(status: number | null): string {
     return "That question could not be processed. Please check it and try again.";
   return "Something went wrong. Please try again.";
 }
-
-const STATUS_TEXT: Record<Citation["status"], string> = {
-  in_force: "in force",
-  repealed: "repealed",
-  model: "model Act, not in force by itself",
-};
 
 const cardId = (c: { act: string; number: string }) =>
   `citation-${c.act}-${c.number}`.replace(/\W+/g, "-");
@@ -75,27 +71,17 @@ function CitationCard({
           </span>
         </button>
       </h3>
-      {c.status === "repealed" && (
-        <p role="note" className="text-redtape">
-          This Provision has been repealed
-          {c.superseded_by
-            ? `. The current law is ${c.superseded_by.split("; ").join(" and ")}.`
-            : "."}
-        </p>
-      )}
-      {c.status === "model" && (
-        <p role="note" className="border-l-4 border-warn-border bg-warn-bg px-3 py-2 text-warn">
-          This is a model Act, a template that States may adopt. It is not law in force by
-          itself. Your State&apos;s own law may differ, so check it.
-        </p>
-      )}
+      <ProvisionNotes provision={c} />
+      <Link
+        href={lawHref(c.act, c.number)}
+        aria-label={`Open full Provision: ${c.act}, ${c.number}`}
+        className="self-start text-sm text-muted underline underline-offset-4 hover:text-ink"
+      >
+        Open full Provision
+      </Link>
       {open && (
         <div id={panelId} className="flex flex-col gap-2 pb-1">
-          {c.supersedes && (
-            <p className="text-muted">
-              Replaces {c.supersedes.split("; ").join(" and ")}.
-            </p>
-          )}
+          {c.supersedes && <ReplacesNote supersedes={c.supersedes} />}
           <blockquote lang="en" className="max-w-[68ch] break-words bg-ledger px-4 py-3 font-serif text-lg leading-relaxed">
             {c.text}
           </blockquote>

@@ -5,6 +5,7 @@ import ThemeToggle from "./theme-toggle";
 import {
   CORPUS_ACTS,
   askHref,
+  lawHref,
   EXAMPLE_QUERIES,
   REPEAL_NOTE,
   REPLACED_BY,
@@ -139,18 +140,20 @@ export default function LandingPage() {
             <div className="flex max-w-3xl flex-col gap-5">
               <ul className="grid gap-x-10 sm:grid-cols-2">
                 {CORPUS_ACTS.map((act) => (
-                  <li
-                    key={act}
-                    className="flex items-baseline justify-between gap-3 border-b border-rule py-2"
-                  >
-                    {REPLACED_BY[act] ? (
-                      <>
-                        <s className="text-muted decoration-redtape decoration-2">{act}</s>
-                        <span className="shrink-0 text-sm text-muted">now {REPLACED_BY[act]}</span>
-                      </>
-                    ) : (
-                      <span>{act}</span>
-                    )}
+                  <li key={act} className="border-b border-rule">
+                    <Link
+                      href={lawHref(act)}
+                      className="flex items-baseline justify-between gap-3 py-2 hover:bg-ledger"
+                    >
+                      {REPLACED_BY[act] ? (
+                        <>
+                          <s className="text-muted decoration-redtape decoration-2">{act}</s>
+                          <span className="shrink-0 text-sm text-muted">now {REPLACED_BY[act]}</span>
+                        </>
+                      ) : (
+                        <span>{act}</span>
+                      )}
+                    </Link>
                   </li>
                 ))}
               </ul>

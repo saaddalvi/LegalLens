@@ -54,3 +54,25 @@ export const REPLACED_BY: Partial<Record<(typeof CORPUS_ACTS)[number], string>> 
 
 // The address that starts an answer to a Query on the asking screen.
 export const askHref = (q: string) => `/ask?${new URLSearchParams({ q })}`;
+
+// The page that shows an Act's Provisions, or one Provision in full. Names go in
+// the address as they are written in the Corpus, encoded.
+export const lawHref = (act: string, number?: string) =>
+  `/law/${encodeURIComponent(act)}${number === undefined ? "" : `/${encodeURIComponent(number)}`}`;
+
+// Route params arrive from the address, so they may still be encoded; decoding a decoded
+// Act name or number changes nothing, as neither contains a "%".
+export function decodeParam(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+// A Query that asks about one Provision, for the "ask about this" link on its page.
+export function askAboutProvision(act: string, number: string): string {
+  return act === "Constitution of India"
+    ? `What does Article ${number} of the Constitution of India say?`
+    : `What does ${act} ${number} say?`;
+}
