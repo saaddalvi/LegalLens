@@ -6,7 +6,7 @@ import threading
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -17,6 +17,7 @@ from .language import detect_language
 from .llm import LLM, GeminiLLM
 from .models import AskRequest, AskResponse, Provision
 from .pipeline import STAGE_LABELS, answer_query
+from .rate_limit import RateLimiter
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 FIXTURE = BACKEND_DIR / "fixtures" / "sample_provisions.json"
@@ -44,10 +45,12 @@ def create_app(
     llm: LLM | None = None,
     fallback: WebFallback | None = None,
     crag: bool = True,
+    rate_limiter: RateLimiter | None = None,
 ) -> FastAPI:
     """Dependencies not supplied are built lazily on the first question.
 
     crag=False serves the plain-RAG baseline (no Grader, no Fallback) for evaluation.
+    rate_limiter limits /ask and /ask/stream per client address; None means no limit.
     """
     app = FastAPI(title="LegalLens")
     app.add_middleware(
@@ -67,11 +70,23 @@ def create_app(
             fallback or default_fallback(),
         )
 
+    def limit(request: Request) -> None:
+        """Rejects with 429 before any work starts, so a streamed answer never begins."""
+        if rate_limiter is None:
+            return
+        wait = rate_limiter.check(request.client.host if request.client else "unknown")
+        if wait is not None:
+            raise HTTPException(
+                429,
+                "Too many requests. Please wait a moment and try again.",
+                headers={"Retry-After": str(wait)},
+            )
+
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    @app.post("/ask", response_model=AskResponse)
+    @app.post("/ask", response_model=AskResponse, dependencies=[Depends(limit)])
     def ask(req: AskRequest) -> AskResponse:
         c, l, f = deps()
         try:
@@ -82,7 +97,7 @@ def create_app(
                 503, "The service is unavailable. Please retry shortly."
             ) from exc
 
-    @app.post("/ask/stream")
+    @app.post("/ask/stream", dependencies=[Depends(limit)])
     def ask_stream(req: AskRequest) -> StreamingResponse:
         try:
             c, l, f = deps()
@@ -153,4 +168,4 @@ def create_app(
     return app
 
 
-app = create_app()
+app = create_app(rate_limiter=RateLimiter.from_env())
