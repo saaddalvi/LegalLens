@@ -4,8 +4,8 @@
 
 | Metric | Plain RAG | CRAG |
 |---|---|---|
-| Retrieval hit-rate | 92% | 92% |
-| Answer accuracy | 81% | 92% |
+| Retrieval hit-rate | 96% | 92% |
+| Answer accuracy | 86% | 94% |
 | Citation validity (after blocking) | 100% | 100% |
 | Hallucinated citations before blocking | 0% | 0% |
 
@@ -13,8 +13,8 @@
 
 | Metric | Plain RAG | CRAG |
 |---|---|---|
-| Retrieval hit-rate | 93% | 93% |
-| Answer accuracy | 93% | 93% |
+| Retrieval hit-rate | 100% | 93% |
+| Answer accuracy | 100% | 93% |
 | Citation validity (after blocking) | 100% | 100% |
 | Hallucinated citations before blocking | 0% | 0% |
 
@@ -23,7 +23,7 @@
 | Metric | Plain RAG | CRAG |
 |---|---|---|
 | Retrieval hit-rate | 80% | 80% |
-| Answer accuracy | 80% | 80% |
+| Answer accuracy | 100% | 100% |
 | Citation validity (after blocking) | 100% | 100% |
 | Hallucinated citations before blocking | 0% | 0% |
 
@@ -52,7 +52,7 @@
 | Retrieval hit-rate | n/a | n/a |
 | Answer accuracy | 0% | 80% |
 | Citation validity (after blocking) | 100% | 100% |
-| Hallucinated citations before blocking | 0% | n/a |
+| Hallucinated citations before blocking | 0% | 0% |
 
 ## Per case
 
@@ -69,12 +69,12 @@
 | en-mta-deposit | correct, hit (corpus) | correct, hit (corpus) |
 | en-tpa-lease | correct, hit (corpus) | correct, hit (corpus) |
 | en-wages-payment | correct, hit (corpus) | correct, hit (corpus) |
-| en-wages-overtime | wrong, miss (none) | wrong, miss (none) |
+| en-wages-overtime | correct, hit (corpus) | correct, hit (corpus) |
 | en-osh-hours | correct, hit (corpus) | correct, hit (corpus) |
 | en-ss-gratuity | correct, hit (corpus) | correct, hit (corpus) |
-| en-ir-strike | correct, hit (corpus) | correct, hit (corpus) |
-| hi-const-arrest | wrong, hit (corpus) | correct, hit (corpus) |
-| hi-mta-deposit | correct, miss (corpus) | wrong, miss (corpus) |
+| en-ir-strike | correct, hit (corpus) | wrong, miss (fallback) |
+| hi-const-arrest | correct, hit (corpus) | correct, hit (corpus) |
+| hi-mta-deposit | correct, miss (corpus) | correct, miss (corpus) |
 | hi-cpa-complaint | correct, hit (corpus) | correct, hit (corpus) |
 | hi-wages | correct, hit (corpus) | correct, hit (corpus) |
 | hi-bns-murder | correct, hit (corpus) | correct, hit (corpus) |
@@ -90,7 +90,7 @@
 | oos-recipe | correct (none) | correct (none) |
 | oos-plead | correct (none) | correct (none) |
 | poor-rti | wrong (corpus) | correct (fallback) |
-| poor-drunk-driving | wrong (corpus) | wrong (fallback) |
+| poor-drunk-driving | wrong (corpus) | wrong (corpus_and_fallback) |
 | poor-divorce | wrong (corpus) | correct (fallback) |
 | poor-dv | wrong (corpus) | correct (fallback) |
 | poor-gst | wrong (corpus) | correct (fallback) |

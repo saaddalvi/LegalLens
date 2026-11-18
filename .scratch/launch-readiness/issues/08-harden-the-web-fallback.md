@@ -10,7 +10,7 @@
 - [x] Each web source reaches the generation prompt fenced in `<web_source>` tags with `<`, `>` and quotes escaped, and the prompt says the text is untrusted and its instructions are to be ignored
 - [x] Tests, with an `httpx.MockTransport` and no network: official search first, one open retry only when empty, no open search when official sources answer, snippet cut, errors raised for the pipeline to handle; a snippet that tries to close its fence cannot
 - [x] ADR 0004 amended (it said "one HTTP call"; ADR 0001's rejection of an official-only Fallback is respected, since the open web is still the second try)
-- [x] Rerun `python -m legallens.evaluate` and refresh the README results (2026-11-18, `gemini-3.5-flash-lite`). Poor-retrieval CRAG stayed at 80%. The other categories did not all stay at 100% (English 93%, Hindi 80%), on cases that did not use the Fallback; see the README.
+- [x] Rerun `python -m legallens.evaluate` and refresh the README results (2026-11-18, `gemini-3.1-flash-lite`, same model as the previous run). Poor-retrieval CRAG stayed at 80%, but two Fallback-path cases flipped (`poor-rti` now right, `poor-drunk-driving` now wrong) and English CRAG fell to 93% on `en-ir-strike`, also a Fallback case. See the README.
 
 ## Notes
 

@@ -172,32 +172,36 @@ The report shows case counts per mode, because a mode that hit Gemini errors on 
 
 ### Results
 
-Latest run (2026-11-18, `gemini-3.5-flash-lite`, Tavily Fallback searching official domains first, full Corpus of 3,501 Chunks embedded with `Qwen/Qwen3-Embedding-0.6B`, retrieval top 10).
-All 72 case runs completed: both modes are scored on all 36 cases. One Gemini 503 occurred during the run and was recovered by the retry, so nothing is excluded.
-With so few cases per category, one case moves a figure by 7 to 25 points. The previous run (2026-11-17) used a different model and scored CRAG on 33 cases (three failed on Gemini 503s), so the two runs are not directly comparable.
+Latest run (2026-11-18, `gemini-3.1-flash-lite`, Tavily Fallback searching official domains first, full Corpus of 3,501 Chunks embedded with `Qwen/Qwen3-Embedding-0.6B`, retrieval top 10).
+This is the same model as the previous run (2026-11-17), so it is the like-for-like comparison with the Fallback change.
+All 72 case runs completed: both modes are scored on all 36 cases. Two Gemini errors (one 429, one 503) were recovered by the retry, so nothing is excluded.
+The 2026-11-17 run scored CRAG on 33 cases (three failed on Gemini 503s), so the case sets differ slightly. With so few cases per category, one case moves a figure by 7 to 25 points.
 
 | Metric | Plain RAG | CRAG |
 |---|---|---|
-| Retrieval hit-rate | 92% | 92% |
-| Answer accuracy | 81% | 92% |
+| Retrieval hit-rate | 96% | 92% |
+| Answer accuracy | 86% | 94% |
 | Citation validity (after blocking) | 100% | 100% |
 | Hallucinated citations before blocking | 0% | 0% |
 
 | Category (answer accuracy) | Cases (plain / CRAG) | Plain RAG | CRAG |
 |---|---|---|---|
-| English | 15 / 15 | 93% | 93% |
-| Hindi | 5 / 5 | 80% | 80% |
+| English | 15 / 15 | 100% | 93% |
+| Hindi | 5 / 5 | 100% | 100% |
 | Repealed-code | 6 / 6 | 100% | 100% |
 | Out-of-scope | 5 / 5 | 100% | 100% |
 | Poor-retrieval | 5 / 5 | 0% | 80% |
 
 Does CRAG beat plain RAG?
 
-- **Ahead:** poor-retrieval Queries (0% to 80%, 4 of 5), where the Fallback to web sources answers what the Corpus cannot. This is the only clear difference, and the overall gap (81% to 92%) comes from it.
-- **Level:** every other category, and retrieval hit-rate (92% each).
-- **Effect of the official-sources-first Fallback:** poor-retrieval CRAG is 80%, the same as before, so no measurable change. The set of failing cases moved: `poor-rti` is now correct and `poor-drunk-driving` is now wrong. One case is a 20-point swing and the report does not say why the judge scored either way, so this is not evidence the change helped or hurt.
-- **Expectation not met for the other categories:** they were expected to stay at 100%, but English is 93% and Hindi is 80% in CRAG. The failures are `en-wages-overtime` (retrieval miss, no Fallback sources; plain RAG also wrong) and `hi-mta-deposit` (Corpus path, retrieval miss). Neither went through the web Fallback, so the Fallback change is unlikely to be the cause; the model changed since the earlier run and `en-wages-overtime` was not scored for CRAG then. This is an inference, not something the run isolates.
-- Plain RAG also wrong on `hi-const-arrest` (CRAG correct) and `hi-mta-deposit` is the reverse (plain correct, CRAG wrong), so the Hindi tie hides two opposite single-case differences.
+- **Ahead:** poor-retrieval Queries (0% to 80%, 4 of 5), where the Fallback to web sources answers what the Corpus cannot. This is the only clear difference.
+- **Behind on English (100% to 93%, one case):** `en-ir-strike`. Its Grader sent it to the web Fallback (a Corpus hit for plain RAG) and the web answer was scored wrong. In the previous run the same case went to the Fallback and was correct. This is the one place the official-sources-first change may have hurt, but it is a single case and the judge's reason is not in the report, so it is not established.
+- **Effect of the Fallback change on poor-retrieval:** 80%, as before, but the wrong case moved: `poor-rti` is now correct (it was the one wrong case) and `poor-drunk-driving` is now wrong (it was correct in the previous run on this model; its Verdict is now `corpus_and_fallback`, so ambiguous, rather than Fallback alone). One case each way, so no net change, but both flips are on the Fallback path.
+- **Expectation not fully met:** the other categories were expected to stay at 100% and English CRAG is 93%, because of `en-ir-strike`. Hindi, repealed-code and out-of-scope stayed at 100%.
+- Overall CRAG accuracy is 94% (34 of 36), against 97% (32 of 33) before. The two wrong cases are `en-ir-strike` and `poor-drunk-driving`, both on the Fallback path; the earlier run's `en-wages-overtime` and `rep-ipc-302` and `en-mta-deposit` were excluded then and are correct now.
+- Retrieval hit-rate CRAG 92% against 96%: the same `en-ir-strike` (the Grader sent it to the Fallback, so the answer cited no expected Provision).
+
+Also run on `gemini-3.5-flash-lite` the same day (commit `8e2e665` has its report): plain RAG 92% hit-rate and 81% accuracy, CRAG 92% and 92%; poor-retrieval CRAG 80%; English and Hindi CRAG 93% and 80%, on `en-wages-overtime` and `hi-mta-deposit`. Model choice moves single cases both ways, so differences of one case between the two models are noise at this size.
 
 Other notes:
 
