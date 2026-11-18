@@ -46,6 +46,10 @@ _Avoid_: Score, grade
 The web search used when a Verdict says the Corpus did not answer the Query.
 _Avoid_: Backup, external search
 
+**Stage**:
+One step of answering a Query, shown to the user while they wait, such as the scope check, retrieval, grading, the Fallback, generation or the Citation check.
+_Avoid_: Step, phase, status (Status is a Provision's in-force state)
+
 **Trust label**:
 The marker on an answer saying whether its support came from the Corpus, the Fallback or both, or `none` for a "cannot answer" message that no source supports.
 _Avoid_: Confidence, source tag

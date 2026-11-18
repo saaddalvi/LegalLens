@@ -6,11 +6,11 @@
 
 **Status:** done
 
-- [ ] With reduced motion set, the answer, Trust label and Citations appear at once (the existing component tests run in this mode)
-- [ ] Component test with fake timers: a long answer is fully revealed within the cap, and the Trust label and Citations appear only after the text
-- [ ] Component test: clicking the answer during the reveal shows the full answer, Trust label and Citations at once
-- [ ] Refusals and "cannot answer" messages reveal the same way
-- [ ] Hindi answers reveal correctly, with words not broken mid-grapheme
-- [ ] Screen readers announce the complete answer once, not word by word
+- [x] With reduced motion set, the answer, Trust label and Citations appear at once (the existing component tests run in this mode)
+- [x] Component test with fake timers: a long answer is fully revealed within the cap, and the Trust label and Citations appear only after the text
+- [x] Component test: clicking the answer during the reveal shows the full answer, Trust label and Citations at once
+- [x] Refusals and "cannot answer" messages reveal the same way
+- [x] Hindi answers reveal correctly, with words not broken mid-grapheme
+- [x] Screen readers announce the complete answer once, not word by word
 - [ ] Manual check in a browser: the reveal looks smooth for a short English answer and a long Hindi answer, in both themes
-- [ ] Lint, typecheck and tests pass
+- [x] Lint, typecheck and tests pass

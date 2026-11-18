@@ -33,5 +33,24 @@ export const EXAMPLE_QUERIES = {
   ],
 };
 
+// The landing page's specimen: one Query and the Provision that answers it,
+// as typeset in the Gazette (BNS 103(1), checked against bns_gaz.pdf).
+export const SPECIMEN = {
+  query: "What is the punishment for murder?",
+  act: "Bharatiya Nyaya Sanhita",
+  number: "103",
+  marginalNote: "Punishment for murder.",
+  text: "(1) Whoever commits murder shall be punished with death or imprisonment for life, and shall also be liable to fine.",
+  repealed: "IPC 302",
+  current: "BNS 103",
+};
+
+// Short names of the current Acts that replace a repealed one, by Act.
+export const REPLACED_BY: Partial<Record<(typeof CORPUS_ACTS)[number], string>> = {
+  "Indian Penal Code": "BNS",
+  "Code of Criminal Procedure": "BNSS",
+  "Indian Evidence Act": "BSA",
+};
+
 // The address that starts an answer to a Query on the asking screen.
 export const askHref = (q: string) => `/ask?${new URLSearchParams({ q })}`;

@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import LandingPage from "./landing-page";
-import { CORPUS_ACTS, askHref, EXAMPLE_QUERIES, REPEAL_NOTE } from "@/lib/corpus";
+import { CORPUS_ACTS, askHref, EXAMPLE_QUERIES, REPEAL_NOTE, SPECIMEN } from "@/lib/corpus";
 import { TRUST_TEXT } from "@/lib/trust-labels";
 
 const push = vi.fn();
@@ -24,6 +24,12 @@ describe("LandingPage", () => {
     }
     const hi = screen.getByRole("link", { name: EXAMPLE_QUERIES.hi[0] });
     expect(hi).toHaveAttribute("lang", "hi");
+  });
+
+  it("links the hero specimen to the answer for its Query", () => {
+    render(<LandingPage />);
+    const specimen = screen.getByRole("link", { name: `See the full answer to: ${SPECIMEN.query}` });
+    expect(specimen).toHaveAttribute("href", askHref(SPECIMEN.query));
   });
 
   it("submits the ask box to /ask with the typed Query, and ignores an empty box", async () => {

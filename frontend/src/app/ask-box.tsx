@@ -4,6 +4,12 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { askHref } from "@/lib/corpus";
 
+// Shared with the asking screen, so both ask boxes look and read the same.
+export const FIELD_CLASS =
+  "w-full resize-y rounded-t border-0 border-b-2 border-ink bg-ledger px-3 py-2.5 font-serif text-lg leading-relaxed text-ink placeholder:text-muted focus-visible:outline-offset-0";
+export const BUTTON_CLASS =
+  "rounded bg-ink px-6 py-2.5 text-base font-semibold text-ink-contrast disabled:opacity-50";
+
 export default function AskBox() {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -25,12 +31,10 @@ export default function AskBox() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         rows={3}
-        className="w-full rounded border border-border bg-surface p-2 text-base text-ink"
+        placeholder="In English or Hindi"
+        className={FIELD_CLASS}
       />
-      <button
-        type="submit"
-        className="rounded bg-primary px-4 py-3 font-medium text-primary-contrast sm:self-start"
-      >
+      <button type="submit" className={`${BUTTON_CLASS} self-start`}>
         Ask
       </button>
     </form>

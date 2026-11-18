@@ -1,70 +1,172 @@
 @import "tailwindcss";
 
-/* Colour tokens. Light is the default; every token is redefined for dark. */
+/*
+ * "Stamp pad": bare-act statute pages, with violet stamp-pad ink marking only
+ * what LegalLens has checked against the Corpus. Red marks only what is struck
+ * out (repealed) or failed. Light is the default; every token is redefined for
+ * dark, which is carbon paper.
+ */
 :root {
-  --paper: #faf6ee;
-  --ink: #1b2a4a;
-  --primary: #1b2a4a;
-  --primary-contrast: #faf6ee;
-  --accent: #d98a1f;
-  --surface: #f2ecdf;
-  --border: #d6cdb9;
-  --muted: #5b6478;
-  --danger: #8f1d1d;
-  --danger-bg: #fbe9e7;
-  --danger-border: #d9a39d;
+  --paper: #fbfbf8;
+  --ledger: #eceee8;
+  --ink: #1f2330;
+  --ink-contrast: #fbfbf8;
+  --muted: #5c6170;
+  --rule: #cdd0c7;
+  --stamp: #5a3e9b;
+  --redtape: #a3271f;
   --warn: #6b4300;
-  --warn-bg: #fdf0d2;
+  --warn-bg: #fbf1d9;
   --warn-border: #d9a93d;
 }
 
+/* Dark follows the device until the reader picks a theme with the toggle,
+   which sets data-theme on <html>. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #12161f;
-    --ink: #e8e4d9;
-    --primary: #9db4e8;
-    --primary-contrast: #12161f;
-    --accent: #f0a63a;
-    --surface: #1b2130;
-    --border: #38415a;
-    --muted: #a3abbd;
-    --danger: #ffb4ac;
-    --danger-bg: #3a1c1c;
-    --danger-border: #7a3a37;
+  :root:not([data-theme="light"]) {
+    --paper: #1b1a2e;
+    --ledger: #25243b;
+    --ink: #e8e6f0;
+    --ink-contrast: #1b1a2e;
+    --muted: #a6a3ba;
+    --rule: #3c3a55;
+    --stamp: #b7a3f2;
+    --redtape: #f08a80;
     --warn: #ffd98a;
-    --warn-bg: #36290d;
+    --warn-bg: #33290f;
     --warn-border: #7d6220;
   }
 }
 
+:root[data-theme="dark"] {
+  --paper: #1b1a2e;
+  --ledger: #25243b;
+  --ink: #e8e6f0;
+  --ink-contrast: #1b1a2e;
+  --muted: #a6a3ba;
+  --rule: #3c3a55;
+  --stamp: #b7a3f2;
+  --redtape: #f08a80;
+  --warn: #ffd98a;
+  --warn-bg: #33290f;
+  --warn-border: #7d6220;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
 @theme inline {
   --color-paper: var(--paper);
+  --color-ledger: var(--ledger);
   --color-ink: var(--ink);
-  --color-primary: var(--primary);
-  --color-primary-contrast: var(--primary-contrast);
-  --color-accent: var(--accent);
-  --color-surface: var(--surface);
-  --color-border: var(--border);
+  --color-ink-contrast: var(--ink-contrast);
   --color-muted: var(--muted);
-  --color-danger: var(--danger);
-  --color-danger-bg: var(--danger-bg);
-  --color-danger-border: var(--danger-border);
+  --color-rule: var(--rule);
+  --color-stamp: var(--stamp);
+  --color-redtape: var(--redtape);
   --color-warn: var(--warn);
   --color-warn-bg: var(--warn-bg);
   --color-warn-border: var(--warn-border);
-  --font-sans: var(--font-geist-sans), var(--font-noto-devanagari);
-  --font-serif: var(--font-serif-display), var(--font-noto-devanagari), Georgia, serif;
-  --font-mono: var(--font-geist-mono);
+  /* Anek is the interface's voice; Tiro is the law's. Both cover Devanagari. */
+  --font-sans: var(--font-anek-latin), var(--font-anek-devanagari), system-ui, sans-serif;
+  --font-serif: var(--font-tiro), Georgia, serif;
 }
 
 body {
   background: var(--paper);
   color: var(--ink);
+  font-family: var(--font-sans);
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--stamp);
+  outline-offset: 3px;
+}
+
+/* Condensed headings, after the lettering on bare-act covers. */
+.condensed {
+  font-stretch: 78%;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  line-height: 1.02;
+}
+
+/*
+ * The marginal note: a heading in a narrow left margin beside its text, as
+ * Indian statutes print a section's heading. On phones it stacks above.
+ */
+.margin-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.margin-grid > .margin-note {
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--rule);
+  justify-self: start;
+}
+
+@media (min-width: 40rem) {
+  .margin-grid {
+    grid-template-columns: 10rem minmax(0, 1fr);
+    gap: 2rem;
+  }
+  .margin-grid > .margin-note {
+    padding-bottom: 0;
+    padding-right: 1.25rem;
+    border-bottom: 0;
+    border-right: 1px solid var(--rule);
+    justify-self: stretch;
+    text-align: right;
+  }
+}
+
+/*
+ * The stamp: an oval of stamp-pad ink. Variants carry how much
+ * support an answer has: solid ink for statute text, a broken edge when web
+ * sources are mixed in, faded ink for web only, and an empty outline for none.
+ */
+.stamp {
+  display: inline-flex;
+  align-items: center;
+  border: 2px solid currentColor;
+  outline: 1px solid currentColor;
   outline-offset: 2px;
+  border-radius: 999px;
+  padding: 0.2rem 0.9rem 0.15rem;
+  color: var(--stamp);
+  font-stretch: 85%;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* The hero specimen's stamp: bigger, with a heavier impression. */
+.stamp-large {
+  padding: 0.35rem 1.25rem 0.3rem;
+  border-width: 3px;
+  outline-width: 1.5px;
+  outline-offset: 3px;
+}
+
+.stamp[data-trust="corpus_and_fallback"] {
+  border-style: dashed;
+}
+
+.stamp[data-trust="fallback"] {
+  color: var(--muted);
+  border-style: dashed;
+  outline-style: dashed;
+}
+
+.stamp[data-trust="none"] {
+  color: var(--muted);
+  outline: none;
+  border-width: 1px;
 }
 
 /* Answer reveal: words fade in one after another, then the rest fades in. */
@@ -87,12 +189,44 @@ body {
   animation: reveal-fade 300ms ease-out both;
 }
 
+/* The one orchestrated moment: the Trust label is stamped onto the answer. */
+@keyframes stamp-press {
+  from {
+    opacity: 0;
+    transform: scale(1.14);
+  }
+  60% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.stamp-in {
+  animation: stamp-press 220ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+/* The running Stage's dot. */
+@keyframes stage-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.stage-pulse {
+  animation: stage-pulse 1.2s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .reveal-word {
     opacity: 1;
     animation: none;
   }
-  .reveal-in {
+  .reveal-in,
+  .stamp-in,
+  .stage-pulse {
     animation: none;
   }
 }

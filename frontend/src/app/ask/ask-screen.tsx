@@ -1,9 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { BUTTON_CLASS, FIELD_CLASS } from "../ask-box";
+import Stamp from "../stamp";
+import ThemeToggle from "../theme-toggle";
 import { provisionKey, splitMentions } from "@/lib/mentions";
-import { TRUST_TEXT, type TrustLabel } from "@/lib/trust-labels";
+import { type TrustLabel } from "@/lib/trust-labels";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -67,27 +71,34 @@ function CitationCard({
   onToggle: () => void;
 }) {
   const panelId = `${cardId(c)}-text`;
+  // The violet rule says this Provision was checked against the Corpus; a
+  // repealed one is ruled in red instead, as struck out.
+  const rule = c.status === "repealed" ? "border-redtape" : "border-stamp";
   return (
-    <article id={cardId(c)} className="rounded border border-border border-l-4 border-l-accent bg-surface">
-      <h3 className="font-serif text-sm font-semibold">
+    <article id={cardId(c)} className={`flex flex-col gap-2 border-l-2 ${rule} pl-4`}>
+      <h3>
         <button
           type="button"
           aria-expanded={open}
           aria-controls={panelId}
           onClick={onToggle}
-          className="flex w-full items-start justify-between gap-2 p-3 text-left"
+          className="flex w-full items-baseline justify-between gap-4 py-1 text-left"
         >
           <span className="min-w-0 break-words">
-            {c.act}, {c.number}{" "}
-            <span className="font-normal text-muted">
+            <span className={`font-semibold ${c.status === "repealed" ? "line-through decoration-redtape decoration-2" : ""}`}>
+              {c.act}, {c.number}
+            </span>{" "}
+            <span className="text-muted">
               ({c.chapter}, {STATUS_TEXT[c.status]})
             </span>
           </span>
-          <span aria-hidden="true">{open ? "−" : "+"}</span>
+          <span aria-hidden="true" className="shrink-0 text-sm text-muted underline underline-offset-4">
+            {open ? "Hide text" : "Show text"}
+          </span>
         </button>
       </h3>
       {c.status === "repealed" && (
-        <p role="note" className="mx-3 mb-3 rounded border border-danger-border bg-danger-bg p-2 text-sm text-danger">
+        <p role="note" className="text-redtape">
           This Provision has been repealed
           {c.superseded_by
             ? `. The current law is ${c.superseded_by.split("; ").join(" and ")}.`
@@ -95,19 +106,19 @@ function CitationCard({
         </p>
       )}
       {c.status === "model" && (
-        <p role="note" className="mx-3 mb-3 rounded border border-warn-border bg-warn-bg p-2 text-sm text-warn">
+        <p role="note" className="border-l-4 border-warn-border bg-warn-bg px-3 py-2 text-warn">
           This is a model Act, a template that States may adopt. It is not law in force by
           itself. Your State&apos;s own law may differ, so check it.
         </p>
       )}
       {open && (
-        <div id={panelId} className="px-3 pb-3">
+        <div id={panelId} className="flex flex-col gap-2 pb-1">
           {c.supersedes && (
-            <p className="text-sm text-muted">
+            <p className="text-muted">
               Replaces {c.supersedes.split("; ").join(" and ")}.
             </p>
           )}
-          <blockquote lang="en" className="mt-1 break-words border-l-2 border-border pl-3 font-serif text-base leading-relaxed italic">
+          <blockquote lang="en" className="max-w-[68ch] break-words bg-ledger px-4 py-3 font-serif text-lg leading-relaxed">
             {c.text}
           </blockquote>
         </div>
@@ -200,7 +211,7 @@ function RevealedParagraphs({
                     key={j}
                     type="button"
                     onClick={() => onMention(seg)}
-                    className="rounded border border-border bg-surface px-1 text-primary underline decoration-accent underline-offset-2"
+                    className="text-stamp underline decoration-stamp/50 decoration-2 underline-offset-4 hover:decoration-stamp"
                   >
                     {seg.text}
                   </button>
@@ -289,13 +300,13 @@ function Answer({ result }: { result: AskResponse }) {
       return next;
     });
   return (
-    <section className="flex flex-col gap-4" aria-label="Answer">
+    <section className="flex flex-col gap-8" aria-label="Answer">
       {/* Clicking is a shortcut for pointer users; reduced motion and the
           finished state need no action, and the text is readable throughout. */}
       <div
         lang={result.answer_language}
         onClick={skip}
-        className="flex flex-col gap-4 break-words font-serif text-lg leading-relaxed"
+        className="flex max-w-[68ch] flex-col gap-5 break-words font-serif text-lg leading-[1.7]"
       >
         <RevealedParagraphs
           text={result.answer}
@@ -308,13 +319,13 @@ function Answer({ result }: { result: AskResponse }) {
 
       {settled && (
         <>
-          <span className={`${fade} self-start rounded-full border border-border bg-surface px-3 py-1 text-xs text-ink`}>
-            {TRUST_TEXT[result.trust_label]}
-          </span>
+          <div className="self-start">
+            <Stamp trust={result.trust_label} press={!instant} />
+          </div>
 
           {result.citations.length > 0 && (
-            <div className={`${fade} flex flex-col gap-2`}>
-              <h2 className="font-serif text-lg font-semibold">Citations</h2>
+            <div className={`${fade} flex flex-col gap-5 border-t border-rule pt-6`}>
+              <h2 className="condensed text-2xl">Citations</h2>
               {result.citations.map((c) => (
                 <CitationCard
                   key={`${c.act}-${c.number}`}
@@ -327,12 +338,14 @@ function Answer({ result }: { result: AskResponse }) {
           )}
 
           {result.fallback_sources.length > 0 && (
-            <div className={`${fade} flex flex-col gap-1`}>
-              <h2 className="font-serif text-lg font-semibold">Web sources</h2>
-              <ul className="list-disc break-words pl-5 text-sm">
+            <div className={`${fade} flex flex-col gap-3 border-t border-rule pt-6`}>
+              <h2 className="condensed text-2xl">Web sources</h2>
+              <ul className="flex flex-col break-words">
                 {result.fallback_sources.map((s) => (
-                  <li key={s.url}>
-                    <a href={s.url} className="underline">{s.title}</a>
+                  <li key={s.url} className="border-b border-rule py-2">
+                    <a href={s.url} className="underline decoration-rule underline-offset-4 hover:decoration-ink">
+                      {s.title}
+                    </a>
                   </li>
                 ))}
               </ul>
@@ -357,10 +370,14 @@ function Refusal({
     <section
       role="status"
       aria-label="Refusal"
-      className="flex flex-col gap-2 rounded border border-danger-border bg-danger-bg p-4 text-danger"
+      className="flex flex-col gap-3 border-l-2 border-redtape pl-4"
     >
-      <h2 className="font-serif text-lg font-semibold">LegalLens can&apos;t help with that question</h2>
-      <div lang={result.answer_language} onClick={skip} className="flex flex-col gap-2">
+      <h2 className="condensed text-2xl">LegalLens can&apos;t help with that question</h2>
+      <div
+        lang={result.answer_language}
+        onClick={skip}
+        className="flex max-w-[68ch] flex-col gap-3 font-serif text-lg leading-[1.7]"
+      >
         <RevealedParagraphs text={reason} animate={!settled} delay={delay} />
       </div>
       {settled && result.suggested_reformulation && (
@@ -369,7 +386,7 @@ function Refusal({
           <button
             type="button"
             onClick={() => onReformulate(result.suggested_reformulation ?? "")}
-            className="text-left underline"
+            className="text-left underline underline-offset-4"
           >
             {result.suggested_reformulation}
           </button>
@@ -470,15 +487,19 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-8">
-      <h1 className="font-serif text-3xl font-semibold">LegalLens</h1>
-      <p
-        role="note"
-        className="rounded border-2 border-warn-border bg-warn-bg p-3 text-sm font-medium text-warn"
-      >
-        LegalLens is for information only and is not legal advice. Consult a
-        qualified lawyer about your situation.
-      </p>
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-10 px-4 pb-16 sm:px-8">
+      <header className="flex flex-col gap-3 border-b border-rule pt-5 pb-4">
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="condensed text-2xl">
+            <Link href="/">LegalLens</Link>
+          </h1>
+          <ThemeToggle />
+        </div>
+        <p role="note" className="text-sm text-muted">
+          For information only, not legal advice. Consult a qualified lawyer about your
+          situation.
+        </p>
+      </header>
 
       <form onSubmit={submit} className="flex flex-col gap-3">
         <label htmlFor="query" className="font-medium">
@@ -489,13 +510,10 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           rows={3}
-          className="w-full rounded border border-border bg-surface p-2 text-base text-ink"
+          placeholder="In English or Hindi"
+          className={FIELD_CLASS}
         />
-        <button
-          type="submit"
-          disabled={loading}
-          className="rounded bg-primary px-4 py-3 font-medium text-primary-contrast disabled:opacity-50 sm:self-start"
-        >
+        <button type="submit" disabled={loading} className={`${BUTTON_CLASS} self-start`}>
           {loading ? "Thinking…" : "Ask"}
         </button>
       </form>
@@ -503,7 +521,7 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
       {showStages && (
         <div role="status" aria-label="Progress">
           {stages.length === 0 && <p className="text-muted">Starting…</p>}
-          <ol className="flex flex-col gap-1 text-muted">
+          <ol className="flex flex-col gap-2.5 border-l border-rule">
             {stages.map((stage, i) => {
               const last = i === stages.length - 1;
               const failed = !loading && last && failedStage !== null;
@@ -511,14 +529,20 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
               return (
                 <li
                   key={stage.id}
-                  className={
-                    failed ? "font-medium text-danger" : active ? "font-medium text-ink" : undefined
-                  }
+                  className={`-ml-[5px] flex items-center gap-3 ${
+                    failed ? "font-medium text-redtape" : active ? "font-medium text-ink" : "text-muted"
+                  }`}
                   aria-current={active ? "step" : undefined}
                 >
-                  <span aria-hidden="true">{failed ? "✗" : active ? "…" : "✓"} </span>
+                  <span
+                    aria-hidden="true"
+                    className={`size-[9px] shrink-0 rounded-full ${
+                      failed ? "bg-redtape" : active ? "stage-pulse bg-ink" : "bg-stamp"
+                    }`}
+                  />
                   <span lang={detectedLang(asked?.q ?? "")}>{stage.label}</span>
-                  <span className="text-sm"> ({failed ? "failed" : active ? "in progress" : "done"})</span>
+                  <span className="sr-only"> ({failed ? "failed" : active ? "in progress" : "done"})</span>
+                  {failed && <span aria-hidden="true" className="text-sm">failed</span>}
                 </li>
               );
             })}
@@ -527,16 +551,9 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
       )}
 
       {error && (
-        <div
-          role="alert"
-          className="flex flex-col items-start gap-3 rounded border border-danger-border bg-danger-bg p-3 text-danger"
-        >
-          <p>{error}</p>
-          <button
-            type="button"
-            onClick={tryAgain}
-            className="rounded bg-primary px-4 py-2 font-medium text-primary-contrast"
-          >
+        <div role="alert" className="flex flex-col items-start gap-3 border-l-2 border-redtape pl-4">
+          <p className="text-redtape">{error}</p>
+          <button type="button" onClick={tryAgain} className={BUTTON_CLASS}>
             Try again
           </button>
         </div>
