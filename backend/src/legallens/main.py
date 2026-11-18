@@ -18,7 +18,14 @@ from .embeddings import LocalEmbedder
 from .fallback import WebFallback, default_fallback
 from .language import detect_language
 from .llm import LLM, GeminiLLM
-from .models import AskRequest, AskResponse, Provision
+from .models import (
+    ActIndex,
+    ActSummary,
+    AskRequest,
+    AskResponse,
+    Provision,
+    ProvisionSummary,
+)
 from .pipeline import STAGE_LABELS, answer_query
 from .rate_limit import RateLimiter
 
@@ -46,6 +53,15 @@ def default_corpus() -> Corpus:
             )
         corpus.add(fixture_provisions())
     return corpus
+
+
+SNIPPET_CHARS = 160
+
+
+def _first_line(text: str) -> str:
+    """The first non-empty line of a Provision, cut to fit an index listing."""
+    line = next((ln.strip() for ln in text.split("\n") if ln.strip()), "")
+    return line if len(line) <= SNIPPET_CHARS else line[: SNIPPET_CHARS - 1] + "…"
 
 
 def is_fixture_corpus(corpus: Corpus) -> bool:
@@ -149,6 +165,49 @@ def create_app(
         except Exception as exc:
             logging.getLogger(__name__).exception("dependencies unavailable")
             raise HTTPException(503, "The service is not ready.") from exc
+
+    def browse_corpus() -> Corpus:
+        try:
+            return deps()[0]
+        except Exception as exc:
+            logging.getLogger(__name__).exception("dependencies unavailable")
+            raise HTTPException(
+                503, "The service is unavailable. Please retry shortly."
+            ) from exc
+
+    # Reading the law makes no Gemini calls, so these routes are not rate limited.
+
+    @app.get("/acts", response_model=list[ActSummary])
+    def acts() -> list[ActSummary]:
+        counts = browse_corpus().act_counts()
+        return [ActSummary(act=a, provisions=counts[a]) for a in sorted(counts)]
+
+    @app.get("/acts/{act}", response_model=ActIndex)
+    def act_index(act: str) -> ActIndex:
+        provisions = browse_corpus().list_act(act)
+        if not provisions:
+            raise HTTPException(404, "No such Act in the Corpus.")
+        return ActIndex(
+            act=act,
+            provisions=[
+                ProvisionSummary(
+                    number=p.number,
+                    chapter=p.chapter,
+                    status=p.status,
+                    snippet=_first_line(p.text),
+                )
+                for p in provisions
+            ],
+        )
+
+    @app.get("/provision/{act}/{number}", response_model=Provision)
+    def provision(act: str, number: str) -> Provision:
+        c = browse_corpus()
+        # The letter in a number such as "21A" may be typed in either case.
+        found = c.get(act, number) or c.get(act, number.upper())
+        if found is None:
+            raise HTTPException(404, "No such Provision in the Corpus.")
+        return found
 
     @app.post("/ask", response_model=AskResponse, dependencies=[Depends(limit)])
     def ask(req: AskRequest) -> AskResponse:

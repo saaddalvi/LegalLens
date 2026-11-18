@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import chromadb
@@ -10,7 +11,9 @@ _COLLECTION = "provisions"
 
 PIECE_CHARS = 800  # the embedding model reads ~512 tokens, so long Provisions are split to be searchable
 _UPSERT_BATCH = 1000  # Chroma rejects a single upsert above ~5,400 records
-_SEARCH_PIECES = 5  # pieces fetched per Provision wanted, so k distinct Provisions come back
+_SEARCH_PIECES = (
+    5  # pieces fetched per Provision wanted, so k distinct Provisions come back
+)
 
 
 def split_text(text: str, size: int = PIECE_CHARS) -> list[str]:
@@ -26,6 +29,17 @@ def split_text(text: str, size: int = PIECE_CHARS) -> list[str]:
     if cur.strip():
         pieces.append(cur)
     return pieces
+
+
+def _number_order(number: str) -> list[tuple[int, int, str]]:
+    """Sort key putting "21A" after "21" and before "22", and "100" after "21A".
+
+    Each run of digits sorts as a number and each run of letters as text, so numbers such as
+    "21", "21A" and "100" come out in the order the statute prints them."""
+    return [
+        (0, int(part), "") if part.isdigit() else (1, 0, part.upper())
+        for part in re.findall(r"\d+|\D+", number)
+    ]
 
 
 class Corpus:
@@ -87,6 +101,24 @@ class Corpus:
     def get(self, act: str, number: str) -> Provision | None:
         res = self._col.get(ids=[f"{act}|{number}|0"])
         return self._provision(res["metadatas"][0]) if res["ids"] else None
+
+    def act_counts(self) -> dict[str, int]:
+        """Number of Provisions in each Act, by Act name."""
+        metas = self._col.get(where={"piece": 0}, include=["metadatas"])["metadatas"]
+        counts: dict[str, int] = {}
+        for m in metas:
+            counts[m["act"]] = counts.get(m["act"], 0) + 1
+        return counts
+
+    def list_act(self, act: str) -> list[Provision]:
+        """Every Provision of an Act, in statute order (21 before 21A before 100)."""
+        res = self._col.get(
+            where={"$and": [{"act": act}, {"piece": 0}]}, include=["metadatas"]
+        )
+        return sorted(
+            (self._provision(m) for m in res["metadatas"]),
+            key=lambda p: _number_order(p.number),
+        )
 
     def search(self, query: str, k: int = 5) -> list[Provision]:
         """The k Provisions whose best piece is closest to the Query, closest first."""

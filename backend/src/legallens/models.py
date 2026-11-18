@@ -37,6 +37,25 @@ class FallbackSource(BaseModel):
     snippet: str
 
 
+class ActSummary(BaseModel):
+    act: str
+    provisions: int
+
+
+class ProvisionSummary(BaseModel):
+    """A Provision as listed in its Act's index: no full text, just its first line."""
+
+    number: str
+    chapter: str
+    status: Status
+    snippet: str
+
+
+class ActIndex(BaseModel):
+    act: str
+    provisions: list[ProvisionSummary]
+
+
 class AskRequest(BaseModel):
     query: str = Field(max_length=2000)
 
