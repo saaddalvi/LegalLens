@@ -10,6 +10,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
+from .answer_cache import AnswerCache
 from .corpus import Corpus
 from .embeddings import LocalEmbedder
 from .fallback import WebFallback, default_fallback
@@ -39,6 +40,11 @@ class _ClientGone(Exception):
     """Raised inside the pipeline thread when the streaming client disconnected."""
 
 
+def _frame(name: str, data: dict) -> str:
+    """One Server-Sent Events frame."""
+    return f"event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
 def create_app(
     *,
     corpus: Corpus | None = None,
@@ -46,11 +52,13 @@ def create_app(
     fallback: WebFallback | None = None,
     crag: bool = True,
     rate_limiter: RateLimiter | None = None,
+    cache: AnswerCache | None = None,
 ) -> FastAPI:
     """Dependencies not supplied are built lazily on the first question.
 
     crag=False serves the plain-RAG baseline (no Grader, no Fallback) for evaluation.
     rate_limiter limits /ask and /ask/stream per client address; None means no limit.
+    cache remembers answers to repeated Queries; None means every Query is answered afresh.
     """
     app = FastAPI(title="LegalLens")
     app.add_middleware(
@@ -88,9 +96,14 @@ def create_app(
 
     @app.post("/ask", response_model=AskResponse, dependencies=[Depends(limit)])
     def ask(req: AskRequest) -> AskResponse:
+        if cache and (hit := cache.get(req.query, crag)):
+            return hit
         c, l, f = deps()
         try:
-            return answer_query(req.query, corpus=c, llm=l, fallback=f, crag=crag)
+            result = answer_query(req.query, corpus=c, llm=l, fallback=f, crag=crag)
+            if cache:
+                cache.put(req.query, crag, result)
+            return result
         except Exception as exc:
             logging.getLogger(__name__).exception("answer generation failed")
             raise HTTPException(
@@ -99,6 +112,13 @@ def create_app(
 
     @app.post("/ask/stream", dependencies=[Depends(limit)])
     def ask_stream(req: AskRequest) -> StreamingResponse:
+        if cache and (hit := cache.get(req.query, crag)):
+            # No Stages to show: the verified answer is already known.
+            return StreamingResponse(
+                iter([_frame("answer", hit.model_dump(mode="json"))]),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+            )
         try:
             c, l, f = deps()
         except Exception as exc:
@@ -124,6 +144,8 @@ def create_app(
                 result = answer_query(
                     req.query, corpus=c, llm=l, fallback=f, crag=crag, on_stage=on_stage
                 )
+                if cache:
+                    cache.put(req.query, crag, result)
                 events.put(("answer", result.model_dump(mode="json")))
             except _ClientGone:
                 pass
@@ -153,8 +175,7 @@ def create_app(
                         continue
                     if event is None:
                         return
-                    name, data = event
-                    yield f"event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+                    yield _frame(*event)
             finally:
                 # Client left: stop the pipeline at its next Stage.
                 cancelled.set()
@@ -168,4 +189,4 @@ def create_app(
     return app
 
 
-app = create_app(rate_limiter=RateLimiter.from_env())
+app = create_app(rate_limiter=RateLimiter.from_env(), cache=AnswerCache.from_env())
