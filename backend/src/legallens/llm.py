@@ -1,5 +1,6 @@
 import os
-from typing import Literal, Protocol
+from collections.abc import Callable
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field
 
@@ -114,23 +115,47 @@ query that uses precise legal terms and names the relevant Indian statute if cle
 Question: {query}"""
 
 
-class GeminiLLM:
-    """Gemini behind the LLM interface. Reads GOOGLE_API_KEY from the environment."""
+def _gemini_chat(model: str):
+    """A Gemini chat model that retries transient errors (429, 503) with backoff."""
+    from langchain_google_genai import ChatGoogleGenerativeAI
 
-    def __init__(self, model: str | None = None):
+    return ChatGoogleGenerativeAI(model=model, temperature=0, timeout=30, max_retries=3)
+
+
+class GeminiLLM:
+    """Gemini behind the LLM interface. Reads GOOGLE_API_KEY from the environment.
+
+    When `fallback_model` (or GEMINI_FALLBACK_MODEL) names a second model, a call that
+    still fails after the primary model's retries is tried once on the second model.
+    Free-tier quotas are per model, so the second model also covers an exhausted quota.
+    `chat_factory` builds a chat model from a model name; tests replace it.
+    """
+
+    def __init__(
+        self,
+        model: str | None = None,
+        fallback_model: str | None = None,
+        chat_factory: Callable[[str], Any] = _gemini_chat,
+    ):
         self._model_name = model or os.environ.get(
             "GEMINI_MODEL", "gemini-3.5-flash-lite"
         )
-        self._model = None
+        fallback = fallback_model or os.environ.get("GEMINI_FALLBACK_MODEL")
+        self._fallback_name = fallback if fallback != self._model_name else None
+        self._chat_factory = chat_factory
+        self._chats: dict[str, Any] = {}
+
+    def _chat(self, name: str):
+        if name not in self._chats:
+            self._chats[name] = self._chat_factory(name)
+        return self._chats[name]
 
     def _structured(self, schema):
-        if self._model is None:
-            from langchain_google_genai import ChatGoogleGenerativeAI
-
-            self._model = ChatGoogleGenerativeAI(
-                model=self._model_name, temperature=0, timeout=30, max_retries=1
-            )
-        return self._model.with_structured_output(schema)
+        primary = self._chat(self._model_name).with_structured_output(schema)
+        if not self._fallback_name:
+            return primary
+        secondary = self._chat(self._fallback_name).with_structured_output(schema)
+        return primary.with_fallbacks([secondary])
 
     @staticmethod
     def _format(provisions: list[Provision]) -> str:

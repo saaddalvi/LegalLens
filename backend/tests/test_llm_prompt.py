@@ -1,21 +1,34 @@
 """What the LLM is shown about each Provision."""
 
-from legallens.llm import _PROMPT, GeminiLLM
+import pytest
+from langchain_core.runnables import RunnableLambda
+
+from legallens.llm import _PROMPT, GeminiLLM, RelevanceScore
 from legallens.models import Provision
 
 
 def provision(status):
     return Provision(
-        act="Model Tenancy Act", chapter="Chapter III", number="11", status=status, text="Deposit."
+        act="Model Tenancy Act",
+        chapter="Chapter III",
+        number="11",
+        status=status,
+        text="Deposit.",
     )
 
 
 def test_model_act_provision_is_marked_for_the_llm():
-    assert GeminiLLM._format([provision("model")]) == "[Act: Model Tenancy Act | Section: 11] (model) Deposit."
+    assert (
+        GeminiLLM._format([provision("model")])
+        == "[Act: Model Tenancy Act | Section: 11] (model) Deposit."
+    )
 
 
 def test_in_force_provision_is_left_unmarked():
-    assert GeminiLLM._format([provision("in_force")]) == "[Act: Model Tenancy Act | Section: 11] Deposit."
+    assert (
+        GeminiLLM._format([provision("in_force")])
+        == "[Act: Model Tenancy Act | Section: 11] Deposit."
+    )
 
 
 def test_prompt_tells_the_llm_a_model_act_is_a_template_to_check_against_state_law():
@@ -34,3 +47,85 @@ def test_citation_schema_tells_the_llm_to_give_act_name_and_number_separately():
     fields = ProvisionRef.model_fields
     assert "without the number" in (fields["act"].description or "")
     assert "one" in (fields["number"].description or "")
+
+
+class FakeChat:
+    """A chat model stand-in: answers a grading prompt with `score`, or raises."""
+
+    def __init__(self, name, score=None, error=None):
+        self.name, self.score, self.error = name, score, error
+        self.calls = 0
+
+    def with_structured_output(self, schema):
+        def run(_prompt):
+            self.calls += 1
+            if self.error:
+                raise self.error
+            return RelevanceScore(score=self.score)
+
+        return RunnableLambda(run)
+
+
+def llm_with(chats, **kwargs):
+    return GeminiLLM("primary", chat_factory=lambda name: chats[name], **kwargs)
+
+
+def grade(llm):
+    return llm.grade("Is a deposit refundable?", [provision("in_force")])
+
+
+def test_a_failing_primary_model_falls_back_to_the_secondary_model():
+    primary = FakeChat("primary", error=RuntimeError("503 unavailable"))
+    secondary = FakeChat("secondary", score=0.8)
+    llm = llm_with(
+        {"primary": primary, "secondary": secondary}, fallback_model="secondary"
+    )
+    assert grade(llm) == 0.8
+    assert (primary.calls, secondary.calls) == (1, 1)
+
+
+def test_the_secondary_model_is_not_used_while_the_primary_works():
+    primary = FakeChat("primary", score=0.6)
+    secondary = FakeChat("secondary", score=0.1)
+    llm = llm_with(
+        {"primary": primary, "secondary": secondary}, fallback_model="secondary"
+    )
+    assert grade(llm) == 0.6
+    assert secondary.calls == 0
+
+
+def test_without_a_secondary_model_a_primary_failure_is_raised():
+    llm = llm_with({"primary": FakeChat("primary", error=RuntimeError("503"))})
+    with pytest.raises(RuntimeError, match="503"):
+        grade(llm)
+
+
+def test_the_secondary_model_comes_from_the_environment(monkeypatch):
+    monkeypatch.setenv("GEMINI_FALLBACK_MODEL", "secondary")
+    primary = FakeChat("primary", error=RuntimeError("503"))
+    secondary = FakeChat("secondary", score=0.9)
+    assert grade(llm_with({"primary": primary, "secondary": secondary})) == 0.9
+
+
+def test_a_secondary_model_equal_to_the_primary_is_ignored(monkeypatch):
+    monkeypatch.setenv("GEMINI_FALLBACK_MODEL", "primary")
+    primary = FakeChat("primary", error=RuntimeError("503"))
+    with pytest.raises(RuntimeError):
+        grade(llm_with({"primary": primary}))
+    assert primary.calls == 1  # not retried against itself
+
+
+def test_gemini_requests_are_retried_with_backoff_before_giving_up(monkeypatch):
+    # A 503 once cost three of 72 evaluation runs with a single retry.
+    import langchain_google_genai
+
+    made = {}
+
+    def record(**kwargs):
+        made.update(kwargs)
+        return FakeChat(kwargs["model"], score=0.5)
+
+    monkeypatch.setattr(langchain_google_genai, "ChatGoogleGenerativeAI", record)
+    assert grade(GeminiLLM("primary")) == 0.5
+    assert made["model"] == "primary"
+    assert made["max_retries"] == 3
