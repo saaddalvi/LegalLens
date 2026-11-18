@@ -1,8 +1,10 @@
+import asyncio
 import json
 import logging
 import os
 import queue
 import threading
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
 
@@ -24,13 +26,35 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 FIXTURE = BACKEND_DIR / "fixtures" / "sample_provisions.json"
 
 
+def fixture_provisions() -> list[Provision]:
+    return [Provision(**p) for p in json.loads(FIXTURE.read_text())]
+
+
 def default_corpus() -> Corpus:
-    """Persistent local store, seeded from the fixture Corpus when empty."""
+    """Persistent local store, seeded from the fixture Corpus when empty.
+
+    With REQUIRE_CORPUS=1 an empty store is an error instead: a deployment that lost
+    its built Corpus must not quietly answer from a handful of sample Provisions.
+    """
     path = os.environ.get("CHROMA_PATH", str(BACKEND_DIR / "data" / "chroma"))
     corpus = Corpus(path, LocalEmbedder())
     if corpus.count() == 0:
-        corpus.add([Provision(**p) for p in json.loads(FIXTURE.read_text())])
+        if os.environ.get("REQUIRE_CORPUS") == "1":
+            raise RuntimeError(
+                f"REQUIRE_CORPUS is set but the Corpus at {path} is empty; "
+                "build it with `python -m legallens.build_corpus`"
+            )
+        corpus.add(fixture_provisions())
     return corpus
+
+
+def is_fixture_corpus(corpus: Corpus) -> bool:
+    """Whether the store holds only the sample fixture. The fixture is persisted when
+    first seeded, so this looks at what is stored, not at what this process did."""
+    sample = fixture_provisions()
+    return corpus.count() == len(sample) and all(
+        corpus.get(p.act, p.number) for p in sample
+    )
 
 
 KEEPALIVE_SECONDS = 10
@@ -60,7 +84,24 @@ def create_app(
     rate_limiter limits /ask and /ask/stream per client address; None means no limit.
     cache remembers answers to repeated Queries; None means every Query is answered afresh.
     """
-    app = FastAPI(title="LegalLens")
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        # WARM_START=1 loads the Corpus and the embedding model now, so the first
+        # question does not pay for it. A failure is logged and shows in /ready.
+        if os.environ.get("WARM_START") == "1":
+
+            def warm() -> None:
+                c, _, _ = deps()
+                c.search("warm-up", 1)  # the first search loads the embedding model
+
+            try:
+                await asyncio.to_thread(warm)
+            except Exception:
+                logging.getLogger(__name__).exception("warm start failed")
+        yield
+
+    app = FastAPI(title="LegalLens", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(
@@ -92,14 +133,29 @@ def create_app(
 
     @app.get("/health")
     def health() -> dict[str, str]:
+        """Liveness: the process is up. See /ready for whether it can answer."""
         return {"status": "ok"}
+
+    @app.get("/ready")
+    def ready() -> dict[str, str | int | bool]:
+        """Readiness: the Corpus loads, and whether it is only the sample fixture."""
+        try:
+            c, _, _ = deps()
+            return {
+                "status": "ready",
+                "provisions": c.count(),
+                "fixture": is_fixture_corpus(c),
+            }
+        except Exception as exc:
+            logging.getLogger(__name__).exception("dependencies unavailable")
+            raise HTTPException(503, "The service is not ready.") from exc
 
     @app.post("/ask", response_model=AskResponse, dependencies=[Depends(limit)])
     def ask(req: AskRequest) -> AskResponse:
         if cache and (hit := cache.get(req.query, crag)):
             return hit
-        c, l, f = deps()
         try:
+            c, l, f = deps()
             result = answer_query(req.query, corpus=c, llm=l, fallback=f, crag=crag)
             if cache:
                 cache.put(req.query, crag, result)
