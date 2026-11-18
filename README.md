@@ -172,38 +172,36 @@ The report shows case counts per mode, because a mode that hit Gemini errors on 
 
 ### Results
 
-Latest run (2026-11-17, `gemini-3.1-flash-lite`, Tavily Fallback, full Corpus of 3,501 Chunks embedded with `Qwen/Qwen3-Embedding-0.6B`, retrieval top 10).
-69 of 72 case runs completed. Three CRAG runs failed on Gemini 503 errors after retries and are excluded from the metrics:
-`en-mta-deposit`, `en-wages-overtime` and `rep-ipc-302`. Plain RAG is scored on all 36 cases and CRAG on 33, so the modes are
-not scored on exactly the same cases, and with so few cases per category one case moves a figure by 7 to 25 points.
-The model is not the one used in the previous run (`gemini-3.5-flash-lite`, whose free daily quota ran out), so the two runs are not directly comparable.
+Latest run (2026-11-18, `gemini-3.5-flash-lite`, Tavily Fallback searching official domains first, full Corpus of 3,501 Chunks embedded with `Qwen/Qwen3-Embedding-0.6B`, retrieval top 10).
+All 72 case runs completed: both modes are scored on all 36 cases. One Gemini 503 occurred during the run and was recovered by the retry, so nothing is excluded.
+With so few cases per category, one case moves a figure by 7 to 25 points. The previous run (2026-11-17) used a different model and scored CRAG on 33 cases (three failed on Gemini 503s), so the two runs are not directly comparable.
 
 | Metric | Plain RAG | CRAG |
 |---|---|---|
-| Retrieval hit-rate | 96% | 91% |
-| Answer accuracy | 86% | 97% |
+| Retrieval hit-rate | 92% | 92% |
+| Answer accuracy | 81% | 92% |
 | Citation validity (after blocking) | 100% | 100% |
 | Hallucinated citations before blocking | 0% | 0% |
 
 | Category (answer accuracy) | Cases (plain / CRAG) | Plain RAG | CRAG |
 |---|---|---|---|
-| English | 15 / 13 | 100% | 100% |
-| Hindi | 5 / 5 | 100% | 100% |
-| Repealed-code | 6 / 5 | 100% | 100% |
+| English | 15 / 15 | 93% | 93% |
+| Hindi | 5 / 5 | 80% | 80% |
+| Repealed-code | 6 / 6 | 100% | 100% |
 | Out-of-scope | 5 / 5 | 100% | 100% |
 | Poor-retrieval | 5 / 5 | 0% | 80% |
 
 Does CRAG beat plain RAG?
 
-- **Ahead:** poor-retrieval Queries (0% to 80%, 4 of 5), where the Fallback to web sources answers what the Corpus cannot (divorce, domestic violence, GST, drunk driving). This is the only clear difference.
-- **Level:** answer accuracy on English, Hindi, repealed-code and out-of-scope Queries (100% each). The overall gap (86% to 97%) comes entirely from the poor-retrieval category.
-- **Behind on retrieval hit-rate (96% to 91%):** only because CRAG retrieves identically but its Grader sent `en-ir-strike` to the web Fallback, so the answer cited no expected Provision, although it was still correct. Not a real retrieval difference.
-- Still wrong in CRAG: `poor-rti` (the Fallback returned something the judge scored as wrong; the report does not say why).
+- **Ahead:** poor-retrieval Queries (0% to 80%, 4 of 5), where the Fallback to web sources answers what the Corpus cannot. This is the only clear difference, and the overall gap (81% to 92%) comes from it.
+- **Level:** every other category, and retrieval hit-rate (92% each).
+- **Effect of the official-sources-first Fallback:** poor-retrieval CRAG is 80%, the same as before, so no measurable change. The set of failing cases moved: `poor-rti` is now correct and `poor-drunk-driving` is now wrong. One case is a 20-point swing and the report does not say why the judge scored either way, so this is not evidence the change helped or hurt.
+- **Expectation not met for the other categories:** they were expected to stay at 100%, but English is 93% and Hindi is 80% in CRAG. The failures are `en-wages-overtime` (retrieval miss, no Fallback sources; plain RAG also wrong) and `hi-mta-deposit` (Corpus path, retrieval miss). Neither went through the web Fallback, so the Fallback change is unlikely to be the cause; the model changed since the earlier run and `en-wages-overtime` was not scored for CRAG then. This is an inference, not something the run isolates.
+- Plain RAG also wrong on `hi-const-arrest` (CRAG correct) and `hi-mta-deposit` is the reverse (plain correct, CRAG wrong), so the Hindi tie hides two opposite single-case differences.
 
 Other notes:
 
-- The three excluded case runs show as `HTTPStatusError` in `backend/evaluation/report.md`; the cause (503) is from the run log, which is not kept in the repo.
-- Retrieval with Qwen3-Embedding-0.6B puts the expected Provision in the top 10 for 23 of the 26 retrieval cases (20 with `multilingual-e5-small`; ADR 0003). FIR (BNSS 173), electronic evidence (BSA 63) and Hindi wages are now found. Still missed: Hindi tenancy deposit (`hi-mta-deposit`, which e5 found) and two repealed-code cases that rely on naming a section (IPC 302, IEA 65B). The report's hit-rate counts what the response cites, so it can differ from this retrieval count.
+- Retrieval with Qwen3-Embedding-0.6B puts the expected Provision in the top 10 for 23 of the 26 retrieval cases (20 with `multilingual-e5-small`; ADR 0003). The report's hit-rate counts what the response cites, so it can differ from this retrieval count.
 - Hallucinated-citation rate before blocking is 0% in both modes: nothing was blocked in this run. CRAG answers that rely on web sources alone are not in this rate.
 
 Per-case detail is in `backend/evaluation/report.md`.

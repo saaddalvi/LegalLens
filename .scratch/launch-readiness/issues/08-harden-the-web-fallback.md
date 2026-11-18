@@ -2,7 +2,7 @@
 
 **What to build:** Prefer official sources in the web Fallback, and stop web text from being able to act as instructions to the generation model.
 
-**Status:** ready-for-human (the evaluation rerun below needs the owner's go-ahead: about 20 minutes and 300 requests on their Gemini and Tavily keys)
+**Status:** done
 
 - [x] The Fallback searches `gov.in`, `nic.in`, `prsindia.org` and `indiankanoon.org` first, and the open web once only when those return nothing
 - [x] A bare domain covers its subdomains. Checked against the live API (the docs are silent): the restricted search for the RTI application fee returned `rti.sci.gov.in`, `rtionline.gov.in` and state `gov.in` sites, where the open search returned a YouTube video and a Facebook post among its first five
@@ -10,7 +10,7 @@
 - [x] Each web source reaches the generation prompt fenced in `<web_source>` tags with `<`, `>` and quotes escaped, and the prompt says the text is untrusted and its instructions are to be ignored
 - [x] Tests, with an `httpx.MockTransport` and no network: official search first, one open retry only when empty, no open search when official sources answer, snippet cut, errors raised for the pipeline to handle; a snippet that tries to close its fence cannot
 - [x] ADR 0004 amended (it said "one HTTP call"; ADR 0001's rejection of an official-only Fallback is respected, since the open web is still the second try)
-- [ ] Rerun `python -m legallens.evaluate` and refresh the README results. Expected: poor-retrieval answer accuracy stays at or above 80% and the other categories stay at 100%. Unmeasured until then.
+- [x] Rerun `python -m legallens.evaluate` and refresh the README results (2026-11-18, `gemini-3.5-flash-lite`). Poor-retrieval CRAG stayed at 80%. The other categories did not all stay at 100% (English 93%, Hindi 80%), on cases that did not use the Fallback; see the README.
 
 ## Notes
 
