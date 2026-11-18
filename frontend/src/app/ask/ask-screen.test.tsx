@@ -519,3 +519,56 @@ describe("chip case handling", () => {
     expect(toggle).toHaveFocus();
   });
 });
+
+describe("Copy answer", () => {
+  function stubClipboard(writeText: (text: string) => Promise<void>) {
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  }
+
+  it("copies the answer, its Citations and the disclaimer, and says so", async () => {
+    mockFetch({ ok: true, status: 200, body: base });
+    await ask();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard(writeText);
+    fireEvent.click(await screen.findByRole("button", { name: "Copy answer" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const copied = writeText.mock.calls[0][0] as string;
+    expect(copied).toContain("Equality before the law is guaranteed.");
+    expect(copied).toContain("- Constitution of India, 14");
+    expect(copied).toMatch(/not legal advice/i);
+    expect(await screen.findByText("Copied")).toBeInTheDocument();
+  });
+
+  it("says when the answer could not be copied", async () => {
+    mockFetch({ ok: true, status: 200, body: base });
+    await ask();
+    stubClipboard(vi.fn().mockRejectedValue(new Error("denied")));
+    fireEvent.click(await screen.findByRole("button", { name: "Copy answer" }));
+    expect(await screen.findByText("Could not copy")).toBeInTheDocument();
+  });
+
+  it("says so when the browser has no clipboard", async () => {
+    mockFetch({ ok: true, status: 200, body: base });
+    await ask();
+    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+    fireEvent.click(await screen.findByRole("button", { name: "Copy answer" }));
+    expect(await screen.findByText("Could not copy")).toBeInTheDocument();
+  });
+
+  it("is not offered on a refusal", async () => {
+    mockFetch({
+      ok: true,
+      status: 200,
+      body: {
+        ...base,
+        response_type: "refusal",
+        refusal_reason: "This is outside Indian law.",
+        answer: "",
+        citations: [],
+      },
+    });
+    await ask();
+    await screen.findByRole("status", { name: "Refusal" });
+    expect(screen.queryByRole("button", { name: "Copy answer" })).not.toBeInTheDocument();
+  });
+});

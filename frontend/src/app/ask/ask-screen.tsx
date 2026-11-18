@@ -6,33 +6,11 @@ import { useEffect, useState } from "react";
 import { BUTTON_CLASS, FIELD_CLASS } from "../ask-box";
 import Stamp from "../stamp";
 import ThemeToggle from "../theme-toggle";
+import { DISCLAIMER, answerAsText } from "@/lib/answer-text";
+import type { AskResponse, Citation } from "@/lib/ask-types";
 import { provisionKey, splitMentions } from "@/lib/mentions";
-import { type TrustLabel } from "@/lib/trust-labels";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-type Citation = {
-  act: string;
-  chapter: string;
-  number: string;
-  status: "in_force" | "repealed" | "model";
-  text: string;
-  superseded_by: string | null;
-  supersedes: string | null;
-};
-
-type FallbackSource = { title: string; url: string; snippet: string };
-
-type AskResponse = {
-  response_type: "answer" | "refusal";
-  refusal_reason: string | null;
-  suggested_reformulation: string | null;
-  answer: string;
-  answer_language: string;
-  trust_label: TrustLabel;
-  citations: Citation[];
-  fallback_sources: FallbackSource[];
-};
 
 function detectedLang(q: string): string {
   const letters = [...q].filter((c) => /\p{L}/u.test(c));
@@ -281,6 +259,41 @@ async function readEvents(
   }
 }
 
+// Copies the answer, its Citations and the disclaimer as plain text. The outcome
+// is announced in a polite live region, which is always on the page so that
+// screen readers pick up the message when it appears.
+function CopyAnswer({ result }: { result: AskResponse }) {
+  const [outcome, setOutcome] = useState<"copied" | "failed" | null>(null);
+  useEffect(() => {
+    if (!outcome) return;
+    const t = setTimeout(() => setOutcome(null), 3000);
+    return () => clearTimeout(t);
+  }, [outcome]);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(answerAsText(result));
+      setOutcome("copied");
+    } catch {
+      // No clipboard (an insecure page) or permission denied.
+      setOutcome("failed");
+    }
+  }
+  return (
+    <>
+      <button
+        type="button"
+        onClick={copy}
+        className="text-sm text-muted underline underline-offset-4 hover:text-ink"
+      >
+        Copy answer
+      </button>
+      <span role="status" className="text-sm text-muted">
+        {outcome === "copied" ? "Copied" : outcome === "failed" ? "Could not copy" : ""}
+      </span>
+    </>
+  );
+}
+
 function Answer({ result }: { result: AskResponse }) {
   const { delay, instant, settled, skip } = useReveal(result.answer);
   const fade = instant ? "" : "reveal-in";
@@ -319,8 +332,9 @@ function Answer({ result }: { result: AskResponse }) {
 
       {settled && (
         <>
-          <div className="self-start">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 self-start">
             <Stamp trust={result.trust_label} press={!instant} />
+            <CopyAnswer result={result} />
           </div>
 
           {result.citations.length > 0 && (
@@ -496,8 +510,7 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
           <ThemeToggle />
         </div>
         <p role="note" className="text-sm text-muted">
-          For information only, not legal advice. Consult a qualified lawyer about your
-          situation.
+          {DISCLAIMER}
         </p>
       </header>
 
