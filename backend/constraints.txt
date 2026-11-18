@@ -1,0 +1,6 @@
+# Versions the Corpus was built and tested with. The Chroma store on disk is only guaranteed
+# to load under the chromadb that wrote it, so the deployed image installs the same ones.
+chromadb==1.5.9
+sentence-transformers==6.3.0
+transformers==5.23.0
+torch==2.15.0

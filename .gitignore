@@ -2,6 +2,7 @@
 __pycache__/
 *.egg-info/
 .env
+.deploy.env
 node_modules/
 .next/
 backend/data/chroma/
