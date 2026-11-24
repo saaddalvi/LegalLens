@@ -4,11 +4,21 @@ import logging
 import os
 import queue
 import threading
+import uuid
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from svix.webhooks import Webhook, WebhookVerificationError
@@ -16,9 +26,10 @@ from svix.webhooks import Webhook, WebhookVerificationError
 from .answer_cache import AnswerCache
 from .answering import Answerer, Cancelled, Stage, StageFailed
 from .auth import ClerkVerifier, InvalidToken, TokenVerifier
+from .contract_intake import MAX_UPLOAD_BYTES, ContractIntake, Refused, Source
 from .corpus import Corpus
 from .db import Database
-from .embeddings import LocalEmbedder
+from .embeddings import Embedder, LocalEmbedder
 from .fallback import WebFallback, default_fallback
 from .llm import LLM, GeminiLLM
 from .models import (
@@ -26,10 +37,13 @@ from .models import (
     ActSummary,
     AskRequest,
     AskResponse,
+    ContractDetail,
+    ContractSummary,
     Provision,
     ProvisionSummary,
 )
 from .rate_limit import RateLimiter
+from .request_log import RequestLog
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 FIXTURE = BACKEND_DIR / "fixtures" / "sample_provisions.json"
@@ -83,6 +97,19 @@ def _frame(name: str, data: dict) -> str:
     return f"event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
+_SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+
+
+def _refusal(r: Refused) -> dict:
+    return {"reason": r.code, "message": r.message}
+
+
+def _single_event_response(name: str, data: dict) -> StreamingResponse:
+    return StreamingResponse(
+        iter([_frame(name, data)]), media_type="text/event-stream", headers=_SSE_HEADERS
+    )
+
+
 def create_app(
     *,
     corpus: Corpus | None = None,
@@ -94,6 +121,7 @@ def create_app(
     cache: AnswerCache | None = None,
     database: Database | None = None,
     webhook_secret: str | None = None,
+    embedder: Embedder | None = None,
 ) -> FastAPI:
     """Dependencies not supplied are built lazily on the first question.
 
@@ -104,6 +132,8 @@ def create_app(
     cache remembers answers to repeated Queries; None means every Query is answered afresh.
     database holds users (and later Contracts); None means no database, and /ask needs none.
     webhook_secret is Clerk's Svix signing secret for /webhooks/clerk; None disables that route.
+    embedder embeds Contract Clauses; None uses the Corpus's embedding model (ADR 0005).
+    The /contracts routes need a database and answer 503 without one.
     """
 
     @asynccontextmanager
@@ -335,6 +365,139 @@ def create_app(
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
+
+    # --- Contracts -------------------------------------------------------------------------
+
+    def contracts_db() -> Database:
+        if database is None:
+            raise HTTPException(503, UNAVAILABLE)
+        return database
+
+    @lru_cache(maxsize=1)
+    def intake() -> ContractIntake:
+        db = contracts_db()
+        c, l, _ = deps()
+        return ContractIntake(llm=l, embedder=embedder or c.embedder, database=db)
+
+    @app.post("/contracts/stream")
+    async def upload_contract(
+        file: Annotated[UploadFile | None, File()] = None,
+        text: Annotated[str | None, Form()] = None,
+        user: str = Depends(current_user),
+    ) -> StreamingResponse:
+        """Takes a PDF or DOCX file, or pasted text, and streams the Stages of reading it,
+        ending in `answer` (the new Contract), `refusal` (why it cannot be explained) or
+        `error`. Nothing is stored unless it ends in `answer`."""
+        contracts_db()
+        if (file is None) == (not (text or "").strip()):
+            raise HTTPException(
+                422, "Send either a file or the pasted text of the Contract."
+            )
+        if file is not None:
+            data = await file.read(MAX_UPLOAD_BYTES + 1)
+            if len(data) > MAX_UPLOAD_BYTES:
+                raise HTTPException(413, "That file is too large.")
+        try:
+            source = (
+                Source.from_bytes(data)
+                if file is not None
+                else Source("text", text=text)
+            )
+            work = intake()
+        except Refused as r:
+            return _single_event_response("refusal", _refusal(r))
+        except Exception as exc:
+            logging.getLogger(__name__).error(
+                "contract intake unavailable: %s", type(exc).__name__
+            )
+            raise HTTPException(503, UNAVAILABLE) from exc
+
+        rlog = RequestLog("contracts_stream", "")
+        events: asyncio.Queue[tuple[str, dict] | None] = asyncio.Queue()
+        running: list[str] = []
+
+        def on_stage(stage_id: str, label: str) -> None:
+            running[:] = [stage_id]
+            rlog.stage(stage_id)
+            events.put_nowait(("stage", {"id": stage_id, "label": label}))
+
+        async def run() -> None:
+            try:
+                stored = await work.process(user, source, on_stage=on_stage)
+                rlog.finish("answer")
+                events.put_nowait(
+                    (
+                        "answer",
+                        {
+                            "id": stored.id,
+                            "title": stored.title,
+                            "clause_count": stored.clause_count,
+                        },
+                    )
+                )
+            except Refused as r:
+                rlog.finish("refused")
+                events.put_nowait(("refusal", _refusal(r)))
+            except asyncio.CancelledError:
+                rlog.finish("client_gone")
+                raise
+            except Exception as exc:  # noqa: BLE001
+                # Never the exception's text or traceback: it can quote the Contract.
+                logging.getLogger(__name__).error(
+                    "contract upload failed in stage %s: %s",
+                    running[0] if running else None,
+                    type(exc).__name__,
+                )
+                rlog.finish("error")
+                events.put_nowait(
+                    (
+                        "error",
+                        {
+                            "stage": running[0] if running else None,
+                            "message": UNAVAILABLE,
+                        },
+                    )
+                )
+            finally:
+                events.put_nowait(None)
+
+        task = asyncio.create_task(run())
+
+        async def frames():
+            try:
+                while True:
+                    try:
+                        event = await asyncio.wait_for(
+                            events.get(), timeout=KEEPALIVE_SECONDS
+                        )
+                    except TimeoutError:
+                        yield ": keepalive\n\n"
+                        continue
+                    if event is None:
+                        return
+                    yield _frame(*event)
+            finally:
+                task.cancel()  # the client left: stop at the next await
+
+        return StreamingResponse(
+            frames(), media_type="text/event-stream", headers=_SSE_HEADERS
+        )
+
+    @app.get("/contracts", response_model=list[ContractSummary])
+    async def list_contracts(user: str = Depends(current_user)):
+        return await contracts_db().list_contracts(user)
+
+    @app.get("/contracts/{contract_id}", response_model=ContractDetail)
+    async def get_contract(contract_id: str, user: str = Depends(current_user)):
+        # 404 for a Contract that is not yours, so its existence is not revealed.
+        try:
+            uuid.UUID(contract_id)
+        except ValueError:
+            raise HTTPException(404, "No such Contract.") from None
+        found = await contracts_db().get_contract(user, contract_id)
+        if found is None:
+            raise HTTPException(404, "No such Contract.")
+        return found
 
     return app
 

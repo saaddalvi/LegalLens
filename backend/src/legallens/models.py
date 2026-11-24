@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -77,3 +78,23 @@ class AskResponse(BaseModel):
     trust_label: TrustLabel
     citations: list[Citation]
     fallback_sources: list[FallbackSource]
+
+
+class ClauseOut(BaseModel):
+    """A Clause of a Contract. Its text is verbatim; pieces of a long Clause are rejoined."""
+
+    number: str
+    heading: str
+    text: str
+
+
+class ContractSummary(BaseModel):
+    id: str
+    title: str
+    created_at: datetime
+    page_count: int
+    clause_count: int
+
+
+class ContractDetail(ContractSummary):
+    clauses: list[ClauseOut]

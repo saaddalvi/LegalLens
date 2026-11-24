@@ -6,11 +6,13 @@
 
 **Status:** ready-for-agent
 
-- [ ] Unit tests for splitting on fixture Contracts: numbered, nested (7.2, 7(a)), unnumbered paragraphs, recitals as Clause 0, and a long Clause split into pieces that keep its number
+- [x] Unit tests for splitting on fixture Contracts: numbered, nested (7.2, 7(a)), unnumbered paragraphs, recitals as Clause 0, and a long Clause split into pieces that keep its number
 - [ ] Endpoint tests for the Stage sequence of a valid upload, and for each refusal (not a Contract, Hindi, over-long). Refusals store nothing
 - [ ] Endpoint test: Clause vectors are stored for each piece, and retrieval filtered by one Contract never returns another Contract's Clauses
 - [ ] Endpoint test: `GET /contracts` returns only the caller's Contracts. Another user's Contract id gets 404
-- [ ] Contract text never appears in the request log line or in error messages
-- [ ] Component tests: upload Stages in order, refusal messages, and the list after a successful upload
+- [x] Contract text never appears in the request log line or in error messages
+- [x] Component tests: upload Stages in order, refusal messages, and the list after a successful upload
 - [ ] Manual check: a scanned rent agreement on stamp paper uploads, and its Clause numbers match the paper
-- [ ] Lint, typecheck and tests pass
+- [x] Lint, typecheck and tests pass
+
+**Implementation notes:** written and passing without a database: splitting, refusals, privacy, auth, 422, component tests. The tests that need Postgres with pgvector (Stage sequence of a valid upload, stored vectors and retrieval isolation, list and 404 ownership) are written in `backend/tests/test_contracts.py` but have not been run: no Postgres was available when this was built. Run them against the test database (see README) before ticking those three boxes. The scanned-rent-agreement manual check is also still to do.

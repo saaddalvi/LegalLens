@@ -3,8 +3,10 @@ in one way each, and Fallbacks that return, record or fail."""
 
 import hashlib
 import json
+import os
 import re
 
+import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
@@ -12,6 +14,7 @@ from legallens.answering import Answerer
 from legallens.auth import InvalidToken
 from legallens.corpus import Corpus
 from legallens.llm import Generation, ProvisionRef, ScopeDecision
+from legallens.migrate import upgrade
 from legallens.models import FallbackSource, Provision
 
 ART_21 = Provision(
@@ -226,3 +229,24 @@ def make_answerer(make_corpus):
         )
 
     return make
+
+
+TEST_DB = os.environ.get(
+    "TEST_DATABASE_URL", "postgresql://postgres:postgres@localhost:54329/legallens_test"
+)
+
+
+def connect():
+    return psycopg.connect(TEST_DB, autocommit=True, connect_timeout=3)
+
+
+@pytest.fixture(scope="module")
+def pg():
+    """A migrated, empty test Postgres, or a skip when there is none. Drops `public`."""
+    try:
+        with connect() as conn:
+            conn.execute("DROP SCHEMA public CASCADE")
+            conn.execute("CREATE SCHEMA public")
+    except psycopg.OperationalError as exc:
+        pytest.skip(f"no test Postgres at TEST_DATABASE_URL ({exc})")
+    upgrade(TEST_DB)

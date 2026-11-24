@@ -53,6 +53,11 @@ class Corpus:
             _COLLECTION, configuration={"hnsw": {"space": "cosine"}}
         )
 
+    @property
+    def embedder(self) -> Embedder:
+        """The embedding model, shared with Contract Clauses (ADR 0005: one model for both)."""
+        return self._embedder
+
     def count(self) -> int:
         """Number of Provisions (not pieces)."""
         return len(self._col.get(where={"piece": 0}, include=[])["ids"])

@@ -129,6 +129,12 @@ cd backend && .venv/bin/python -m pytest   # default TEST_DATABASE_URL points at
 
 Without a reachable test database, those tests are skipped.
 
+Contracts: `POST /contracts/stream` takes a PDF, a DOCX or pasted text and streams the Stages (`reading`,
+`contract_check`, `splitting`, `indexing`), ending in `answer` (the new Contract), `refusal` (not a Contract, not
+English, over about 30 pages, unreadable) or `error`. Only the extracted text and its Clauses (with 1024-dimension
+vectors) are stored; the file never is. `GET /contracts` and `GET /contracts/{id}` return the signed-in user's own
+Contracts, and 404 for anyone else's. Scanned PDFs are read by Gemini, so they need `GOOGLE_API_KEY`.
+
 ### Logs
 
 Each question writes one JSON line to the server's log (a Space's Logs tab shows it), for seeing where

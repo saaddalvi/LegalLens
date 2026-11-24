@@ -7,14 +7,17 @@ import { useEffect, useState } from "react";
 import AccountNav from "../account-nav";
 import { BUTTON_CLASS, FIELD_CLASS } from "../ask-box";
 import { ProvisionNotes, ReplacesNote, STATUS_TEXT } from "../provision-notes";
+import type { Stage } from "../stage-list";
+import StageList from "../stage-list";
 import Stamp from "../stamp";
 import ThemeToggle from "../theme-toggle";
+import { API_URL } from "@/lib/api-url";
 import { DISCLAIMER, answerAsText } from "@/lib/answer-text";
 import type { AskResponse, Citation } from "@/lib/ask-types";
 import { lawHref } from "@/lib/corpus";
 import { provisionKey, splitMentions } from "@/lib/mentions";
+import { readEvents } from "@/lib/sse";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 function detectedLang(q: string): string {
   const letters = [...q].filter((c) => /\p{L}/u.test(c));
@@ -201,53 +204,7 @@ type Outcome = {
   // The Stage that was running when answering failed, when there was one.
   failedStage?: string | null;
 };
-type Stage = { id: string; label: string };
 type Progress = { for: Asked; stages: Stage[] };
-
-// Reads a Server-Sent Events body, calling onEvent for each complete frame.
-async function readEvents(
-  body: ReadableStream<Uint8Array>,
-  onEvent: (name: string, data: unknown) => void,
-) {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  const flush = () => {
-    let end: number;
-    while ((end = buffer.indexOf("\n\n")) !== -1) {
-      const frame = buffer.slice(0, end);
-      buffer = buffer.slice(end + 2);
-      let name = "message";
-      const data: string[] = [];
-      for (const line of frame.split("\n")) {
-        if (line.startsWith("event:")) name = line.slice(6).trim();
-        else if (line.startsWith("data:")) data.push(line.slice(5).replace(/^ /, ""));
-      }
-      if (!data.length) continue; // comment or keepalive
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(data.join("\n"));
-      } catch {
-        continue; // skip a malformed frame rather than failing the stream
-      }
-      onEvent(name, parsed);
-    }
-  };
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (value) buffer += decoder.decode(value, { stream: !done }).replace(/\r\n/g, "\n");
-      if (done) {
-        buffer += "\n\n"; // a body ending without a blank line still has a last frame
-        flush();
-        return;
-      }
-      flush();
-    }
-  } finally {
-    reader.cancel().catch(() => {});
-  }
-}
 
 // Copies the answer, its Citations and the disclaimer as plain text. The outcome
 // is announced in a polite live region, which is always on the page so that
@@ -531,35 +488,12 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
       </form>
 
       {showStages && (
-        <div role="status" aria-label="Progress">
-          {stages.length === 0 && <p className="text-muted">Starting…</p>}
-          <ol className="flex flex-col gap-2.5 border-l border-rule">
-            {stages.map((stage, i) => {
-              const last = i === stages.length - 1;
-              const failed = !loading && last && failedStage !== null;
-              const active = loading && last;
-              return (
-                <li
-                  key={stage.id}
-                  className={`-ml-[5px] flex items-center gap-3 ${
-                    failed ? "font-medium text-redtape" : active ? "font-medium text-ink" : "text-muted"
-                  }`}
-                  aria-current={active ? "step" : undefined}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`size-[9px] shrink-0 rounded-full ${
-                      failed ? "bg-redtape" : active ? "stage-pulse bg-ink" : "bg-stamp"
-                    }`}
-                  />
-                  <span lang={detectedLang(asked?.q ?? "")}>{stage.label}</span>
-                  <span className="sr-only"> ({failed ? "failed" : active ? "in progress" : "done"})</span>
-                  {failed && <span aria-hidden="true" className="text-sm">failed</span>}
-                </li>
-              );
-            })}
-          </ol>
-        </div>
+        <StageList
+          stages={stages}
+          loading={loading}
+          failedStage={failedStage}
+          lang={detectedLang(asked?.q ?? "")}
+        />
       )}
 
       {error && (

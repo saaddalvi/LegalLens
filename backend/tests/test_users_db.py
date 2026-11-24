@@ -3,20 +3,20 @@
 
 import base64
 import json
-import os
 import time
 from datetime import UTC, datetime
 
-import psycopg
 import pytest
 from conftest import (
     ART_21,
     IPC_302,
+    TEST_DB,
     FakeEmbedder,
     FakeFallback,
     FakeLLM,
     FakeVerifier,
     auth_for,
+    connect,
 )
 from fastapi.testclient import TestClient
 from svix.webhooks import Webhook
@@ -24,32 +24,13 @@ from svix.webhooks import Webhook
 from legallens.corpus import Corpus
 from legallens.db import Database
 from legallens.main import create_app
-from legallens.migrate import upgrade
 
-TEST_DB = os.environ.get(
-    "TEST_DATABASE_URL", "postgresql://postgres:postgres@localhost:54329/legallens_test"
-)
 SECRET = "whsec_" + base64.b64encode(b"test-signing-secret-bytes").decode()
-
-
-def _connect():
-    return psycopg.connect(TEST_DB, autocommit=True, connect_timeout=3)
-
-
-@pytest.fixture(scope="module")
-def pg():
-    try:
-        with _connect() as conn:
-            conn.execute("DROP SCHEMA public CASCADE")
-            conn.execute("CREATE SCHEMA public")
-    except psycopg.OperationalError as exc:
-        pytest.skip(f"no test Postgres at TEST_DATABASE_URL ({exc})")
-    upgrade(TEST_DB)
 
 
 @pytest.fixture
 def rows(pg):
-    with _connect() as conn:
+    with connect() as conn:
         conn.execute("TRUNCATE users CASCADE")
 
         def read() -> list[str]:
@@ -91,7 +72,7 @@ def signed(payload: dict, secret: str = SECRET) -> tuple[bytes, dict[str, str]]:
 
 
 def test_upgrade_on_an_empty_database_creates_users_and_enables_vector(pg):
-    with _connect() as conn:
+    with connect() as conn:
         tables = {
             r[0]
             for r in conn.execute(
