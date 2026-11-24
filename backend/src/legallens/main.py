@@ -11,11 +11,13 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from svix.webhooks import Webhook, WebhookVerificationError
 
 from .answer_cache import AnswerCache
 from .answering import Answerer, Cancelled, Stage, StageFailed
 from .auth import ClerkVerifier, InvalidToken, TokenVerifier
 from .corpus import Corpus
+from .db import Database
 from .embeddings import LocalEmbedder
 from .fallback import WebFallback, default_fallback
 from .llm import LLM, GeminiLLM
@@ -90,6 +92,8 @@ def create_app(
     rate_limiter: RateLimiter | None = None,
     verifier: TokenVerifier | None = None,
     cache: AnswerCache | None = None,
+    database: Database | None = None,
+    webhook_secret: str | None = None,
 ) -> FastAPI:
     """Dependencies not supplied are built lazily on the first question.
 
@@ -98,6 +102,8 @@ def create_app(
     with None they refuse every request.
     rate_limiter limits /ask and /ask/stream per signed-in user; None means no limit.
     cache remembers answers to repeated Queries; None means every Query is answered afresh.
+    database holds users (and later Contracts); None means no database, and /ask needs none.
+    webhook_secret is Clerk's Svix signing secret for /webhooks/clerk; None disables that route.
     """
 
     @asynccontextmanager
@@ -115,6 +121,8 @@ def create_app(
             except Exception:
                 logging.getLogger(__name__).exception("warm start failed")
         yield
+        if database is not None:
+            await database.dispose()
 
     app = FastAPI(title="LegalLens", lifespan=lifespan)
     app.add_middleware(
@@ -139,8 +147,9 @@ def create_app(
         c, l, f = deps()
         return Answerer(corpus=c, llm=l, fallback=f, crag=crag, cache=cache)
 
-    def current_user(request: Request) -> str:
-        """The Clerk user id behind the bearer token; 401 before any work starts."""
+    async def current_user(request: Request) -> str:
+        """The Clerk user id behind the bearer token; 401 before any work starts. The first
+        request from a user also creates their users row."""
         scheme, _, token = request.headers.get("Authorization", "").partition(" ")
         token = token.strip()
         unauthorized = HTTPException(
@@ -151,12 +160,20 @@ def create_app(
         if scheme.lower() != "bearer" or not token or verifier is None:
             raise unauthorized
         try:
-            return verifier.verify(token)
+            # Verifying may fetch the JWKS over the network, so it stays off the event loop.
+            user = await asyncio.to_thread(verifier.verify, token)
         except InvalidToken as exc:
             # The reason (expired, wrong issuer, JWKS unreachable) helps whoever runs the
             # service; the token itself is never logged.
             logging.getLogger(__name__).warning("token refused: %s", exc)
             raise unauthorized from exc
+        if database is not None:
+            try:
+                await database.ensure_user(user)
+            except Exception:
+                # /ask does not need the row, so a database outage must not stop it.
+                logging.getLogger(__name__).exception("could not record the user")
+        return user
 
     def limit(user: str = Depends(current_user)) -> None:
         """Rejects with 429 before any work starts, so a streamed answer never begins."""
@@ -231,6 +248,24 @@ def create_app(
         if found is None:
             raise HTTPException(404, "No such Provision in the Corpus.")
         return found
+
+    @app.post("/webhooks/clerk")
+    async def clerk_webhook(request: Request) -> dict[str, str]:
+        """Clerk's webhook. Authenticated by its Svix signature, not a bearer token.
+        `user.deleted` deletes the user's row and, by cascade, all their data."""
+        if not webhook_secret or database is None:
+            raise HTTPException(503, "Webhooks are not configured.")
+        body = await request.body()
+        try:
+            Webhook(webhook_secret).verify(body, dict(request.headers))
+            event = json.loads(body)
+        except (WebhookVerificationError, ValueError) as exc:
+            raise HTTPException(400, "Invalid webhook signature.") from exc
+        if event.get("type") == "user.deleted":
+            user_id = (event.get("data") or {}).get("id")
+            if isinstance(user_id, str) and user_id:
+                await database.delete_user(user_id)
+        return {"status": "ok"}
 
     UNAVAILABLE = "The service is unavailable. Please retry shortly."
 
@@ -308,4 +343,6 @@ app = create_app(
     rate_limiter=RateLimiter.from_env(),
     verifier=ClerkVerifier.from_env(),
     cache=AnswerCache.from_env(),
+    database=Database.from_env(),
+    webhook_secret=os.environ.get("CLERK_WEBHOOK_SECRET") or None,
 )

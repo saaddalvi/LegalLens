@@ -4,12 +4,12 @@
 
 **Blocked by:** 01 (Clerk sign-in)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `alembic upgrade head` on an empty database creates `users` and enables `vector`
-- [ ] Endpoint test: the first signed-in request creates exactly one `users` row, and later requests don't duplicate it
-- [ ] Endpoint tests: a webhook with a bad or missing signature gets 400 and changes nothing. A valid `user.deleted` removes the row
-- [ ] `/ask` works with `DATABASE_URL` unset
-- [ ] Tests run against a test Postgres with pgvector (a local Postgres or a Neon branch, documented in the README)
-- [ ] The deploy notes say to run migrations before starting the Space, and list `DATABASE_URL` and the Clerk webhook secret as Space secrets
-- [ ] Lint and tests pass
+- [x] `alembic upgrade head` on an empty database creates `users` and enables `vector`
+- [x] Endpoint test: the first signed-in request creates exactly one `users` row, and later requests don't duplicate it
+- [x] Endpoint tests: a webhook with a bad or missing signature gets 400 and changes nothing. A valid `user.deleted` removes the row
+- [x] `/ask` works with `DATABASE_URL` unset
+- [x] Tests run against a test Postgres with pgvector (a local Postgres or a Neon branch, documented in the README)
+- [x] The deploy notes say to run migrations before starting the Space, and list `DATABASE_URL` and the Clerk webhook secret as Space secrets
+- [x] Lint and tests pass

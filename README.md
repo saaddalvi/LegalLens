@@ -91,6 +91,8 @@ These are environment variables for the backend (`backend/.env.example` has them
 | `CLERK_AUTHORIZED_PARTIES` | `http://localhost:3000` | Comma-separated frontend origins whose tokens are accepted (the token's `azp` claim). |
 | `RATE_LIMIT_PER_MINUTE`, `RATE_LIMIT_PER_DAY` | 5 and 50 | Per signed-in user, on `/ask` and `/ask/stream`; over the limit gets HTTP 429 with `Retry-After`. Set both to 0 to turn it off, for example for local work. |
 | `ANSWER_CACHE_SIZE`, `ANSWER_CACHE_TTL_SECONDS` | 500 and 86400 | Answers to repeated Queries are remembered in memory. Size 0 turns it off. A "cannot answer" is never remembered. |
+| `DATABASE_URL` | none | Postgres (Neon) for users and, later, Contracts. A secret. Optional: `/ask` works without it. Run `python -m legallens.migrate` against it first. |
+| `CLERK_WEBHOOK_SECRET` | none | Clerk's Svix signing secret (`whsec_...`) for `POST /webhooks/clerk`. A `user.deleted` event deletes that user's row and, by cascade, their data. A secret. |
 | `REQUIRE_CORPUS` | off | Set to `1` to fail, instead of seeding the 3-Provision sample Corpus, when the store is empty. |
 | `WARM_START` | off | Set to `1` to load the Corpus and embedding model at startup instead of on the first question. |
 
@@ -106,6 +108,26 @@ Signed-out visitors to `/ask` are sent to Clerk's sign-in and come back to it; `
 
 `GET /health` says the process is up. `GET /ready` says the Corpus loads, how many Provisions it has,
 and whether it is only the sample (`"fixture": true`). Use `/ready` as a deployment health probe.
+
+### Database and tests
+
+Users live in Postgres with the pgvector extension. Create a Neon project, copy its connection string into
+`DATABASE_URL`, then create the tables (and enable `vector`):
+
+```bash
+cd backend && .venv/bin/python -m legallens.migrate   # needs DATABASE_URL in the environment
+```
+
+The database tests need a Postgres with pgvector, **and they drop and recreate its `public` schema**, so never
+point them at a real database. Locally, use Docker (or a throwaway Neon branch via `TEST_DATABASE_URL`):
+
+```bash
+docker run -d --name legallens-test-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=legallens_test \
+  -p 54329:5432 pgvector/pgvector:pg17
+cd backend && .venv/bin/python -m pytest   # default TEST_DATABASE_URL points at that container
+```
+
+Without a reachable test database, those tests are skipped.
 
 ### Logs
 
@@ -145,8 +167,12 @@ What it does, if you would rather do it by hand:
    `--push` it only assembles the files. It refuses to ship an empty Corpus or the sample.
    The image installs the versions pinned in `backend/constraints.txt`, because a Chroma store is only
    guaranteed to load under the version that wrote it. It downloads the embedding model while building.
-3. **Set the Space's secrets and variables:** `GOOGLE_API_KEY`, `WEB_SEARCH_API_KEY` (secrets) and
-   `CORS_ORIGINS` set to the Vercel address (a variable).
+3. **Run the migrations before starting the Space** (`DATABASE_URL=... python -m legallens.migrate`, from
+   your machine or any shell with the backend installed), and again after any release that adds one.
+   Then set the Space's secrets and variables: `GOOGLE_API_KEY`, `WEB_SEARCH_API_KEY`, `DATABASE_URL`
+   (the Neon connection string) and `CLERK_WEBHOOK_SECRET` (secrets), `CLERK_ISSUER` and
+   `CLERK_AUTHORIZED_PARTIES`, and `CORS_ORIGINS` set to the Vercel address (variables). In Clerk, add a
+   webhook endpoint `https://<space>/webhooks/clerk` subscribed to `user.deleted`.
 4. **Deploy the frontend** on Vercel with root directory `frontend` and `NEXT_PUBLIC_API_URL` set to the
    Space's address. It is read at build time, so changing it needs a redeploy.
 
