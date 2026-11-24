@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import AccountNav from "../account-nav";
 import { BUTTON_CLASS, FIELD_CLASS } from "../ask-box";
 import { Answer, Refusal } from "../answer-view";
@@ -38,6 +38,7 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [addressQuery, setAddressQuery] = useState(initialQuery);
+  const fieldRef = useRef<HTMLTextAreaElement>(null);
 
   // The address is the source of truth: when it changes to another Query (a
   // link, a reload, back or forward), the ask box shows that Query and it is
@@ -112,6 +113,15 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
     if (asked) setAsked({ q: asked.q });
   }
 
+  // Starts over: the address drops the Query, which clears the ask box and the answer.
+  function askAnother() {
+    router.push("/ask", { scroll: false });
+    setQuery("");
+    setAsked(null);
+    fieldRef.current?.scrollIntoView?.({ block: "center" });
+    fieldRef.current?.focus({ preventScroll: true });
+  }
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
     const q = query.trim();
@@ -124,7 +134,7 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-10 px-4 pb-16 sm:px-8">
-      <header className="flex flex-col gap-3 border-b border-rule pt-5 pb-4">
+      <header className="border-b border-rule pt-5 pb-4">
         <div className="flex items-center justify-between gap-4">
           <h1 className="condensed text-2xl">
             <Link href="/">LegalLens</Link>
@@ -134,9 +144,6 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
             <ThemeToggle />
           </div>
         </div>
-        <p role="note" className="text-sm text-muted">
-          {DISCLAIMER}
-        </p>
       </header>
 
       <form onSubmit={submit} className="flex flex-col gap-3">
@@ -145,6 +152,7 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
         </label>
         <textarea
           id="query"
+          ref={fieldRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           rows={3}
@@ -183,6 +191,17 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
       )}
 
       {result?.response_type === "answer" && <Answer key={`${asked?.q}-${result.answer}`} result={result} />}
+
+      <footer className="flex flex-col items-start gap-6 border-t border-rule pt-6">
+        {result && (
+          <button type="button" onClick={askAnother} className={BUTTON_CLASS}>
+            Ask another question
+          </button>
+        )}
+        <p role="note" className="max-w-[68ch] text-sm text-muted">
+          {DISCLAIMER}
+        </p>
+      </footer>
     </main>
   );
 }

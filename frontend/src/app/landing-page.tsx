@@ -221,7 +221,7 @@ export default function LandingPage() {
                 <li key={q} className="border-b border-rule">
                   <Link
                     href={askHref(q)}
-                    className="block py-3 hover:text-stamp"
+                    className="block py-3 hover:underline hover:decoration-ink hover:underline-offset-4"
                   >
                     {q}
                   </Link>
@@ -232,7 +232,7 @@ export default function LandingPage() {
                   <Link
                     href={askHref(q)}
                     lang="hi"
-                    className="block py-3 hover:text-stamp"
+                    className="block py-3 hover:underline hover:decoration-ink hover:underline-offset-4"
                   >
                     {q}
                   </Link>
