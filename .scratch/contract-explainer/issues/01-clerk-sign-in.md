@@ -4,12 +4,12 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Endpoint tests: `/ask` and `/ask/stream` without a token, or with an invalid or expired one, get 401 before any work starts
-- [ ] Endpoint tests: `/health`, `/ready` and the `/law` data endpoints need no token
-- [ ] Endpoint test: rate limits are counted per user id, so two users from one address are counted separately
-- [ ] The token verifier is injected through `create_app` (a fake that accepts test tokens in tests). Existing `/ask` and evaluation tests pass with it
-- [ ] Frontend: signed-out visits to `/ask` redirect to sign-in. `/` and `/law/**` render signed out. The landing page's ask box and example Queries go through sign-in and then land on `/ask?q=…`
-- [ ] README settings table lists the Clerk variables for the backend and frontend
-- [ ] Lint, typecheck and tests pass
+- [x] Endpoint tests: `/ask` and `/ask/stream` without a token, or with an invalid or expired one, get 401 before any work starts
+- [x] Endpoint tests: `/health`, `/ready` and the `/law` data endpoints need no token
+- [x] Endpoint test: rate limits are counted per user id, so two users from one address are counted separately
+- [x] The token verifier is injected through `create_app` (a fake that accepts test tokens in tests). Existing `/ask` and evaluation tests pass with it
+- [x] Frontend: signed-out visits to `/ask` redirect to sign-in. `/` and `/law/**` render signed out. The landing page's ask box and example Queries go through sign-in and then land on `/ask?q=…`
+- [x] README settings table lists the Clerk variables for the backend and frontend
+- [x] Lint, typecheck and tests pass
