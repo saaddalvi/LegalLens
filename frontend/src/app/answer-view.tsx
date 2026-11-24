@@ -345,7 +345,7 @@ export function Refusal({
       )}
       {settled && result.redirect_to_ask && (
         <p className={instant ? "" : "reveal-in"}>
-          <Link href="/ask" className="underline underline-offset-4">
+          <Link href="/ask" className="inline-flex min-h-11 items-center underline underline-offset-4">
             Go to the asking screen
           </Link>
         </p>

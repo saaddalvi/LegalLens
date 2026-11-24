@@ -10,7 +10,7 @@ export default function AccountNav() {
   if (isSignedIn) return <UserButton />;
   return (
     <SignInButton>
-      <button type="button" className="text-sm font-medium underline underline-offset-4">
+      <button type="button" className="inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4">
         Sign in
       </button>
     </SignInButton>

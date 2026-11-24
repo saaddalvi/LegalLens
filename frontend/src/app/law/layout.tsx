@@ -20,7 +20,7 @@ export default function LawLayout({ children }: { children: React.ReactNode }) {
           </p>
           <div className="flex items-center gap-5">
             <nav aria-label="Main" className="flex gap-5 whitespace-nowrap text-sm">
-              <Link href="/ask" className="underline underline-offset-4">
+              <Link href="/ask" className="inline-flex min-h-11 items-center underline underline-offset-4">
                 Ask a question
               </Link>
               <Link href="/law" className="underline underline-offset-4">

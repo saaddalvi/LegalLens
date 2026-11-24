@@ -96,4 +96,46 @@ describe("LandingPage", () => {
     expect(within(section).getByText("Or upload a Contract")).toBeInTheDocument();
     expect(within(section).getByText(/Flagged clause/)).toBeInTheDocument();
   });
+
+  it("sets the Hindi line in Hindi", () => {
+    render(<LandingPage />);
+    expect(screen.getByText(/हिंदी में भी पूछिए/)).toHaveAttribute("lang", "hi");
+  });
+
+  it("tells a screen reader when the ask box is submitted empty, and clears the hint on typing", async () => {
+    const user = userEvent.setup();
+    render(<LandingPage />);
+    const box = screen.getByRole("textbox");
+    expect(box).toBeRequired();
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    expect(screen.getByRole("status")).toHaveTextContent(/type your question first/i);
+    expect(box).toBeInvalid();
+    await user.type(box, "x");
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+  });
+
+  it("shows three Trust labels and tucks the five Contract and mixed ones behind a disclosure", () => {
+    render(<LandingPage />);
+    const section = screen.getByRole("region", { name: /trust labels/i });
+    const summary = within(section).getByText(/labels for contracts and mixed sources \(5\)/i).closest("details");
+    expect(summary).not.toHaveAttribute("open");
+    expect(summary).toContainElement(within(section).getByText(TRUST_TEXT.contract));
+    expect(summary).not.toContainElement(within(section).getByText(TRUST_TEXT.corpus));
+    expect(summary).not.toContainElement(within(section).getByText(TRUST_TEXT.none));
+  });
+
+  it("shows six Acts and puts the rest, repealed last, behind See all 15", () => {
+    render(<LandingPage />);
+    const section = screen.getByRole("region", { name: /what the corpus covers/i });
+    const more = within(section).getByText(/see all 15 acts/i).closest("details")!;
+    expect(more).not.toHaveAttribute("open");
+    expect(more).not.toContainElement(within(section).getByText("Bharatiya Nyaya Sanhita"));
+    const links = within(more).getAllByRole("link", { hidden: true });
+    expect(links).toHaveLength(9);
+    expect(links.slice(-3).map((l) => l.textContent)).toEqual([
+      "Indian Penal Codenow BNS",
+      "Code of Criminal Procedurenow BNSS",
+      "Indian Evidence Actnow BSA",
+    ]);
+  });
 });

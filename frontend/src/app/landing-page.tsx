@@ -34,16 +34,81 @@ const CONTRACT_LANE = {
   body: "LegalLens writes a Contract brief: the parties, key terms and obligations, with each Flagged clause shown beside the Clause it comes from and how it differs from Indian law. Then ask follow-up Queries about it. Only English Contracts are accepted.",
 };
 
-const TRUST_ORDER: TrustLabel[] = [
-  "corpus",
+// Three labels cover most answers; the five Contract and mixed variants sit behind a disclosure.
+const TRUST_MAIN: TrustLabel[] = ["corpus", "fallback", "none"];
+const TRUST_MORE: TrustLabel[] = [
   "corpus_and_fallback",
-  "fallback",
   "contract",
   "contract_and_corpus",
   "contract_and_fallback",
   "contract_corpus_and_fallback",
-  "none",
 ];
+
+type Act = (typeof CORPUS_ACTS)[number];
+// Six Acts up front; the rest, with the repealed ones last, behind "See all 15".
+const FEATURED_ACTS: Act[] = [
+  "Constitution of India",
+  "Bharatiya Nyaya Sanhita",
+  "Bharatiya Nagarik Suraksha Sanhita",
+  "Bharatiya Sakshya Adhiniyam",
+  "Indian Contract Act",
+  "Consumer Protection Act",
+];
+const isRepealed = (act: Act) => Boolean(REPLACED_BY[act]);
+const MORE_ACTS: Act[] = [
+  ...CORPUS_ACTS.filter((a) => !FEATURED_ACTS.includes(a) && !isRepealed(a)),
+  ...CORPUS_ACTS.filter(isRepealed),
+];
+
+function ActList({ acts }: { acts: Act[] }) {
+  return (
+    <ul className="grid gap-x-10 sm:grid-cols-2">
+      {acts.map((act) => (
+        <li key={act} className="border-b border-rule">
+          <Link
+            href={lawHref(act)}
+            className="flex items-baseline justify-between gap-3 py-2 hover:bg-ledger"
+          >
+            {REPLACED_BY[act] ? (
+              <>
+                <s className="text-muted decoration-redtape decoration-2">
+                  {act}
+                </s>
+                <span className="shrink-0 text-sm text-muted">
+                  now {REPLACED_BY[act]}
+                </span>
+              </>
+            ) : (
+              <span>{act}</span>
+            )}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function TrustList({ labels }: { labels: TrustLabel[] }) {
+  return (
+    <dl className="flex flex-col">
+      {labels.map((t) => (
+        <div
+          key={t}
+          className="grid gap-3 border-b border-rule py-4 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-center lg:gap-6"
+        >
+          <dt>
+            <Stamp trust={t} />
+          </dt>
+          <dd className="text-muted">{TRUST_EXPLANATION[t]}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+const DISCLOSURE = "group flex flex-col gap-3";
+const SUMMARY =
+  "inline-flex min-h-11 cursor-pointer list-none items-center self-start font-medium underline underline-offset-4 [&::-webkit-details-marker]:hidden";
 
 // The hero's specimen: what an answer's support looks like, typeset like a
 // bare-act page, with the repealed IPC section struck through.
@@ -91,12 +156,12 @@ export default function LandingPage() {
   return (
     <>
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 sm:px-8">
-        <header className="flex items-baseline justify-between gap-4 border-b border-rule py-5">
+        <header className="flex items-center justify-between gap-4 border-b border-rule py-3">
           <span className="condensed text-2xl">LegalLens</span>
           <div className="flex items-center gap-4 sm:gap-6">
             <Link
               href="/ask"
-              className="text-sm font-medium underline underline-offset-4"
+              className="inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4"
             >
               Go to the asking screen
             </Link>
@@ -108,12 +173,19 @@ export default function LandingPage() {
         <div className="grid gap-12 py-12 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-16 lg:py-20">
           <div className="flex flex-col gap-6">
             <h1 className="condensed text-5xl text-balance sm:text-6xl lg:text-7xl">
-              Ask about Indian law. Read the law itself.
+              <span className="block">Ask about Indian law.</span>{" "}
+              <span className="block">Read the law itself.</span>
             </h1>
-            <p className="max-w-[52ch] text-lg text-muted">
+            <p className="max-w-[52ch] text-lg text-pretty text-muted">
               Plain-language answers in English or Hindi, each backed by the
               statute text it comes from. Every Citation is checked against that
               text before you see it.
+            </p>
+            <p
+              lang="hi"
+              className="max-w-[52ch] text-lg leading-relaxed text-pretty text-muted"
+            >
+              हिंदी में भी पूछिए। हर उत्तर कानून के मूल पाठ से जाँचा जाता है।
             </p>
             <div className="grid gap-8 sm:grid-cols-[minmax(0,1fr)_13rem] sm:gap-0">
               <div className="sm:pr-8">
@@ -204,29 +276,18 @@ export default function LandingPage() {
               What the Corpus covers
             </h2>
             <div className="flex max-w-3xl flex-col gap-5">
-              <ul className="grid gap-x-10 sm:grid-cols-2">
-                {CORPUS_ACTS.map((act) => (
-                  <li key={act} className="border-b border-rule">
-                    <Link
-                      href={lawHref(act)}
-                      className="flex items-baseline justify-between gap-3 py-2 hover:bg-ledger"
-                    >
-                      {REPLACED_BY[act] ? (
-                        <>
-                          <s className="text-muted decoration-redtape decoration-2">
-                            {act}
-                          </s>
-                          <span className="shrink-0 text-sm text-muted">
-                            now {REPLACED_BY[act]}
-                          </span>
-                        </>
-                      ) : (
-                        <span>{act}</span>
-                      )}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+              <ActList acts={FEATURED_ACTS} />
+              <details className={DISCLOSURE}>
+                <summary className={SUMMARY}>
+                  <span className="group-open:hidden">
+                    See all {CORPUS_ACTS.length} Acts
+                  </span>
+                  <span className="hidden group-open:inline">
+                    Show fewer Acts
+                  </span>
+                </summary>
+                <ActList acts={MORE_ACTS} />
+              </details>
               <p className="max-w-[68ch] text-muted">{REPEAL_NOTE}</p>
             </div>
           </section>
@@ -239,19 +300,18 @@ export default function LandingPage() {
               <p>
                 Every answer carries a label saying where its support came from.
               </p>
-              <dl className="flex flex-col">
-                {TRUST_ORDER.map((t) => (
-                  <div
-                    key={t}
-                    className="grid gap-3 border-b border-rule py-4 sm:grid-cols-[18rem_minmax(0,1fr)] sm:items-center sm:gap-6"
-                  >
-                    <dt>
-                      <Stamp trust={t} />
-                    </dt>
-                    <dd className="text-muted">{TRUST_EXPLANATION[t]}</dd>
-                  </div>
-                ))}
-              </dl>
+              <TrustList labels={TRUST_MAIN} />
+              <details className={DISCLOSURE}>
+                <summary className={SUMMARY}>
+                  <span className="group-open:hidden">
+                    Labels for Contracts and mixed sources ({TRUST_MORE.length})
+                  </span>
+                  <span className="hidden group-open:inline">
+                    Hide Contract and mixed labels
+                  </span>
+                </summary>
+                <TrustList labels={TRUST_MORE} />
+              </details>
             </div>
           </section>
         </div>
@@ -267,7 +327,10 @@ export default function LandingPage() {
       <footer className="border-t border-rule px-4 py-6 text-center text-sm text-muted">
         <p>
           LegalLens answers from Indian statute text.{" "}
-          <Link href="/ask" className="underline underline-offset-4">
+          <Link
+            href="/ask"
+            className="inline-flex min-h-11 items-center underline underline-offset-4"
+          >
             Ask a question
           </Link>
         </p>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { askHref } from "@/lib/corpus";
 
 // Shared with the asking screen, so both ask boxes look and read the same.
@@ -13,11 +13,16 @@ export const BUTTON_CLASS =
 export default function AskBox() {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const [missing, setMissing] = useState(false);
+  const hintId = useId();
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     const q = query.trim();
-    if (!q) return;
+    if (!q) {
+      setMissing(true);
+      return;
+    }
     router.push(askHref(q));
   }
 
@@ -29,14 +34,26 @@ export default function AskBox() {
       <textarea
         id="landing-query"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setMissing(false);
+        }}
         rows={3}
+        aria-required="true"
+        aria-invalid={missing || undefined}
+        aria-describedby={hintId}
         placeholder="In English or Hindi"
         className={FIELD_CLASS}
       />
-      <button type="submit" className={`${BUTTON_CLASS} self-start`}>
-        Ask
-      </button>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <button type="submit" className={BUTTON_CLASS}>
+          Ask
+        </button>
+        {/* Always in the page so a screen reader announces the text when it appears. */}
+        <p id={hintId} role="status" aria-live="polite" className="font-medium">
+          {missing ? "Type your question first, in English or Hindi." : ""}
+        </p>
+      </div>
     </form>
   );
 }
