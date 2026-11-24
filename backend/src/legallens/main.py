@@ -21,6 +21,7 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from starlette.formparsers import MultiPartParser
 from svix.webhooks import Webhook, WebhookVerificationError
 
 from .answer_cache import AnswerCache
@@ -44,6 +45,11 @@ from .models import (
 )
 from .rate_limit import RateLimiter
 from .request_log import RequestLog
+
+# Starlette spools an uploaded file to a temp file on disk once it passes 1MB. A Contract is
+# private and its file is never kept (spec: "Upload endpoint"), so keep uploads up to the size
+# limit in memory instead.
+MultiPartParser.spool_max_size = MAX_UPLOAD_BYTES + 1
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 FIXTURE = BACKEND_DIR / "fixtures" / "sample_provisions.json"

@@ -346,3 +346,11 @@ def test_clause_retrieval_is_filtered_to_one_contract(make_app, pg_client):
     # Someone else's Contract id returns nothing, whoever asks.
     assert asyncio.run(db.search_clauses("user_b", id_a, vec, k=10)) == []
     assert asyncio.run(db.search_clauses("user_a", id_b, vec, k=10)) == []
+
+
+def test_an_uploaded_file_is_never_spooled_to_disk():
+    from starlette.formparsers import MultiPartParser
+
+    from legallens.contract_intake import MAX_UPLOAD_BYTES
+
+    assert MultiPartParser.spool_max_size > MAX_UPLOAD_BYTES
