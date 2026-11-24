@@ -12,7 +12,7 @@
 - [x] Endpoint test: `GET /contracts` returns only the caller's Contracts. Another user's Contract id gets 404
 - [x] Contract text never appears in the request log line or in error messages
 - [x] Component tests: upload Stages in order, refusal messages, and the list after a successful upload
-- [ ] Manual check: a scanned rent agreement on stamp paper uploads, and its Clause numbers match the paper
+- [x] Manual check: a scanned rent agreement on stamp paper uploads, and its Clause numbers match the paper
 - [x] Lint, typecheck and tests pass
 
-**Implementation notes:** all automated checks pass, including the Postgres-backed tests in `backend/tests/test_contracts.py` (run against a pgvector container). The scanned-rent-agreement manual check, which exercises real Gemini PDF reading, is still to do.
+**Implementation notes:** all automated checks pass, including the Postgres-backed tests in `backend/tests/test_contracts.py`. Manual check done on a scanned rent agreement: Clauses 1 to 21 match the paper, with the parties and recitals as Clause 0. Known limitation: text after the last Clause (Annexure, "In witness whereof", witness and signature lines) is folded into the last Clause, because the witnesses' "1." and "2." repeat numbers already used.
