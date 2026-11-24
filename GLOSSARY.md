@@ -39,7 +39,7 @@ _Avoid_: Prompt, request
 ### Corrective loop
 
 **Verdict**:
-The Grader's judgement of retrieved Chunks against a Query: correct, ambiguous or incorrect.
+The Grader's judgement of retrieved Chunks or Clauses against a Query: correct, ambiguous or incorrect.
 _Avoid_: Score, grade
 
 **Fallback**:
@@ -50,8 +50,12 @@ _Avoid_: Backup, external search
 One step of answering a Query, shown to the user while they wait, such as the scope check, retrieval, grading, the Fallback, generation or the Citation check.
 _Avoid_: Step, phase, status (Status is a Provision's in-force state)
 
+**Decisions**:
+What the corrective loop decided while answering one Query: the Grader's score and Verdict, how many Fallback sources came back, and whether a Hallucinated citation forced a regeneration or blocked the answer.
+_Avoid_: Trace, debug info
+
 **Trust label**:
-The marker on an answer saying whether its support came from the Corpus, the Fallback or both, or `none` for a "cannot answer" message or a refusal of an Out-of-scope query, which no source supports.
+The marker on an answer saying whether its support came from the Corpus, the Fallback, the user's Contract or a combination, or `none` for a "cannot answer" message or a refusal of an Out-of-scope query, which no source supports.
 _Avoid_: Confidence, source tag
 
 ### Answer
@@ -65,5 +69,35 @@ A Citation that names a Provision not present in the Corpus.
 _Avoid_: Bad cite, fake source
 
 **Out-of-scope query**:
-A Query that is not about Indian law or that asks for personal advice, such as whether to sue or sign.
+A Query that is not about Indian law or that asks for personal advice, such as whether to sue or sign. In a Contract conversation, also a Query about neither the Contract nor the law that governs it.
 _Avoid_: Invalid query, off-topic
+
+### Contracts
+
+**Contract**:
+An agreement between two or more parties that a user uploads to have explained, such as a rent agreement, a job offer or an NDA. Only English Contracts are accepted.
+_Avoid_: Document, file, agreement (as the term)
+
+**Clause**:
+A single numbered unit of a Contract. A Contract without numbered Clauses has its paragraphs numbered in order.
+_Avoid_: Section, Provision, term
+
+**Clause reference**:
+A reference in an answer to a specific Clause of the user's Contract, with its verbatim text.
+_Avoid_: Citation (a Citation is always to a Provision), quote
+
+**Hallucinated clause reference**:
+A Clause reference whose number or text is not in the Contract.
+_Avoid_: Bad quote, wrong clause
+
+**Contract brief**:
+The structured explanation of a Contract given when it is uploaded: the parties, what the Contract is for, its key terms, what each party must do, and its Flagged clauses.
+_Avoid_: Summary, overview, analysis
+
+**Flagged clause**:
+A Clause that differs from what Indian law provides, shown with its Clause reference and at least one Citation. LegalLens says how the Clause differs, never whether to sign.
+_Avoid_: Red flag, risky clause, unfair clause
+
+**Contract conversation**:
+The saved Queries and answers about one Contract, beginning with its Contract brief. Each Contract has exactly one.
+_Avoid_: Chat, thread, session
