@@ -7,6 +7,7 @@ import threading
 import uuid
 from collections.abc import Callable
 from contextlib import asynccontextmanager
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
@@ -45,7 +46,7 @@ from .models import (
     Provision,
     ProvisionSummary,
 )
-from .rate_limit import RateLimiter
+from .rate_limit import DailyCaps, RateLimiter
 from .request_log import RequestLog
 
 # Starlette spools an uploaded file to a temp file on disk once it passes 1MB. A Contract is
@@ -149,6 +150,7 @@ def create_app(
     database: Database | None = None,
     webhook_secret: str | None = None,
     embedder: Embedder | None = None,
+    daily_caps: DailyCaps | None = None,
 ) -> FastAPI:
     """Dependencies not supplied are built lazily on the first question.
 
@@ -160,6 +162,8 @@ def create_app(
     database holds users (and later Contracts); None means no database, and /ask needs none.
     webhook_secret is Clerk's Svix signing secret for /webhooks/clerk; None disables that route.
     embedder embeds Contract Clauses; None uses the Corpus's embedding model (ADR 0005).
+    daily_caps limits new Contracts and Contract-conversation Queries per user per UTC day;
+    None means no cap.
     The /contracts routes need a database and answer 503 without one.
     """
 
@@ -189,6 +193,8 @@ def create_app(
         ),
         allow_methods=["*"],
         allow_headers=["*"],
+        # Without this a page on another origin cannot read when a 429 resets.
+        expose_headers=["Retry-After", "X-Limit-Scope"],
     )
 
     @lru_cache(maxsize=1)
@@ -400,6 +406,36 @@ def create_app(
             raise HTTPException(503, UNAVAILABLE)
         return database
 
+    async def reserve(user: str, kind: str) -> date | None:
+        """Counts one `kind` against the user's daily cap, or answers 429 with the time until the
+        count resets (midnight UTC). Returns the day it was counted on, or None when nothing was
+        counted, so a refused upload can be given back to that same day. Runs before any work or
+        stream starts."""
+        if daily_caps is None:
+            return None
+        cap = daily_caps.limit(kind)
+        if cap <= 0:
+            return None
+        day = daily_caps.today()
+        if not await contracts_db().reserve(user, kind, day, cap):
+            noun = "Contracts" if kind == "contracts" else "questions about Contracts"
+            raise HTTPException(
+                429,
+                f"You have reached today's limit of {cap} {noun}. It resets at midnight UTC.",
+                headers={
+                    "Retry-After": str(daily_caps.seconds_until_reset()),
+                    "X-Limit-Scope": "daily",  # lets the page tell this from the per-minute limit
+                },
+            )
+        return day
+
+    async def give_back(user: str, kind: str, day: date | None) -> None:
+        if day is not None:
+            try:
+                await contracts_db().release(user, kind, day)
+            except Exception:
+                logging.getLogger(__name__).exception("could not give back a count")
+
     @lru_cache(maxsize=1)
     def intake() -> ContractIntake:
         db = contracts_db()
@@ -426,6 +462,7 @@ def create_app(
             data = await file.read(MAX_UPLOAD_BYTES + 1)
             if len(data) > MAX_UPLOAD_BYTES:
                 raise HTTPException(413, "That file is too large.")
+        counted_on = await reserve(user, "contracts")
         try:
             source = (
                 Source.from_bytes(data)
@@ -434,8 +471,10 @@ def create_app(
             )
             work = intake()
         except Refused as r:
+            await give_back(user, "contracts", counted_on)
             return _single_event_response("refusal", _refusal(r))
         except Exception as exc:
+            await give_back(user, "contracts", counted_on)
             logging.getLogger(__name__).error(
                 "contract intake unavailable: %s", type(exc).__name__
             )
@@ -467,6 +506,7 @@ def create_app(
                 )
             except Refused as r:
                 logging.getLogger(__name__).info("contract upload refused: %s", r.code)
+                await give_back(user, "contracts", counted_on)
                 rlog.finish("refused")
                 events.put_nowait(("refusal", _refusal(r)))
             except asyncio.CancelledError:
@@ -533,6 +573,7 @@ def create_app(
         except Exception as exc:
             logging.getLogger(__name__).exception("dependencies unavailable")
             raise HTTPException(503, UNAVAILABLE) from exc
+        await reserve(user, "queries")
 
         events: asyncio.Queue[tuple[str, dict] | None] = asyncio.Queue()
         cancelled = threading.Event()
@@ -592,11 +633,24 @@ def create_app(
             raise HTTPException(404, "No such Contract.")
         return found
 
+    @app.delete("/contracts/{contract_id}", status_code=204)
+    async def delete_contract(contract_id: str, user: str = Depends(current_user)):
+        """Deletes one of the caller's Contracts with its Clauses, vectors and conversation.
+        404 for one that is not theirs, so its existence is not revealed."""
+        db = contracts_db()
+        try:
+            uuid.UUID(contract_id)
+        except ValueError:
+            raise HTTPException(404, "No such Contract.") from None
+        if not await db.delete_contract(user, contract_id):
+            raise HTTPException(404, "No such Contract.")
+
     return app
 
 
 app = create_app(
     rate_limiter=RateLimiter.from_env(),
+    daily_caps=DailyCaps.from_env(),
     verifier=ClerkVerifier.from_env(),
     cache=AnswerCache.from_env(),
     database=Database.from_env(),

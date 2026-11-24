@@ -8,6 +8,7 @@ import type { Stage } from "../../stage-list";
 import StageList from "../../stage-list";
 import { API_URL } from "@/lib/api-url";
 import { detectedLang, errorMessage } from "@/lib/ask-stream";
+import { dailyCapMessage, isDailyCap, retryAfterSeconds } from "@/lib/daily-cap";
 import type { ContractAnswer, ConversationTurn } from "@/lib/contract-types";
 import { readEvents } from "@/lib/sse";
 
@@ -65,7 +66,9 @@ export default function ContractConversation({
         return fail(
           res.status === 404
             ? "We could not find that Contract. It may have been deleted."
-            : errorMessage(res.status),
+            : res.status === 429 && isDailyCap(res)
+              ? dailyCapMessage("questions about Contracts", "You can ask again", retryAfterSeconds(res))
+              : errorMessage(res.status),
         );
       }
       if (!res.body) return fail(errorMessage(null));

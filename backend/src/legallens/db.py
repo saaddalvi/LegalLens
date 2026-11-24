@@ -10,11 +10,12 @@ from __future__ import annotations
 import os
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
+    Date,
     DateTime,
     ForeignKey,
     Identity,
@@ -24,6 +25,7 @@ from sqlalchemy import (
     delete,
     func,
     select,
+    update,
 )
 from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -104,6 +106,19 @@ class ContractMessage(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class Usage(Base):
+    """What one user has used on one UTC day, for the daily caps."""
+
+    __tablename__ = "usage"
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    contracts: Mapped[int] = mapped_column(Integer, server_default="0")
+    queries: Mapped[int] = mapped_column(Integer, server_default="0")
 
 
 def _turns(rows) -> list[ConversationTurn]:
@@ -390,6 +405,44 @@ class Database:
                         },
                     },
                 ],
+            )
+
+    async def delete_contract(self, user_id: str, contract_id: str) -> bool:
+        """Deletes the user's Contract; foreign keys cascade to its Clauses, vectors and
+        messages. False when it does not exist or is not the user's."""
+        async with self.engine.begin() as conn:
+            deleted = await conn.execute(
+                delete(Contract)
+                .where(Contract.id == contract_id, Contract.user_id == user_id)
+                .returning(Contract.id)
+            )
+            return deleted.first() is not None
+
+    async def reserve(self, user_id: str, kind: str, day: date, cap: int) -> bool:
+        """Counts one more `kind` ("contracts" or "queries") for the user on `day` unless they
+        are at `cap`. One atomic statement, so concurrent requests cannot pass the cap."""
+        column = Usage.contracts if kind == "contracts" else Usage.queries
+        async with self.engine.begin() as conn:
+            row = await conn.execute(
+                insert(Usage)
+                .values(user_id=user_id, day=day, **{kind: 1})
+                .on_conflict_do_update(
+                    index_elements=[Usage.user_id, Usage.day],
+                    set_={kind: column + 1},
+                    where=column < cap,
+                )
+                .returning(column)
+            )
+            return row.first() is not None
+
+    async def release(self, user_id: str, kind: str, day: date) -> None:
+        """Gives back one `reserve`, for an upload that was refused."""
+        column = Usage.contracts if kind == "contracts" else Usage.queries
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                update(Usage)
+                .where(Usage.user_id == user_id, Usage.day == day)
+                .values({kind: func.greatest(column - 1, 0)})
             )
 
     async def dispose(self) -> None:

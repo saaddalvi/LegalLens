@@ -7,17 +7,19 @@ import { BUTTON_CLASS, FIELD_CLASS } from "../ask-box";
 import StageList, { type Stage } from "../stage-list";
 import { API_URL } from "@/lib/api-url";
 import type { ContractSummary, UploadedContract } from "@/lib/contract-types";
+import { dailyCapMessage, retryAfterSeconds } from "@/lib/daily-cap";
 import { readEvents } from "@/lib/sse";
+import DeleteContract from "./delete-contract";
 
 const ACCEPT = ".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-function errorMessage(status: number | null): string {
+function errorMessage(status: number | null, retryAfter: number | null = null): string {
   if (status === null)
     return "We could not reach the LegalLens service. Check your connection and try again.";
   if (status === 401) return "Your session has expired. Please sign in again, then upload your Contract.";
   if (status === 413) return "That file is too large. Please upload a smaller file.";
   if (status === 422) return "Please choose a file or paste the text of the Contract.";
-  if (status === 429) return "You have reached your limit of new Contracts for today. Please try again tomorrow.";
+  if (status === 429) return dailyCapMessage("new Contracts", "You can upload another", retryAfter);
   return "The service is unavailable right now. Please try again shortly.";
 }
 
@@ -96,7 +98,7 @@ export default function ContractsScreen() {
         body: form,
         signal: ctl.signal,
       });
-      if (!res.ok) return finish({ kind: "error", message: errorMessage(res.status), failedStage: null });
+      if (!res.ok) return finish({ kind: "error", message: errorMessage(res.status, retryAfterSeconds(res)), failedStage: null });
       if (!res.body) return finish({ kind: "error", message: errorMessage(null), failedStage: null });
       let ended = false;
       await readEvents(res.body, (name, data) => {
@@ -264,6 +266,11 @@ export default function ContractsScreen() {
                 <span className="text-sm text-muted">
                   {formatDate(c.created_at)} · {c.clause_count} {c.clause_count === 1 ? "Clause" : "Clauses"}
                 </span>
+                <DeleteContract
+                  contractId={c.id}
+                  title={c.title}
+                  onDeleted={() => setContracts((list) => list && list.filter((x) => x.id !== c.id))}
+                />
               </li>
             ))}
           </ul>

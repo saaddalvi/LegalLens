@@ -6,6 +6,7 @@ import threading
 import time
 from collections import deque
 from collections.abc import Callable
+from datetime import UTC, date, datetime, timedelta
 
 MINUTE = 60.0
 DAY = 86400.0
@@ -65,3 +66,41 @@ class RateLimiter:
     def _sweep(self, now: float) -> None:
         for key in [k for k, h in self._hits.items() if not h or now - h[-1] >= DAY]:
             del self._hits[key]
+
+
+class DailyCaps:
+    """How many new Contracts and Contract-conversation Queries one user may make per UTC day.
+    A cap of 0 turns that cap off. The counts live in the database; this holds the limits and
+    the clock."""
+
+    def __init__(
+        self,
+        contracts: int,
+        queries: int,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ):
+        self.contracts = contracts
+        self.queries = queries
+        self._clock = clock
+
+    @classmethod
+    def from_env(cls) -> DailyCaps:
+        """Reads DAILY_CONTRACT_CAP (default 5) and DAILY_QUERY_CAP (default 50)."""
+        return cls(
+            int(os.environ.get("DAILY_CONTRACT_CAP", "5")),
+            int(os.environ.get("DAILY_QUERY_CAP", "50")),
+        )
+
+    def limit(self, kind: str) -> int:
+        """The cap for "contracts" or "queries"; 0 means no cap."""
+        return {"contracts": self.contracts, "queries": self.queries}[kind]
+
+    def today(self) -> date:
+        return self._clock().astimezone(UTC).date()
+
+    def seconds_until_reset(self) -> int:
+        now = self._clock().astimezone(UTC)
+        midnight = datetime.combine(
+            now.date() + timedelta(days=1), datetime.min.time(), UTC
+        )
+        return max(1, math.ceil((midnight - now).total_seconds()))

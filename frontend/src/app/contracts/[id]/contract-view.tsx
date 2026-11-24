@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import { API_URL } from "@/lib/api-url";
 import { DISCLAIMER } from "@/lib/answer-text";
 import type { ContractDetail } from "@/lib/contract-types";
 import BriefView from "./contract-brief";
+import DeleteContract from "../delete-contract";
 import ContractConversation from "./contract-conversation";
 
 type State = { contract: ContractDetail } | { error: string } | null;
@@ -22,6 +24,7 @@ function failure(status: number | null): string {
 // next one), then the Contract's Clauses verbatim.
 export default function ContractView({ id }: { id: string }) {
   const { getToken } = useAuth();
+  const router = useRouter();
   const [state, setState] = useState<State>(null);
 
   useEffect(() => {
@@ -64,6 +67,7 @@ export default function ContractView({ id }: { id: string }) {
           {contract.clause_count} {contract.clause_count === 1 ? "Clause" : "Clauses"}
         </p>
       </header>
+      <DeleteContract contractId={contract.id} title={contract.title} onDeleted={() => router.push("/contracts")} />
       <p role="note" className="max-w-[68ch] text-sm text-muted">
         {DISCLAIMER}
       </p>

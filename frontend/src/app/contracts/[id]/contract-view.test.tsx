@@ -1,6 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import ContractView from "./contract-view";
+
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 
 const getToken = vi.fn();
 vi.mock("@clerk/nextjs", () => ({ useAuth: () => ({ getToken }) }));
@@ -132,4 +136,23 @@ it("still shows the Clauses of a Contract that has no brief", async () => {
   expect(screen.queryByRole("heading", { name: "Parties" })).not.toBeInTheDocument();
   expect(screen.getByText("Clause 7.2")).toBeInTheDocument();
   expect(screen.getByText(/not legal advice/i)).toBeInTheDocument();
+});
+
+it("offers Delete, asks for confirmation, then deletes and returns to the list", async () => {
+  const fn = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) =>
+    init?.method === "DELETE"
+      ? { ok: true, status: 204 }
+      : { ok: true, status: 200, json: async () => CONTRACT },
+  );
+  vi.stubGlobal("fetch", fn);
+  const user = userEvent.setup();
+  render(<ContractView id="c1" />);
+  await user.click(await screen.findByRole("button", { name: /delete/i }));
+  expect(screen.getByText(/delete this contract\?/i)).toBeInTheDocument();
+  expect(fn.mock.calls.filter(([, i]) => i?.method === "DELETE")).toHaveLength(0);
+  await user.click(screen.getByRole("button", { name: /yes, delete/i }));
+  await waitFor(() => expect(push).toHaveBeenCalledWith("/contracts"));
+  const [url, init] = fn.mock.calls.find(([, i]) => i?.method === "DELETE")!;
+  expect(url).toMatch(/\/contracts\/c1$/);
+  expect(init.headers.Authorization).toBe("Bearer tok");
 });

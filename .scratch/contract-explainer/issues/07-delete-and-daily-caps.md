@@ -6,8 +6,8 @@
 
 **Status:** ready-for-agent
 
-- [ ] Endpoint test: deleting a Contract removes its rows from every table. Deleting another user's Contract gets 404
-- [ ] Endpoint test: the Clerk `user.deleted` webhook removes the user's Contracts, Clauses and messages
-- [ ] Endpoint tests: the 6th Contract and the 51st Query in a day get 429 with `Retry-After`. A refused upload doesn't consume the cap. The count resets the next day
-- [ ] Component tests: Delete asks for confirmation and removes the Contract from the list, and the 429 message says when the limit resets
-- [ ] Lint, typecheck and tests pass
+- [x] Endpoint test: deleting a Contract removes its rows from every table. Deleting another user's Contract gets 404
+- [x] Endpoint test: the Clerk `user.deleted` webhook removes the user's Contracts, Clauses and messages
+- [x] Endpoint tests: the 6th Contract and the 51st Query in a day get 429 with `Retry-After`. A refused upload doesn't consume the cap. The count resets the next day
+- [x] Component tests: Delete asks for confirmation and removes the Contract from the list, and the 429 message says when the limit resets
+- [x] Lint, typecheck and tests pass

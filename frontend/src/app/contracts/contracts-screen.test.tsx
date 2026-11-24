@@ -233,3 +233,69 @@ describe("uploading", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/could not reach/i);
   });
 });
+
+describe("deleting", () => {
+  const OTHER = { ...RENT, id: "c2", title: "Job offer" };
+
+  function stubWithDelete(deleteResponse: unknown = { ok: true, status: 204 }) {
+    const fn = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "DELETE") return deleteResponse;
+      return { ok: true, status: 200, json: async () => [RENT, OTHER] };
+    });
+    vi.stubGlobal("fetch", fn);
+    return fn;
+  }
+  const deleteCalls = (fn: ReturnType<typeof vi.fn>) =>
+    fn.mock.calls.filter(([, init]) => init?.method === "DELETE");
+
+  it("asks for confirmation first, and cancelling deletes nothing", async () => {
+    const fn = stubWithDelete();
+    const user = userEvent.setup();
+    render(<ContractsScreen />);
+    await screen.findByRole("link", { name: /job offer/i });
+    await user.click(screen.getByRole("button", { name: /delete job offer/i }));
+    expect(screen.getByText(/delete this contract\?/i)).toBeInTheDocument();
+    expect(deleteCalls(fn)).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
+    expect(screen.queryByText(/delete this contract\?/i)).toBeNull();
+    expect(deleteCalls(fn)).toHaveLength(0);
+    expect(screen.getByRole("link", { name: /job offer/i })).toBeInTheDocument();
+  });
+
+  it("confirming deletes it on the server and removes it from the list", async () => {
+    const fn = stubWithDelete();
+    const user = userEvent.setup();
+    render(<ContractsScreen />);
+    await screen.findByRole("link", { name: /job offer/i });
+    await user.click(screen.getByRole("button", { name: /delete job offer/i }));
+    await user.click(screen.getByRole("button", { name: /yes, delete/i }));
+    await waitFor(() => expect(screen.queryByRole("link", { name: /job offer/i })).toBeNull());
+    expect(screen.getByRole("link", { name: /residential rent agreement/i })).toBeInTheDocument();
+    const [[url, init]] = deleteCalls(fn);
+    expect(url).toMatch(/\/contracts\/c2$/);
+    expect(init.headers.Authorization).toBe("Bearer session-token");
+  });
+
+  it("keeps the Contract and says so when the delete fails", async () => {
+    stubWithDelete({ ok: false, status: 503 });
+    const user = userEvent.setup();
+    render(<ContractsScreen />);
+    await screen.findByRole("link", { name: /job offer/i });
+    await user.click(screen.getByRole("button", { name: /delete job offer/i }));
+    await user.click(screen.getByRole("button", { name: /yes, delete/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/could not delete/i);
+    expect(screen.getByRole("link", { name: /job offer/i })).toBeInTheDocument();
+  });
+});
+
+describe("the daily cap", () => {
+  it("says when the limit resets", async () => {
+    stubApi({
+      upload: () => ({ ok: false, status: 429, headers: new Headers({ "Retry-After": "19800" }) }),
+    });
+    await pasteAndUpload();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/limit of new contracts for today/i);
+    expect(alert).toHaveTextContent(/5 hours 30 minutes/i);
+  });
+});

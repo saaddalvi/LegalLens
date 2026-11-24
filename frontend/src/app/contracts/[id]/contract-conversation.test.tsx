@@ -5,6 +5,8 @@ import ContractView from "./contract-view";
 import ContractConversation from "./contract-conversation";
 import type { ContractAnswer, ConversationTurn } from "@/lib/contract-types";
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
 const getToken = vi.fn();
 vi.mock("@clerk/nextjs", () => ({ useAuth: () => ({ getToken }) }));
 
@@ -231,4 +233,43 @@ it("marks a Hindi Query's Stages and answer as Hindi, with the Clause text kept 
   const text = await screen.findByText("जमा राशि ₹1,00,000 है।");
   expect(text.closest("[lang]")).toHaveAttribute("lang", "hi");
   expect(screen.getByText(/The Tenant pays Rs\. 1,00,000\./).closest("[lang]")).toHaveAttribute("lang", "en");
+});
+
+it("says when the daily limit on questions resets", async () => {
+  const user = userEvent.setup();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({ ok: false, status: 429, headers: new Headers({ "Retry-After": "7200", "X-Limit-Scope": "daily" }) }),
+  );
+  render(<ContractConversation contractId="c1" initial={[]} />);
+  await typeAndAsk(user, "What is the deposit?");
+  const alert = await screen.findByRole("alert");
+  expect(alert).toHaveTextContent(/limit of questions about contracts for today/i);
+  expect(alert).toHaveTextContent(/2 hours/i);
+});
+
+it("keeps the short wait message for the per-minute limit", async () => {
+  const user = userEvent.setup();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({ ok: false, status: 429, headers: new Headers({ "Retry-After": "30" }) }),
+  );
+  render(<ContractConversation contractId="c1" initial={[]} />);
+  await typeAndAsk(user, "What is the deposit?");
+  expect(await screen.findByRole("alert")).toHaveTextContent(/too many questions/i);
+});
+
+it("says when the daily limit resets even when little time is left before midnight", async () => {
+  const user = userEvent.setup();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      headers: new Headers({ "Retry-After": "90", "X-Limit-Scope": "daily" }),
+    }),
+  );
+  render(<ContractConversation contractId="c1" initial={[]} />);
+  await typeAndAsk(user, "What is the deposit?");
+  expect(await screen.findByRole("alert")).toHaveTextContent(/2 minutes/i);
 });
