@@ -343,3 +343,27 @@ def test_the_sample_contracts_hold_no_real_personal_data():
         assert "written for testing" in text
         assert not re.search(r"\b\d{10}\b|@|\b\d{4}\s\d{4}\s\d{4}\b", text), path.name
     json.loads((FIXTURES / "cases.json").read_text())
+
+
+def test_retried_uploads_leave_no_contract_behind(client):
+    """Each attempt that stored a Contract before failing must still be cleaned up."""
+    first = client.post("/contracts/stream", data={"text": RENT})
+    assert first.status_code == 200
+    assert len(client.get("/contracts").json()) == 1
+    run(client, sample())
+    assert client.get("/contracts").json() == []
+
+
+def test_a_malformed_brief_is_one_errored_contract_not_a_crashed_run(
+    client, monkeypatch
+):
+    import legallens.contract_evaluation as ce
+
+    def broken(*a, **k):
+        raise KeyError("clause_reference")
+
+    monkeypatch.setattr(ce, "_score_contract", broken)
+    result = run(client, sample())
+    assert result.contracts[0].error == "KeyError"
+    assert result.contracts[0].found_flags == []
+    assert client.get("/contracts").json() == []

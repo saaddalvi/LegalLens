@@ -245,7 +245,12 @@ def _parse_sse(text: str) -> list[tuple[str, dict]]:
         if not frame or frame.startswith(":"):
             continue
         lines = dict(line.split(": ", 1) for line in frame.split("\n") if ": " in line)
-        events.append((lines["event"], json.loads(lines["data"])))
+        if "event" not in lines or "data" not in lines:
+            continue
+        try:
+            events.append((lines["event"], json.loads(lines["data"])))
+        except ValueError:
+            continue
     return events
 
 
@@ -296,53 +301,72 @@ def _evaluate_contract(
         id=sample.id, title=sample.title, expected_flags=expected_labels
     )
     try:
-        uploaded = _upload(client, sample, sleep)
-    except Exception as exc:
-        log.exception("contract %s could not be uploaded", sample.id)
-        outcome.error = type(exc).__name__
-        return outcome
-    contract_id = uploaded["id"]
-    try:
-        stored = [
-            ClauseOut(**c)
-            for c in client.get(f"/contracts/{contract_id}").json()["clauses"]
-        ]
-        brief = uploaded["brief"]
-        numbers = {c.number for c in stored}
-        flags = brief["flagged_clauses"]
-        outcome.found_flags = [
-            FoundFlag(
-                clause=f["clause_reference"]["number"],
-                provisions=[
-                    _provision_key(c["act"], c["number"]) for c in f["citations"]
-                ],
-            )
-            for f in flags
-        ]
-        outcome.expected_found, outcome.found_correct = _flag_scores(
-            sample.expected_flags, outcome.found_flags
-        )
-        # Every Clause number the brief gives, and the text quoted for each flag.
-        cited_numbers = [t["clause"] for t in brief["key_terms"]] + [
-            n
-            for p in brief["obligations"]
-            for o in p["obligations"]
-            for n in o["clauses"]
-        ]
-        refs = [ClauseReference(**f["clause_reference"]) for f in flags]
-        outcome.clause_references_checked = len(cited_numbers) + len(refs)
-        outcome.unverified_clause_references = len(
-            [n for n in cited_numbers if n not in numbers]
-        ) + len(unverified_clause_references(refs, stored))
-        for case in sample.followups:
-            outcome.followups.append(
-                _evaluate_followup(
-                    case, sample, contract_id, stored, client, judge, sleep
-                )
+        try:
+            uploaded = _upload(client, sample, sleep)
+            _score_contract(outcome, sample, uploaded, client, judge, sleep)
+        except Exception as exc:
+            log.exception("contract %s could not be scored", sample.id)
+            # Nothing partial is kept: a half-scored Contract would skew the totals.
+            outcome = ContractOutcome(
+                id=sample.id,
+                title=sample.title,
+                expected_flags=expected_labels,
+                error=type(exc).__name__,
             )
     finally:
-        client.delete(f"/contracts/{contract_id}")
+        _delete_all(client)
     return outcome
+
+
+def _delete_all(client: _Client) -> None:
+    """Deletes every Contract the evaluation user owns, best effort. A retried upload can leave
+    a stored Contract behind, and the user belongs to the harness, so nothing else is lost."""
+    try:
+        for c in client.get("/contracts").json():
+            client.delete(f"/contracts/{c['id']}")
+    except Exception:
+        log.exception("could not delete the sample Contracts")
+
+
+def _score_contract(
+    outcome: ContractOutcome,
+    sample: SampleContract,
+    uploaded: dict,
+    client: _Client,
+    judge: Judge,
+    sleep,
+) -> None:
+    contract_id = uploaded["id"]
+    stored = [
+        ClauseOut(**c)
+        for c in client.get(f"/contracts/{contract_id}").json()["clauses"]
+    ]
+    brief = uploaded["brief"]
+    numbers = {c.number for c in stored}
+    flags = brief["flagged_clauses"]
+    outcome.found_flags = [
+        FoundFlag(
+            clause=f["clause_reference"]["number"],
+            provisions=[_provision_key(c["act"], c["number"]) for c in f["citations"]],
+        )
+        for f in flags
+    ]
+    outcome.expected_found, outcome.found_correct = _flag_scores(
+        sample.expected_flags, outcome.found_flags
+    )
+    # Every Clause number the brief gives, and the text quoted for each flag.
+    cited_numbers = [t["clause"] for t in brief["key_terms"]] + [
+        n for p in brief["obligations"] for o in p["obligations"] for n in o["clauses"]
+    ]
+    refs = [ClauseReference(**f["clause_reference"]) for f in flags]
+    outcome.clause_references_checked = len(cited_numbers) + len(refs)
+    outcome.unverified_clause_references = len(
+        [n for n in cited_numbers if n not in numbers]
+    ) + len(unverified_clause_references(refs, stored))
+    for case in sample.followups:
+        outcome.followups.append(
+            _evaluate_followup(case, sample, contract_id, stored, client, judge, sleep)
+        )
 
 
 def _evaluate_followup(
