@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import logging
 import os
+import ssl
 from typing import Protocol
 
+import certifi
 import jwt
 from jwt import PyJWKClient
 
@@ -34,7 +36,12 @@ class ClerkVerifier:
         self.issuer = issuer.rstrip("/")
         self.authorized_parties = authorized_parties
         # PyJWKClient caches the fetched keys, so the JWKS is not fetched per request.
-        self._keys = keys or PyJWKClient(f"{self.issuer}/.well-known/jwks.json")
+        # certifi's CA bundle, because a Python without system certificates (a python.org
+        # build on macOS) cannot otherwise fetch the JWKS, and every token would be refused.
+        self._keys = keys or PyJWKClient(
+            f"{self.issuer}/.well-known/jwks.json",
+            ssl_context=ssl.create_default_context(cafile=certifi.where()),
+        )
 
     @classmethod
     def from_env(cls) -> ClerkVerifier | None:

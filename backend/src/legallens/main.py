@@ -153,6 +153,9 @@ def create_app(
         try:
             return verifier.verify(token)
         except InvalidToken as exc:
+            # The reason (expired, wrong issuer, JWKS unreachable) helps whoever runs the
+            # service; the token itself is never logged.
+            logging.getLogger(__name__).warning("token refused: %s", exc)
             raise unauthorized from exc
 
     def limit(user: str = Depends(current_user)) -> None:

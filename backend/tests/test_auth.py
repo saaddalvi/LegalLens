@@ -132,3 +132,16 @@ def test_an_unauthenticated_request_does_not_use_up_anyones_allowance(make_clien
     client = make_client(rate_limiter=RateLimiter(per_minute=1, per_day=10))
     assert client.post("/ask", json={"query": QUERY}).status_code == 401
     assert client.post("/ask", json={"query": QUERY}, headers=AUTH).status_code == 200
+
+
+def test_a_refused_token_is_logged_with_its_reason_but_not_the_token(
+    make_client, caplog
+):
+    make_client().post(
+        "/ask",
+        json={"query": QUERY},
+        headers={"Authorization": "Bearer secret-garbage"},
+    )
+    text = caplog.text
+    assert "token refused: not a test token" in text
+    assert "secret-garbage" not in text
