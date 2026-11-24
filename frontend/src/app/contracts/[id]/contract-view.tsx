@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import { API_URL } from "@/lib/api-url";
+import { DISCLAIMER } from "@/lib/answer-text";
 import type { ContractDetail } from "@/lib/contract-types";
+import BriefView from "./contract-brief";
 
 type State = { contract: ContractDetail } | { error: string } | null;
 
@@ -15,7 +17,7 @@ function failure(status: number | null): string {
   return "The service is unavailable right now. Please try again shortly.";
 }
 
-// The Contract and its Clauses, verbatim. The brief and the Contract conversation come later.
+// The Contract brief, then the Contract's Clauses verbatim. The Contract conversation comes later.
 export default function ContractView({ id }: { id: string }) {
   const { getToken } = useAuth();
   const [state, setState] = useState<State>(null);
@@ -60,6 +62,11 @@ export default function ContractView({ id }: { id: string }) {
           {contract.clause_count} {contract.clause_count === 1 ? "Clause" : "Clauses"}
         </p>
       </header>
+      <p role="note" className="max-w-[68ch] text-sm text-muted">
+        {DISCLAIMER}
+      </p>
+      {contract.brief && <BriefView brief={contract.brief} />}
+      <h2 className="condensed text-xl">The Contract, Clause by Clause</h2>
       <ol className="flex flex-col gap-6">
         {contract.clauses.map((c) => (
           <li key={c.number} className="flex flex-col gap-2 border-l-2 border-stamp pl-4">

@@ -6,10 +6,12 @@
 
 **Status:** ready-for-agent
 
-- [ ] Endpoint test: a valid upload's `answer` event carries a brief whose Clause references all match stored Clause text
-- [ ] Endpoint test: a fake LLM that flags a Clause with a Hallucinated citation, then again on regeneration, yields a brief without that flag
-- [ ] Endpoint test: a Hallucinated clause reference on the first generation triggers `citation_recheck` and a valid brief
-- [ ] Endpoint test: reopening the Contract returns the stored brief without calling the LLM
-- [ ] The brief never says whether to sign (prompt rule, and an eval case in ticket 08)
-- [ ] Component tests: all brief sections render, Flagged clauses show both the Clause text and the Citation, and Citations link to `/law`
-- [ ] Lint, typecheck and tests pass
+- [x] Endpoint test: a valid upload's `answer` event carries a brief whose Clause references all match stored Clause text
+- [x] Endpoint test: a fake LLM that flags a Clause with a Hallucinated citation, then again on regeneration, yields a brief without that flag
+- [x] Endpoint test: a Hallucinated clause reference on the first generation triggers `citation_recheck` and a valid brief
+- [x] Endpoint test: reopening the Contract returns the stored brief without calling the LLM
+- [x] The brief never says whether to sign (prompt rule, and an eval case in ticket 08)
+- [x] Component tests: all brief sections render, Flagged clauses show both the Clause text and the Citation, and Citations link to `/law`
+- [x] Lint, typecheck and tests pass
+
+**Implementation notes:** all automated checks pass (backend 426 tests including the Postgres-backed ones, frontend 121). The brief is written by one `write_brief` call; Provisions given to the model are retrieved per Clause (top 2 for up to 40 Clauses, at most 20 kept). A regeneration repeats the same call without telling the model what failed. An obligation with any invalid Clause number is dropped whole. Contracts uploaded before this ticket have no brief and show their Clauses only.

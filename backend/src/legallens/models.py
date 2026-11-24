@@ -88,6 +88,49 @@ class ClauseOut(BaseModel):
     text: str
 
 
+class ClauseReference(BaseModel):
+    """A Clause of the user's Contract, quoted: the number and its verbatim stored text."""
+
+    number: str
+    text: str
+
+
+class BriefTerm(BaseModel):
+    label: str
+    value: str
+    clause: str  # a Clause number that exists in the Contract
+
+
+class Obligation(BaseModel):
+    text: str
+    clauses: list[str]  # Clause numbers that exist in the Contract
+
+
+class PartyObligations(BaseModel):
+    party: str
+    obligations: list[Obligation]
+
+
+class FlaggedClause(BaseModel):
+    """A Clause that differs from what Indian law provides. Always has a Clause reference and
+    at least one Citation verified against the Corpus."""
+
+    clause_reference: ClauseReference
+    how_it_differs: str
+    citations: list[Citation]
+
+
+class ContractBrief(BaseModel):
+    """The structured explanation of a Contract. Every Clause number in it is one of the
+    Contract's own, and every Citation was checked against the Corpus."""
+
+    parties: list[str]
+    purpose: str
+    key_terms: list[BriefTerm]
+    obligations: list[PartyObligations]
+    flagged_clauses: list[FlaggedClause]
+
+
 class ContractSummary(BaseModel):
     id: str
     title: str
@@ -98,3 +141,6 @@ class ContractSummary(BaseModel):
 
 class ContractDetail(ContractSummary):
     clauses: list[ClauseOut]
+    brief: ContractBrief | None = (
+        None  # None for a Contract uploaded before briefs existed
+    )

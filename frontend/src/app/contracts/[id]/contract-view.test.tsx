@@ -48,3 +48,88 @@ it("explains a failed load", async () => {
   render(<ContractView id="c1" />);
   expect(await screen.findByRole("alert")).toHaveTextContent(/unavailable/i);
 });
+
+const BRIEF = {
+  parties: ["Asha Rao (Landlord)", "Ravi Kumar (Tenant)"],
+  purpose: "Rent of a flat in Pune for eleven months.",
+  key_terms: [{ label: "Monthly rent", value: "Rs. 20,000", clause: "2" }],
+  obligations: [
+    {
+      party: "Tenant",
+      obligations: [{ text: "Pay the rent by the 5th.", clauses: ["2", "2.1"] }],
+    },
+  ],
+  flagged_clauses: [
+    {
+      clause_reference: { number: "3", text: "3. Deposit\nThe Tenant pays Rs. 1,00,000." },
+      how_it_differs: "The deposit is more than the Model Tenancy Act provides.",
+      citations: [
+        {
+          act: "Model Tenancy Act",
+          chapter: "Chapter II",
+          number: "11",
+          status: "model" as const,
+          text: "The security deposit shall not exceed two months' rent.",
+          superseded_by: null,
+          supersedes: null,
+        },
+      ],
+    },
+  ],
+};
+
+async function renderWithBrief(brief: unknown) {
+  stub({ ok: true, status: 200, json: async () => ({ ...CONTRACT, brief }) });
+  render(<ContractView id="c1" />);
+  await screen.findByRole("heading", { name: "Residential rent agreement" });
+}
+
+it("shows every section of the brief", async () => {
+  await renderWithBrief(BRIEF);
+  expect(screen.getByRole("heading", { name: "Parties" })).toBeInTheDocument();
+  expect(screen.getByText("Asha Rao (Landlord)")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "What it is for" })).toBeInTheDocument();
+  expect(screen.getByText(/Rent of a flat in Pune/)).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Key terms" })).toBeInTheDocument();
+  expect(screen.getByText("Monthly rent")).toBeInTheDocument();
+  expect(screen.getByText("Rs. 20,000")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "What each party must do" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Tenant" })).toBeInTheDocument();
+  expect(screen.getByText("Pay the rent by the 5th.")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Flagged clauses" })).toBeInTheDocument();
+});
+
+it("labels Clause references as your Contract's", async () => {
+  await renderWithBrief(BRIEF);
+  expect(screen.getByText("Your Contract, Clause 2")).toBeInTheDocument(); // the key term
+  expect(screen.getByText("Your Contract, Clauses 2, 2.1")).toBeInTheDocument(); // the obligation
+  expect(screen.getByText("Your Contract, Clause 3")).toBeInTheDocument(); // the flag
+});
+
+it("shows a Flagged clause's own text, how it differs, and its Citation with a link to /law", async () => {
+  await renderWithBrief(BRIEF);
+  expect(screen.getByText(/The Tenant pays Rs\. 1,00,000\./)).toBeInTheDocument();
+  expect(screen.getByText(/more than the Model Tenancy Act provides/)).toBeInTheDocument();
+  expect(screen.getByText(/security deposit shall not exceed two months/)).toBeInTheDocument();
+  const link = screen.getByRole("link", { name: /Open full Provision: Model Tenancy Act, 11/ });
+  expect(link).toHaveAttribute("href", "/law/Model%20Tenancy%20Act/11");
+  expect(screen.getByText(/not law in force by\s+itself/i)).toBeInTheDocument();
+});
+
+it("says so when no clause was flagged, and never offers a verdict on signing", async () => {
+  await renderWithBrief({ ...BRIEF, flagged_clauses: [] });
+  expect(screen.getByText(/No clause was flagged/i)).toBeInTheDocument();
+  expect(screen.queryByText(/should sign|do not sign|safe to sign/i)).not.toBeInTheDocument();
+});
+
+it("always shows the disclaimer, with or without a brief", async () => {
+  await renderWithBrief(BRIEF);
+  expect(screen.getByText(/not legal advice/i)).toBeInTheDocument();
+});
+
+it("still shows the Clauses of a Contract that has no brief", async () => {
+  await renderWithBrief(null);
+  expect(screen.queryByRole("heading", { name: "Parties" })).not.toBeInTheDocument();
+  expect(screen.getByText("Clause 7.2")).toBeInTheDocument();
+  expect(screen.getByText(/not legal advice/i)).toBeInTheDocument();
+});

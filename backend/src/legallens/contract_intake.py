@@ -22,9 +22,12 @@ from pypdf import PdfReader
 from pypdf.errors import PyPdfError
 
 from .clauses import split_clauses
+from .contract_brief import BriefWriter
+from .corpus import Corpus
 from .db import Database
 from .embeddings import Embedder
 from .llm import DocumentLLM
+from .models import ContractBrief
 
 log = logging.getLogger(__name__)
 
@@ -82,6 +85,7 @@ class Stored:
     title: str
     clause_count: int
     page_count: int
+    brief: ContractBrief
 
 
 def _pages_for(text: str) -> int:
@@ -118,8 +122,16 @@ def _clean(text: str) -> str:
 
 
 class ContractIntake:
-    def __init__(self, *, llm: DocumentLLM, embedder: Embedder, database: Database):
+    def __init__(
+        self,
+        *,
+        llm: DocumentLLM,
+        embedder: Embedder,
+        database: Database,
+        corpus: Corpus,
+    ):
         self._llm, self._embedder, self._db = llm, embedder, database
+        self._briefs = BriefWriter(llm=llm, corpus=corpus)
 
     async def process(
         self,
@@ -128,7 +140,7 @@ class ContractIntake:
         *,
         on_stage: Callable[[str, str], None] = lambda stage_id, label: None,
     ) -> Stored:
-        """Reads, checks, splits and stores a Contract for `user_id`, calling `on_stage`
+        """Reads, checks, splits, briefs and stores a Contract for `user_id`, calling `on_stage`
         (id, label) as each Stage starts. Raises Refused, or any error from a Stage."""
         text, pages, pdf = self._precheck(source)
 
@@ -157,6 +169,7 @@ class ContractIntake:
         vectors = await asyncio.to_thread(
             self._embedder.embed, [p.text for p in pieces], is_query=False
         )
+        brief = await self._briefs.write(text, pieces, on_stage=on_stage)
         title = check.title.strip()[:120] or "Untitled Contract"
         contract_id = await self._db.add_contract(
             user_id,
@@ -165,8 +178,9 @@ class ContractIntake:
             page_count=pages,
             pieces=pieces,
             vectors=vectors,
+            brief=brief,
         )
-        return Stored(contract_id, title, len({p.number for p in pieces}), pages)
+        return Stored(contract_id, title, len({p.number for p in pieces}), pages, brief)
 
     @staticmethod
     def _precheck(source: Source) -> tuple[str, int, bytes | None]:

@@ -25,13 +25,13 @@ from sqlalchemy import (
     func,
     select,
 )
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.pool import NullPool
 
 from .clauses import ClausePiece
-from .models import ClauseOut, ContractDetail, ContractSummary
+from .models import ClauseOut, ContractBrief, ContractDetail, ContractSummary
 
 EMBEDDING_DIMENSIONS = 1024  # Qwen3-Embedding-0.6B (ADR 0003)
 
@@ -81,6 +81,22 @@ class Clause(Base):
     text: Mapped[str] = mapped_column(Text)
     piece: Mapped[int] = mapped_column(Integer)
     embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIMENSIONS))
+
+
+class ContractMessage(Base):
+    """One message of a Contract conversation. The first is the Contract brief."""
+
+    __tablename__ = "contract_messages"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    contract_id: Mapped[str] = mapped_column(
+        ForeignKey("contracts.id", ondelete="CASCADE"), index=True
+    )
+    role: Mapped[str] = mapped_column(Text)
+    payload: Mapped[dict] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 @dataclass(frozen=True)
@@ -140,8 +156,10 @@ class Database:
         page_count: int,
         pieces: list[ClausePiece],
         vectors: list[list[float]],
+        brief: ContractBrief,
     ) -> str:
-        """Stores a Contract and all its Clause pieces in one transaction; returns its id."""
+        """Stores a Contract, all its Clause pieces and its brief (the first message of its
+        Contract conversation) in one transaction; returns its id."""
         contract_id = str(uuid.uuid4())
         async with self.engine.begin() as conn:
             await conn.execute(
@@ -166,6 +184,13 @@ class Database:
                     }
                     for p, v in zip(pieces, vectors, strict=True)
                 ],
+            )
+            await conn.execute(
+                insert(ContractMessage).values(
+                    contract_id=contract_id,
+                    role="assistant",
+                    payload={"type": "brief", **brief.model_dump(mode="json")},
+                )
             )
         return contract_id
 
@@ -209,6 +234,17 @@ class Database:
                 .where(Clause.contract_id == contract_id)
                 .order_by(Clause.id)
             )
+            stored = (
+                await conn.execute(
+                    select(ContractMessage.payload)
+                    .where(
+                        ContractMessage.contract_id == contract_id,
+                        ContractMessage.payload["type"].astext == "brief",
+                    )
+                    .order_by(ContractMessage.id)
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
         clauses: dict[str, ClauseOut] = {}
         for number, heading, text in pieces:
             if number in clauses:  # a later piece of the same Clause
@@ -222,6 +258,7 @@ class Database:
             page_count=head.page_count,
             clause_count=len(clauses),
             clauses=list(clauses.values()),
+            brief=ContractBrief.model_validate(stored) if stored else None,
         )
 
     async def search_clauses(

@@ -28,7 +28,15 @@ from pypdf import PdfWriter
 from legallens.contract_intake import MAX_PAGES
 from legallens.corpus import Corpus
 from legallens.db import Database
-from legallens.llm import ContractCheck
+from legallens.llm import (
+    BriefDraft,
+    ContractCheck,
+    FlagDraft,
+    ObligationDraft,
+    PartyObligationsDraft,
+    ProvisionRef,
+    TermDraft,
+)
 from legallens.main import create_app
 
 RENT = """RENT AGREEMENT
@@ -44,6 +52,7 @@ The Tenant shall pay Rs. 20,000 each month.
 The Tenant pays a deposit of Rs. 1,00,000.
 """
 STAGES = ["reading", "contract_check", "splitting", "indexing"]
+BRIEF_STAGES = ["brief", "citation_check"]
 UNREACHABLE = "postgresql://x:y@127.0.0.1:1/none?connect_timeout=1"
 
 
@@ -51,16 +60,49 @@ class Embedder1024(FakeEmbedder):
     dim = 1024
 
 
-class ContractLLM(FakeLLM):
-    """Reads PDFs as `pdf_text` and checks Contracts as `check` says."""
+def good_draft(provisions=None) -> BriefDraft:
+    """A brief whose Clause references are in RENT and whose flag cites a real Provision."""
+    return BriefDraft(
+        parties=["Asha Rao (Landlord)", "Ravi Kumar (Tenant)"],
+        purpose="Rent of a flat for eleven months.",
+        key_terms=[TermDraft(label="Rent", value="Rs. 20,000 a month", clause="2")],
+        obligations=[
+            PartyObligationsDraft(
+                party="Tenant",
+                obligations=[
+                    ObligationDraft(text="Pay the rent monthly.", clauses=["2"])
+                ],
+            )
+        ],
+        flagged_clauses=[
+            FlagDraft(
+                clause="3",
+                how_it_differs="The deposit is larger than the statute provides.",
+                citations=[ProvisionRef(act=ART_21.act, number=ART_21.number)],
+            )
+        ],
+    )
 
-    def __init__(self, check=None, pdf_text=RENT):
+
+class ContractLLM(FakeLLM):
+    """Reads PDFs as `pdf_text`, checks Contracts as `check` says and writes the briefs in
+    `drafts` in turn (the last one again when it runs out)."""
+
+    def __init__(self, check=None, pdf_text=RENT, drafts=None):
         super().__init__()
         self.check = check or ContractCheck(
             is_contract=True, is_english=True, title="Rent agreement"
         )
         self.pdf_text = pdf_text
         self.reads = 0
+        self.drafts = drafts or [good_draft()]
+        self.brief_calls = 0
+        self.brief_provisions: list = []
+
+    def write_brief(self, contract_text, clause_numbers, provisions):
+        self.brief_calls += 1
+        self.brief_provisions = provisions
+        return self.drafts[min(self.brief_calls, len(self.drafts)) - 1]
 
     def read_document(self, data, mime_type):
         self.reads += 1
@@ -245,8 +287,8 @@ def pg_client(make_app, pg):
 
 def test_a_valid_upload_streams_the_stages_and_stores_the_contract(pg_client, db):
     events = upload_text(pg_client())
-    assert [e for e, _ in events] == ["stage"] * 4 + ["answer"]
-    assert [d["id"] for e, d in events if e == "stage"] == STAGES
+    assert [e for e, _ in events] == ["stage"] * 6 + ["answer"]
+    assert [d["id"] for e, d in events if e == "stage"] == STAGES + BRIEF_STAGES
     _, answer = events[-1]
     assert answer["title"] == "Rent agreement"
     assert answer["clause_count"] == 4  # recitals as Clause 0, then 1, 2, 3
@@ -354,3 +396,148 @@ def test_an_uploaded_file_is_never_spooled_to_disk():
     from legallens.contract_intake import MAX_UPLOAD_BYTES
 
     assert MultiPartParser.spool_max_size > MAX_UPLOAD_BYTES
+
+
+# --- the Contract brief ------------------------------------------------------------------
+
+CLAUSE_TEXT = {
+    "0": RENT.split("\n\n1. Term")[0].strip(),
+    "3": "3. Deposit\nThe Tenant pays a deposit of Rs. 1,00,000.",
+}
+
+
+def brief_of(events):
+    assert events[-1][0] == "answer", events[-1]
+    return events[-1][1]["brief"]
+
+
+def stage_ids(events):
+    return [d["id"] for e, d in events if e == "stage"]
+
+
+def test_a_valid_upload_carries_a_brief_whose_clause_references_match_stored_text(
+    pg_client, db
+):
+    c = pg_client()
+    events = upload_text(c)
+    brief = brief_of(events)
+    assert brief["parties"] == ["Asha Rao (Landlord)", "Ravi Kumar (Tenant)"]
+    assert brief["purpose"].startswith("Rent of a flat")
+    assert brief["key_terms"] == [
+        {"label": "Rent", "value": "Rs. 20,000 a month", "clause": "2"}
+    ]
+    assert brief["obligations"][0]["party"] == "Tenant"
+    [flag] = brief["flagged_clauses"]
+    # The Clause text is the stored text, not the model's words.
+    assert flag["clause_reference"] == {"number": "3", "text": CLAUSE_TEXT["3"]}
+    [cite] = flag["citations"]
+    assert (cite["act"], cite["number"]) == (ART_21.act, ART_21.number)
+    assert cite["text"] == ART_21.text  # verbatim from the Corpus
+    # The brief is the first message of the Contract conversation.
+    assert db("SELECT count(*) FROM contract_messages") == 1
+    assert db("SELECT role FROM contract_messages") == "assistant"
+
+
+def test_the_model_is_given_provisions_retrieved_from_the_corpus(pg_client):
+    llm = ContractLLM()
+    upload_text(pg_client(llm=llm))
+    assert {(p.act, p.number) for p in llm.brief_provisions} <= {
+        (ART_21.act, ART_21.number),
+        (IPC_302.act, IPC_302.number),
+    }
+    assert llm.brief_provisions
+
+
+def test_a_flag_with_a_hallucinated_citation_twice_is_dropped(pg_client):
+    ghost = good_draft()
+    ghost.flagged_clauses[0].citations = [
+        ProvisionRef(act="Indian Penal Code", number="420")
+    ]
+    llm = ContractLLM(drafts=[ghost])
+    events = upload_text(pg_client(llm=llm))
+    assert stage_ids(events) == STAGES + ["brief", "citation_check", "citation_recheck"]
+    assert llm.brief_calls == 2  # one regeneration, no more
+    brief = brief_of(events)
+    assert brief["flagged_clauses"] == []
+    assert brief["key_terms"]  # the rest of the brief stands
+
+
+def test_a_flag_without_any_citation_is_dropped(pg_client):
+    bare = good_draft()
+    bare.flagged_clauses[0].citations = []
+    events = upload_text(pg_client(llm=ContractLLM(drafts=[bare])))
+    assert brief_of(events)["flagged_clauses"] == []
+    assert "citation_recheck" not in stage_ids(events)  # nothing hallucinated
+
+
+def test_a_hallucinated_clause_reference_triggers_a_recheck_and_a_valid_brief(
+    pg_client,
+):
+    bad = good_draft()
+    bad.key_terms[0].clause = "99"
+    llm = ContractLLM(drafts=[bad, good_draft()])
+    events = upload_text(pg_client(llm=llm))
+    assert stage_ids(events) == STAGES + ["brief", "citation_check", "citation_recheck"]
+    assert llm.brief_calls == 2
+    brief = brief_of(events)
+    assert brief["key_terms"][0]["clause"] == "2"
+    assert len(brief["flagged_clauses"]) == 1
+
+
+def test_clause_references_that_stay_invalid_are_dropped(pg_client):
+    bad = good_draft()
+    bad.key_terms.append(TermDraft(label="Notice", value="2 months", clause="42"))
+    bad.flagged_clauses.append(
+        FlagDraft(
+            clause="77",
+            how_it_differs="x",
+            citations=[ProvisionRef(act=ART_21.act, number=ART_21.number)],
+        )
+    )
+    bad.obligations[0].obligations.append(
+        ObligationDraft(text="Ghost.", clauses=["88"])
+    )
+    brief = brief_of(upload_text(pg_client(llm=ContractLLM(drafts=[bad]))))
+    assert [t["label"] for t in brief["key_terms"]] == ["Rent"]
+    assert [f["clause_reference"]["number"] for f in brief["flagged_clauses"]] == ["3"]
+    assert [o["text"] for o in brief["obligations"][0]["obligations"]] == [
+        "Pay the rent monthly."
+    ]
+
+
+def test_clause_numbers_are_matched_after_trimming_a_leading_word(pg_client):
+    d = good_draft()
+    d.key_terms[0].clause = "Clause 2."
+    brief = brief_of(upload_text(pg_client(llm=ContractLLM(drafts=[d]))))
+    assert brief["key_terms"][0]["clause"] == "2"
+
+
+def test_a_failing_brief_stores_nothing(pg_client, db):
+    class Boom(ContractLLM):
+        def write_brief(self, *a):
+            raise RuntimeError("Aadhaar 1234 quoted in an error")
+
+    events = upload_text(pg_client(llm=Boom()))
+    assert events[-1][0] == "error"
+    assert events[-1][1]["stage"] == "brief"
+    assert "Aadhaar" not in json.dumps(events)
+    assert db("SELECT count(*) FROM contracts") == 0
+    assert db("SELECT count(*) FROM contract_messages") == 0
+
+
+def test_reopening_a_contract_returns_the_stored_brief_without_the_llm(pg_client):
+    llm = ContractLLM()
+    c = pg_client(llm=llm)
+    events = upload_text(c)
+    cid = events[-1][1]["id"]
+    calls = llm.brief_calls
+    detail = c.get(f"/contracts/{cid}").json()
+    assert detail["brief"] == brief_of(events)
+    assert llm.brief_calls == calls == 1
+
+
+def test_deleting_a_user_deletes_the_brief(pg_client, db):
+    upload_text(pg_client("user_gone"))
+    with connect() as conn:
+        conn.execute("DELETE FROM users WHERE id = 'user_gone'")
+    assert db("SELECT count(*) FROM contract_messages") == 0

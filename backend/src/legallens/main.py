@@ -383,7 +383,9 @@ def create_app(
     def intake() -> ContractIntake:
         db = contracts_db()
         c, l, _ = deps()
-        return ContractIntake(llm=l, embedder=embedder or c.embedder, database=db)
+        return ContractIntake(
+            llm=l, embedder=embedder or c.embedder, database=db, corpus=c
+        )
 
     @app.post("/contracts/stream")
     async def upload_contract(
@@ -438,6 +440,7 @@ def create_app(
                             "id": stored.id,
                             "title": stored.title,
                             "clause_count": stored.clause_count,
+                            "brief": stored.brief.model_dump(mode="json"),
                         },
                     )
                 )
