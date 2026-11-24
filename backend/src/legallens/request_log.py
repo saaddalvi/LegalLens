@@ -12,6 +12,7 @@ from collections.abc import Callable
 
 from .language import detect_language
 from .models import AskResponse
+from .pipeline import Decisions
 
 LOGGER_NAME = "legallens.request"
 
@@ -26,11 +27,9 @@ if not log.handlers and not logging.getLogger().handlers:
 
 
 class RequestLog:
-    """Times one request and writes its record when it ends.
-
-    `trace` is filled in by the pipeline with what it decided (the Grader's score and
-    Verdict, whether the Citation check forced a rewrite) and is part of the record.
-    """
+    """Times one request and writes its record when it ends. The record includes what the
+    corrective loop decided (the Grader's score and Verdict, whether the Citation check
+    forced a rewrite), when it got that far."""
 
     def __init__(
         self,
@@ -39,7 +38,6 @@ class RequestLog:
         clock: Callable[[], float] = time.monotonic,
     ):
         self.endpoint = endpoint
-        self.trace: dict = {}
         self._language = detect_language(query)
         self._query_chars = len(query)
         self._clock = clock
@@ -55,6 +53,7 @@ class RequestLog:
         result: AskResponse | None = None,
         *,
         cache_hit: bool = False,
+        decisions: Decisions | None = None,
     ) -> None:
         """outcome: "answer", "error", or "client_gone" (the reader left mid-stream)."""
         end = self._clock()
@@ -75,7 +74,7 @@ class RequestLog:
             "cache_hit": cache_hit,
             "total_ms": round((end - self._started) * 1000),
             "stages_ms": stages_ms,
-            **self.trace,
+            **_decided(decisions),
         }
         if result is not None:
             record["response_type"] = result.response_type
@@ -83,3 +82,20 @@ class RequestLog:
         if outcome == "error" and self._stages:
             record["error_stage"] = self._stages[-1][0]
         log.info(json.dumps(record))
+
+
+def _decided(d: Decisions | None) -> dict:
+    """The Decisions that were reached, as record fields."""
+    if d is None:
+        return {}
+    out: dict = {}
+    if d.grader_score is not None:
+        out["grader_score"] = d.grader_score
+        out["verdict"] = d.verdict
+    if d.fallback_sources is not None:
+        out["fallback_sources"] = d.fallback_sources
+    if d.citation_recheck:
+        out["citation_recheck"] = True
+    if d.citation_blocked:
+        out["citation_blocked"] = True
+    return out

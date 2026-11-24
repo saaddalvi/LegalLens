@@ -1,155 +1,151 @@
-import json
-import re
+"""What POST /ask/stream does itself: Server-Sent Events framing, keepalives, the error frame,
+and stopping the work when the reader leaves. How a Query is answered is tested at the
+Answerer (test_answering.py)."""
+
+import asyncio
+import gc
+import logging
+import threading
+import time
 
 import pytest
-from fastapi.testclient import TestClient
-from test_ask import (
-    ART_21,
-    IPC_302,
-    AlwaysHallucinatingLLM,
+from conftest import (
+    QUERY,
+    BrokenLLM,
     FakeEmbedder,
+    FakeFallback,
     FakeLLM,
-    HallucinatingThenValidLLM,
+    GenerationFailsLLM,
+    ScopeFailsLLM,
+    parse_sse,
 )
-from test_crag import QUERY, RecordingFallback
+from fastapi.testclient import TestClient
 
+from legallens import main
+from legallens.answer_cache import AnswerCache
 from legallens.corpus import Corpus
-from legallens.llm import ScopeDecision
 from legallens.main import create_app
-
-HINDI_QUERY = "क्या मुझे जीवन और स्वतंत्रता का अधिकार है?"
-
-
-def make_client(tmp_path, llm, fallback=None):
-    corpus = Corpus(tmp_path / "chroma", FakeEmbedder())
-    corpus.add([ART_21, IPC_302])
-    return TestClient(
-        create_app(corpus=corpus, llm=llm, fallback=fallback or RecordingFallback())
-    )
+from legallens.models import AskRequest
+from legallens.request_log import LOGGER_NAME
 
 
-def parse(text: str) -> list[tuple[str, dict]]:
-    events = []
-    for frame in text.strip().split("\n\n"):
-        lines = dict(line.split(": ", 1) for line in frame.split("\n"))
-        events.append((lines["event"], json.loads(lines["data"])))
-    return events
+@pytest.fixture
+def make_app(make_corpus):
+    def make(llm, **kw):
+        return create_app(corpus=make_corpus(), llm=llm, fallback=FakeFallback(), **kw)
+
+    return make
 
 
-def stream(client, query=QUERY):
-    r = client.post("/ask/stream", json={"query": query})
+def stream(app, query=QUERY):
+    r = TestClient(app).post("/ask/stream", json={"query": query})
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/event-stream")
-    return parse(r.text)
+    return parse_sse(r.text)
 
 
-def stage_ids(events):
-    return [d["id"] for name, d in events if name == "stage"]
+def names(events):
+    return [n for n, _ in events]
 
 
-class OutOfScopeLLM(FakeLLM):
-    def classify(self, query):
-        return ScopeDecision(category="personal_advice", reason="Not for me.")
+def test_stages_then_one_answer_frame_equal_to_ask(make_app):
+    app = make_app(FakeLLM(score=0.9))
+    events = stream(app)
+    assert names(events) == ["stage"] * 5 + ["answer"]
+    assert events[0] == (
+        "stage",
+        {"id": "scope_check", "label": "Checking your question"},
+    )
+    assert events[-1][1] == TestClient(app).post("/ask", json={"query": QUERY}).json()
 
 
-class BrokenLLM(FakeLLM):
-    def grade(self, query, provisions):
-        raise RuntimeError("gemini down")
-
-
-CASES = {
-    "correct": (lambda: FakeLLM(score=0.9), None,
-        ["scope_check", "retrieval", "grading", "generation", "citation_check"]),
-    "ambiguous": (lambda: FakeLLM(score=0.5), None,
-        ["scope_check", "retrieval", "grading", "fallback", "generation", "citation_check"]),
-    "incorrect": (lambda: FakeLLM(score=0.1), None,
-        ["scope_check", "retrieval", "grading", "fallback", "generation"]),
-    "failed_fallback": (lambda: FakeLLM(score=0.1), RecordingFallback(fail=True),
-        ["scope_check", "retrieval", "grading", "fallback"]),
-    "recheck": (HallucinatingThenValidLLM, None,
-        ["scope_check", "retrieval", "grading", "generation", "citation_check", "citation_recheck"]),
-    "blocked": (AlwaysHallucinatingLLM, None,
-        ["scope_check", "retrieval", "grading", "generation", "citation_check", "citation_recheck"]),
-    "out_of_scope": (OutOfScopeLLM, None, ["scope_check"]),
-}
-
-
-@pytest.mark.parametrize("case", CASES)
-def test_stage_sequence_and_answer_equals_ask(tmp_path, case):
-    make_llm, fb, expected = CASES[case]
-    events = stream(make_client(tmp_path, make_llm(), fb))
-    assert stage_ids(events) == expected
-    assert [n for n, _ in events][-1] == "answer"
-    assert [n for n, _ in events].count("answer") == 1
-    fresh = make_client(tmp_path / "again", make_llm(), fb)
-    assert events[-1][1] == fresh.post("/ask", json={"query": QUERY}).json()
-
-
-def test_hindi_query_gets_hindi_labels(tmp_path):
-    events = stream(make_client(tmp_path, FakeLLM(score=0.9)), HINDI_QUERY)
-    labels = [d["label"] for n, d in events if n == "stage"]
-    assert labels
-    assert all(any("ऀ" <= ch <= "ॿ" for ch in label) for label in labels)
-
-
-def test_labels_never_show_verdict_words(tmp_path):
-    for i, (make_llm, fb, _) in enumerate(CASES.values()):
-        events = stream(make_client(tmp_path / str(i), make_llm(), fb))
-        for n, d in events:
-            if n == "stage":
-                words = set(re.findall(r"\w+", d["label"].lower()))
-                assert not {"correct", "ambiguous", "incorrect", "verdict"} & words
-
-
-def test_exception_emits_error_naming_the_running_stage(tmp_path):
-    events = stream(make_client(tmp_path, BrokenLLM()))
-    assert events[-1][0] == "error"
-    assert events[-1][1]["stage"] == "grading"
-    assert "unavailable" in events[-1][1]["message"]
-    assert "answer" not in [n for n, _ in events]
-
-
-class GenerationFailsLLM(FakeLLM):
-    def generate(self, *args, **kwargs):
-        raise RuntimeError("gemini 503")
-
-
-class ScopeFailsLLM(FakeLLM):
-    def classify(self, query):
-        raise RuntimeError("gemini 503")
-
-
-def test_failure_in_generation_streams_stages_then_error_and_ends(tmp_path):
-    events = stream(make_client(tmp_path, GenerationFailsLLM(score=0.9)))
-    assert stage_ids(events) == ["scope_check", "retrieval", "grading", "generation"]
-    assert [n for n, _ in events][-1] == "error"
-    assert [n for n, _ in events].count("error") == 1
+def test_a_failure_streams_the_stages_so_far_then_one_error_frame_naming_the_stage(
+    make_app,
+):
+    events = stream(make_app(GenerationFailsLLM(score=0.9)))
+    assert [d["id"] for n, d in events if n == "stage"] == [
+        "scope_check",
+        "retrieval",
+        "grading",
+        "generation",
+    ]
+    assert names(events)[-1] == "error" and names(events).count("error") == 1
     assert events[-1][1]["stage"] == "generation"
     assert "unavailable" in events[-1][1]["message"]
+    assert "answer" not in names(events)
 
 
-def test_failure_in_scope_check_names_scope_check(tmp_path):
-    events = stream(make_client(tmp_path, ScopeFailsLLM()))
-    assert [n for n, _ in events] == ["stage", "error"]
-    assert events[-1][1]["stage"] == "scope_check"
+@pytest.mark.parametrize(
+    ("llm", "stage"), [(ScopeFailsLLM(), "scope_check"), (BrokenLLM(), "grading")]
+)
+def test_the_error_frame_carries_the_failed_stage(make_app, llm, stage):
+    assert stream(make_app(llm))[-1][1]["stage"] == stage
 
 
-def test_ask_still_returns_503_when_generation_fails(tmp_path):
-    client = make_client(tmp_path, GenerationFailsLLM(score=0.9))
-    assert client.post("/ask", json={"query": QUERY}).status_code == 503
-
-
-def test_unavailable_dependencies_give_503_before_the_stream(tmp_path):
+def test_unavailable_dependencies_give_503_before_the_stream_starts(
+    tmp_path, monkeypatch
+):
     def broken_llm():
         raise RuntimeError("no api key")
 
-    app = create_app(corpus=Corpus(tmp_path / "c", FakeEmbedder()), fallback=RecordingFallback())
-    import legallens.main as m
-
-    original = m.GeminiLLM
-    m.GeminiLLM = broken_llm
-    try:
-        r = TestClient(app).post("/ask/stream", json={"query": QUERY})
-    finally:
-        m.GeminiLLM = original
+    monkeypatch.setattr(main, "GeminiLLM", broken_llm)
+    app = create_app(
+        corpus=Corpus(tmp_path / "c", FakeEmbedder()), fallback=FakeFallback()
+    )
+    r = TestClient(app).post("/ask/stream", json={"query": QUERY})
     assert r.status_code == 503
+    assert not r.headers["content-type"].startswith("text/event-stream")
+
+
+def test_a_slow_stage_is_covered_by_keepalive_comments(make_app, monkeypatch):
+    monkeypatch.setattr(main, "KEEPALIVE_SECONDS", 0.02)
+
+    class SlowLLM(FakeLLM):
+        def classify(self, query):
+            time.sleep(0.2)
+            return super().classify(query)
+
+    r = TestClient(make_app(SlowLLM())).post("/ask/stream", json={"query": QUERY})
+    assert ": keepalive\n\n" in r.text
+    assert names(parse_sse(r.text))[-1] == "answer"
+
+
+def test_a_cache_hit_streams_a_single_answer_frame(make_app):
+    app = make_app(FakeLLM(), cache=AnswerCache())
+    answer = TestClient(app).post("/ask", json={"query": QUERY}).json()
+    assert stream(app) == [("answer", answer)]
+
+
+def test_a_reader_who_leaves_cancels_the_work(make_app, caplog):
+    caplog.set_level(logging.INFO, logger=LOGGER_NAME)
+    gate = threading.Event()
+
+    class GatedLLM(FakeLLM):
+        graded = False
+
+        def classify(self, query):
+            gate.wait(timeout=5)  # the reader leaves while this runs
+            return super().classify(query)
+
+        def grade(self, query, provisions):
+            self.graded = True
+            return super().grade(query, provisions)
+
+    llm = GatedLLM()
+    route = next(r for r in make_app(llm).routes if r.path == "/ask/stream")
+    body = route.endpoint(AskRequest(query=QUERY)).body_iterator
+
+    async def read_one_frame_then_leave():
+        first = await body.__anext__()
+        assert first.startswith("event: stage")  # the first Stage was sent
+        await body.aclose()  # disconnect
+
+    asyncio.run(read_one_frame_then_leave())
+    gc.collect()
+    gate.set()
+
+    deadline = time.monotonic() + 5
+    while "client_gone" not in caplog.text and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert '"outcome": "client_gone"' in caplog.text
+    assert not llm.graded

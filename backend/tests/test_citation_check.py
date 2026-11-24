@@ -1,4 +1,4 @@
-from test_ask import ART_21, FakeEmbedder
+from conftest import ART_21, FakeEmbedder
 
 from legallens.citation_check import check_citations
 from legallens.corpus import Corpus
@@ -13,7 +13,9 @@ def make_corpus(tmp_path, provisions):
 
 def test_citation_present_in_corpus_is_valid(tmp_path):
     corpus = make_corpus(tmp_path, [ART_21])
-    result = check_citations([ProvisionRef(act=ART_21.act, number=ART_21.number)], corpus=corpus)
+    result = check_citations(
+        [ProvisionRef(act=ART_21.act, number=ART_21.number)], corpus=corpus
+    )
     assert result.hallucinated == []
     assert len(result.valid) == 1
     assert result.valid[0].text == ART_21.text

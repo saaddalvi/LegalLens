@@ -1,8 +1,8 @@
 from urllib.parse import quote
 
 import pytest
+from conftest import ART_21, IPC_302, FakeEmbedder, FakeFallback, FakeLLM
 from fastapi.testclient import TestClient
-from test_ask import ART_21, IPC_302, FakeEmbedder, FakeFallback, FakeLLM
 
 from legallens.corpus import Corpus
 from legallens.main import create_app

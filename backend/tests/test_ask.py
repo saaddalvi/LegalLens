@@ -1,209 +1,59 @@
-import hashlib
-import re
+"""What POST /ask does itself: it turns the Answerer's result into JSON and its failure into a 503.
+How a Query is answered is tested at the Answerer (test_answering.py)."""
 
 import pytest
+from conftest import ART_21, FakeEmbedder, FakeFallback, FakeLLM, GenerationFailsLLM
 from fastapi.testclient import TestClient
 
+from legallens import main
 from legallens.corpus import Corpus
-from legallens.llm import Generation, ProvisionRef, ScopeDecision
 from legallens.main import create_app
-from legallens.models import Provision
-from legallens.pipeline import TOP_K
-
-ART_21 = Provision(
-    act="Constitution of India",
-    chapter="Part III",
-    number="21",
-    status="in_force",
-    text="No person shall be deprived of his life or personal liberty except according to procedure established by law.",
-)
-IPC_302 = Provision(
-    act="Indian Penal Code",
-    chapter="Chapter XVI",
-    number="302",
-    status="repealed",
-    text="Whoever commits murder shall be punished with death, or imprisonment for life, and shall also be liable to fine.",
-)
-
-
-class FakeEmbedder:
-    """Deterministic bag-of-words hashing embedder; no model download."""
-
-    dim = 64
-
-    def embed(self, texts: list[str], *, is_query: bool) -> list[list[float]]:
-        out = []
-        for t in texts:
-            v = [0.0] * self.dim
-            for w in re.findall(r"\w+", t.lower()):
-                v[int(hashlib.md5(w.encode()).hexdigest(), 16) % self.dim] += 1.0
-            out.append(v)
-        return out
-
-
-class GradingStub:
-    """Grader and rewriter defaults: retrieval is judged fully relevant."""
-
-    score = 1.0
-
-    def classify(self, query):
-        return ScopeDecision(category="in_scope")
-
-    def grade(self, query, provisions):
-        return self.score
-
-    def rewrite(self, query):
-        return query
-
-
-class FakeLLM(GradingStub):
-    """Cites the top retrieved Provision, as a well-behaved Gemini would."""
-
-    def __init__(self, score: float = 1.0):
-        self.score = score
-        self.seen: list[Provision] = []
-        self.sources_seen = ()
-
-    def generate(self, query, provisions, sources=(), language="en"):
-        self.seen = provisions
-        self.sources_seen = sources
-        if not provisions:
-            return Generation(answer="Web-based summary.", citations=[])
-        top = provisions[0]
-        return Generation(
-            answer=f"Plain-language summary of {top.act} {top.number}.",
-            citations=[ProvisionRef(act=top.act, number=top.number)],
-        )
-
-
-class FakeFallback:
-    def search(self, query):
-        return []
-
-
-class HallucinatingThenValidLLM(GradingStub):
-    """Cites a Provision absent from the Corpus once, then recovers on regeneration."""
-
-    def __init__(self):
-        self.calls = 0
-
-    def generate(self, query, provisions, sources=(), language="en"):
-        self.calls += 1
-        if self.calls == 1:
-            return Generation(
-                answer="Ghost citation answer.",
-                citations=[ProvisionRef(act="Indian Penal Code", number="420")],
-            )
-        top = provisions[0]
-        return Generation(
-            answer=f"Plain-language summary of {top.act} {top.number}.",
-            citations=[ProvisionRef(act=top.act, number=top.number)],
-        )
-
-
-class AlwaysHallucinatingLLM(GradingStub):
-    """Cites a Provision absent from the Corpus on every call."""
-
-    def __init__(self):
-        self.calls = 0
-
-    def generate(self, query, provisions, sources=(), language="en"):
-        self.calls += 1
-        return Generation(
-            answer="Ghost citation answer.",
-            citations=[ProvisionRef(act="Indian Penal Code", number="420")],
-        )
 
 
 @pytest.fixture
-def client(tmp_path):
-    corpus = Corpus(tmp_path / "chroma", FakeEmbedder())
-    corpus.add([ART_21, IPC_302])
-    return TestClient(create_app(corpus=corpus, llm=FakeLLM(), fallback=FakeFallback()))
+def make_client(make_corpus):
+    def make(llm=None, **kw):
+        return TestClient(
+            create_app(
+                corpus=make_corpus(),
+                llm=llm or FakeLLM(),
+                fallback=FakeFallback(),
+                **kw,
+            )
+        )
+
+    return make
 
 
-def test_query_returns_answer_with_verbatim_citation(client):
-    r = client.post("/ask", json={"query": "Can I be deprived of personal liberty?"})
+def test_a_query_returns_the_answer_as_json(make_client):
+    r = make_client().post(
+        "/ask", json={"query": "Can I be deprived of personal liberty?"}
+    )
     assert r.status_code == 200
     body = r.json()
     assert body["answer"]
     assert body["answer_language"] == "en"
     assert body["trust_label"] == "corpus"
-    assert body["fallback_sources"] == []
-    assert len(body["citations"]) >= 1
-    c = body["citations"][0]
-    assert c["act"] == "Constitution of India"
-    assert c["number"] == "21"
-    assert c["status"] == "in_force"
-    assert c["text"] == ART_21.text
+    assert body["citations"][0]["text"] == ART_21.text
 
 
-def test_repealed_provision_citation_carries_status(client):
-    body = client.post("/ask", json={"query": "punishment for murder death imprisonment"}).json()
-    assert body["citations"][0]["status"] == "repealed"
+def test_a_blank_query_is_rejected(make_client):
+    assert make_client().post("/ask", json={"query": "  "}).status_code == 422
 
 
-def test_empty_query_is_rejected(client):
-    assert client.post("/ask", json={"query": "  "}).status_code == 422
-
-
-def test_hallucinated_citation_triggers_regeneration(tmp_path):
-    corpus = Corpus(tmp_path / "chroma", FakeEmbedder())
-    corpus.add([ART_21])
-    llm = HallucinatingThenValidLLM()
-    c = TestClient(create_app(corpus=corpus, llm=llm, fallback=FakeFallback()))
-    r = c.post("/ask", json={"query": "Can I be deprived of personal liberty?"})
-    assert r.status_code == 200
-    body = r.json()
-    assert llm.calls == 2
-    refs = [(cit["act"], cit["number"]) for cit in body["citations"]]
-    assert ("Indian Penal Code", "420") not in refs
-    assert ("Constitution of India", "21") in refs
-
-
-def test_hallucinated_citation_after_regeneration_is_blocked(tmp_path):
-    corpus = Corpus(tmp_path / "chroma", FakeEmbedder())
-    corpus.add([ART_21])
-    llm = AlwaysHallucinatingLLM()
-    c = TestClient(create_app(corpus=corpus, llm=llm, fallback=FakeFallback()))
-    r = c.post("/ask", json={"query": "Can I be deprived of personal liberty?"})
-    assert r.status_code == 200
-    body = r.json()
-    assert llm.calls == 2
-    assert body["citations"] == []
-    assert "cannot answer reliably" in body["answer"].lower()
-
-
-def test_llm_failure_returns_503(tmp_path):
-    class BrokenLLM(GradingStub):
-        def generate(self, query, provisions, sources=(), language="en"):
-            raise RuntimeError("quota")
-
-    corpus = Corpus(tmp_path / "chroma", FakeEmbedder())
-    corpus.add([ART_21])
-    c = TestClient(create_app(corpus=corpus, llm=BrokenLLM(), fallback=FakeFallback()))
-    r = c.post("/ask", json={"query": "liberty"})
+def test_a_failure_while_answering_returns_503(make_client):
+    r = make_client(GenerationFailsLLM(score=0.9)).post(
+        "/ask", json={"query": "liberty"}
+    )
     assert r.status_code == 503
 
 
-def test_the_llm_sees_the_ten_best_matches_so_lower_ranked_provisions_are_not_lost(
-    tmp_path,
-):
-    # Real-Corpus ranks of the expected Provisions for "When must my employer pay my wages?" (8)
-    # and the working-hours Query (10) were just outside the old top five.
-    wages = [
-        Provision(
-            act="Code on Wages",
-            chapter="Chapter II",
-            number=str(n),
-            status="in_force",
-            text=f"employer pays wages {n}",
-        )
-        for n in range(1, 11)
-    ]
-    corpus = Corpus(tmp_path / "chroma", FakeEmbedder())
-    corpus.add(wages)
-    llm = FakeLLM()
-    client = TestClient(create_app(corpus=corpus, llm=llm, fallback=FakeFallback()))
-    client.post("/ask", json={"query": "employer pays wages"})
-    assert len(llm.seen) == TOP_K == 10
+def test_unavailable_dependencies_return_503(tmp_path, monkeypatch):
+    def broken_llm():
+        raise RuntimeError("no api key")
+
+    monkeypatch.setattr(main, "GeminiLLM", broken_llm)
+    app = create_app(
+        corpus=Corpus(tmp_path / "c", FakeEmbedder()), fallback=FakeFallback()
+    )
+    assert TestClient(app).post("/ask", json={"query": "liberty"}).status_code == 503

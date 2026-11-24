@@ -165,7 +165,7 @@ for the Gemini free tier, so a full run takes about 20 minutes and uses roughly 
 
 - **Retrieval hit-rate**: the response cites at least one of the case's expected Provisions (cases with expected Provisions only).
 - **Answer accuracy**: a Gemini judge compares the answer with the case's reference points. Out-of-scope cases are correct only when refused, and Hindi cases only when answered in Hindi.
-- **Citation validity (after blocking)**: no Citation in the response fails the Hallucinated-citation check against the Corpus. This is 100% by construction, because the endpoint blocks Hallucinated citations.
+- **Citation validity (guard: 100% by construction)**: no Citation in the response fails the Hallucinated-citation check against the Corpus. This is a guard, not a measurement: the Answerer blocks any answer with an unverified Citation.
 - **Hallucinated citations before blocking**: the share of generated answers whose first generation cited a Provision missing from the Corpus. It counts only generations that had Provisions to cite, so CRAG answers from web sources alone are not in it.
 
 The report shows case counts per mode, because a mode that hit Gemini errors on different cases is scored on different cases.
@@ -181,7 +181,7 @@ The 2026-11-17 run scored CRAG on 33 cases (three failed on Gemini 503s), so the
 |---|---|---|
 | Retrieval hit-rate | 96% | 92% |
 | Answer accuracy | 86% | 94% |
-| Citation validity (after blocking) | 100% | 100% |
+| Citation validity (guard: 100% by construction) | 100% | 100% |
 | Hallucinated citations before blocking | 0% | 0% |
 
 | Category (answer accuracy) | Cases (plain / CRAG) | Plain RAG | CRAG |

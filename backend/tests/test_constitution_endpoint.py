@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
 
+from conftest import FakeEmbedder, FakeFallback, FakeLLM
 from fastapi.testclient import TestClient
-from test_ask import FakeEmbedder, FakeFallback, FakeLLM
 
 from legallens.build_corpus import build
 from legallens.corpus import Corpus

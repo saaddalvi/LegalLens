@@ -13,10 +13,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from .answer_cache import AnswerCache
+from .answering import Answerer, Cancelled, Stage, StageFailed
 from .corpus import Corpus
 from .embeddings import LocalEmbedder
 from .fallback import WebFallback, default_fallback
-from .language import detect_language
 from .llm import LLM, GeminiLLM
 from .models import (
     ActIndex,
@@ -26,9 +26,7 @@ from .models import (
     Provision,
     ProvisionSummary,
 )
-from .pipeline import STAGE_LABELS, answer_query
 from .rate_limit import RateLimiter
-from .request_log import RequestLog
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 FIXTURE = BACKEND_DIR / "fixtures" / "sample_provisions.json"
@@ -75,10 +73,6 @@ def is_fixture_corpus(corpus: Corpus) -> bool:
 
 
 KEEPALIVE_SECONDS = 10
-
-
-class _ClientGone(Exception):
-    """Raised inside the pipeline thread when the streaming client disconnected."""
 
 
 def _frame(name: str, data: dict) -> str:
@@ -135,6 +129,11 @@ def create_app(
             llm or GeminiLLM(),
             fallback or default_fallback(),
         )
+
+    @lru_cache(maxsize=1)
+    def answerer() -> Answerer:
+        c, l, f = deps()
+        return Answerer(corpus=c, llm=l, fallback=f, crag=crag, cache=cache)
 
     def limit(request: Request) -> None:
         """Rejects with 429 before any work starts, so a streamed answer never begins."""
@@ -210,96 +209,49 @@ def create_app(
             raise HTTPException(404, "No such Provision in the Corpus.")
         return found
 
+    UNAVAILABLE = "The service is unavailable. Please retry shortly."
+
+    def get_answerer() -> Answerer:
+        try:
+            return answerer()
+        except Exception as exc:
+            logging.getLogger(__name__).exception("dependencies unavailable")
+            raise HTTPException(503, UNAVAILABLE) from exc
+
     @app.post("/ask", response_model=AskResponse, dependencies=[Depends(limit)])
     def ask(req: AskRequest) -> AskResponse:
-        rlog = RequestLog("ask", req.query)
-        if cache and (hit := cache.get(req.query, crag)):
-            rlog.finish("answer", hit, cache_hit=True)
-            return hit
         try:
-            c, l, f = deps()
-            result = answer_query(
-                req.query,
-                corpus=c,
-                llm=l,
-                fallback=f,
-                crag=crag,
-                on_stage=rlog.stage,
-                trace=rlog.trace,
-            )
-            if cache:
-                cache.put(req.query, crag, result)
-        except Exception as exc:
-            logging.getLogger(__name__).exception("answer generation failed")
-            rlog.finish("error")
-            raise HTTPException(
-                503, "The service is unavailable. Please retry shortly."
-            ) from exc
-        rlog.finish("answer", result)
-        return result
+            return get_answerer().answer(req.query, endpoint="ask").response
+        except StageFailed as exc:
+            raise HTTPException(503, UNAVAILABLE) from exc
 
     @app.post("/ask/stream", dependencies=[Depends(limit)])
     def ask_stream(req: AskRequest) -> StreamingResponse:
-        rlog = RequestLog("ask_stream", req.query)
-        if cache and (hit := cache.get(req.query, crag)):
-            # No Stages to show: the verified answer is already known.
-            rlog.finish("answer", hit, cache_hit=True)
-            return StreamingResponse(
-                iter([_frame("answer", hit.model_dump(mode="json"))]),
-                media_type="text/event-stream",
-                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-            )
-        try:
-            c, l, f = deps()
-        except Exception as exc:
-            logging.getLogger(__name__).exception("dependencies unavailable")
-            rlog.finish("error")
-            raise HTTPException(
-                503, "The service is unavailable. Please retry shortly."
-            ) from exc
-        language = detect_language(req.query)
+        a = get_answerer()  # 503 here, before any stream starts
         events: queue.Queue[tuple[str, dict] | None] = queue.Queue()
-        current: list[str] = []
         cancelled = threading.Event()
 
-        def on_stage(stage_id: str) -> None:
-            if cancelled.is_set():
-                raise _ClientGone()
-            current[:] = [stage_id]
-            rlog.stage(stage_id)
-            events.put(
-                ("stage", {"id": stage_id, "label": STAGE_LABELS[stage_id][language]})
-            )
+        def on_stage(stage: Stage) -> None:
+            events.put(("stage", {"id": stage.id, "label": stage.label}))
 
         def work() -> None:
             try:
-                result = answer_query(
+                answered = a.answer(
                     req.query,
-                    corpus=c,
-                    llm=l,
-                    fallback=f,
-                    crag=crag,
+                    endpoint="ask_stream",
                     on_stage=on_stage,
-                    trace=rlog.trace,
+                    cancel=cancelled,
                 )
-                if cache:
-                    cache.put(req.query, crag, result)
-                events.put(("answer", result.model_dump(mode="json")))
-                rlog.finish("answer", result)
-            except _ClientGone:
-                rlog.finish("client_gone")
+                events.put(("answer", answered.response.model_dump(mode="json")))
+            except Cancelled:
+                pass  # the reader is gone
+            except StageFailed as exc:
+                events.put(("error", {"stage": exc.stage, "message": UNAVAILABLE}))
             except Exception:
-                logging.getLogger(__name__).exception("answer generation failed")
-                rlog.finish("error")
-                events.put(
-                    (
-                        "error",
-                        {
-                            "stage": current[0] if current else None,
-                            "message": "The service is unavailable. Please retry shortly.",
-                        },
-                    )
+                logging.getLogger(__name__).exception(
+                    "answering failed outside a Stage"
                 )
+                events.put(("error", {"stage": None, "message": UNAVAILABLE}))
             finally:
                 events.put(None)
 
@@ -317,7 +269,7 @@ def create_app(
                         return
                     yield _frame(*event)
             finally:
-                # Client left: stop the pipeline at its next Stage.
+                # Client left: stop the work at its next Stage.
                 cancelled.set()
 
         return StreamingResponse(

@@ -1,5 +1,6 @@
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Literal
 
 from .citation_check import check_citations
@@ -49,41 +50,29 @@ DEFAULT_REFORMULATION: dict[Language, str] = {
     "hi": "आप जिस स्थिति के बारे में पूछ रहे हैं, उसके बारे में भारतीय कानून क्या कहता है?",
 }
 
-# Stages the pipeline reports through its progress callback, with plain-language labels.
-STAGE_LABELS: dict[str, dict[Language, str]] = {
-    "scope_check": {
-        "en": "Checking your question",
-        "hi": "आपके प्रश्न की जाँच हो रही है",
-    },
-    "retrieval": {
-        "en": "Searching the statutes",
-        "hi": "कानूनों में खोज हो रही है",
-    },
-    "grading": {
-        "en": "Checking whether the statutes answer your question",
-        "hi": "जाँच हो रही है कि कानून आपके प्रश्न का उत्तर देते हैं या नहीं",
-    },
-    "fallback": {
-        "en": "Searching the web for more information",
-        "hi": "अधिक जानकारी के लिए वेब पर खोज हो रही है",
-    },
-    "generation": {
-        "en": "Writing the answer",
-        "hi": "उत्तर लिखा जा रहा है",
-    },
-    "citation_check": {
-        "en": "Verifying citations against the statutes",
-        "hi": "उद्धरणों की कानूनों से पुष्टि हो रही है",
-    },
-    "citation_recheck": {
-        "en": "A citation could not be verified; rewriting and rechecking",
-        "hi": "एक उद्धरण की पुष्टि नहीं हो सकी; उत्तर दोबारा लिखकर जाँचा जा रहा है",
-    },
-}
-
 StageCallback = Callable[[str], None]
 
+
+@dataclass
+class Decisions:
+    """What the corrective loop decided on the way to an answer. None means the decision
+    was never reached (no Grader in plain RAG, no Fallback after a Correct verdict)."""
+
+    grader_score: float | None = None
+    verdict: Verdict | None = None
+    fallback_sources: int | None = None  # how many sources the Fallback returned
+    # Whether the first generation cited a Provision missing from the Corpus and so needed a
+    # rewrite; None when no generation with Provisions was checked.
+    citation_recheck: bool | None = None
+    # The rewrite was still unverified, so the answer was blocked.
+    citation_blocked: bool = False
+
+
 log = logging.getLogger(__name__)
+
+
+class Cancelled(Exception):
+    """The reader left: stop at the next Stage boundary. Error handling must let it through."""
 
 
 def verdict_for(score: float) -> Verdict:
@@ -146,6 +135,8 @@ def _search_fallback(
     """Rewrite the Query and run the Fallback; any provider failure yields no sources."""
     try:
         return fallback.search(llm.rewrite(query))
+    except Cancelled:
+        raise
     except Exception:
         log.exception("web Fallback failed")
         return []
@@ -161,11 +152,10 @@ def _answer(
     trust_label: TrustLabel,
     language: Language,
     on_stage: StageCallback | None = None,
-    trace: dict | None = None,
+    decisions: Decisions,
 ) -> AskResponse:
     """Generate, verifying Citations against the Corpus (one regeneration, then block)."""
     stage = on_stage or (lambda _id: None)
-    note = trace if trace is not None else {}
     if not provisions:
         # Fallback-only answer: web sources are listed, never cited as Provisions.
         stage("generation")
@@ -181,13 +171,13 @@ def _answer(
     gen = llm.generate(query, provisions, sources, language=language)
     stage("citation_check")
     result = check_citations(gen.citations, corpus=corpus)
+    decisions.citation_recheck = not result.all_valid
     if not result.all_valid:
         stage("citation_recheck")
-        note["citation_recheck"] = True
         gen = llm.generate(query, provisions, sources, language=language)
         result = check_citations(gen.citations, corpus=corpus)
     if not result.all_valid:
-        note["citation_blocked"] = True
+        decisions.citation_blocked = True
         log.warning("answer blocked: a Citation could not be verified after a rewrite")
         return _refusal(CANNOT_ANSWER_RELIABLY, language)
     return AskResponse(
@@ -207,13 +197,12 @@ def answer_query(
     fallback: WebFallback,
     crag: bool = True,
     on_stage: StageCallback | None = None,
-    trace: dict | None = None,
+    decisions: Decisions,
 ) -> AskResponse:
     """Corrective RAG (ADR 0001); with crag=False, the plain-RAG baseline.
 
-    `trace`, when given, is filled in with what the pipeline decided (the Grader's score and
-    Verdict, how many Fallback sources came back, whether a Citation forced a rewrite or
-    blocked the answer), for the request log.
+    `decisions` is filled in as the pipeline decides (the Grader's score and Verdict, how many
+    Fallback sources came back, whether a Citation forced a rewrite or blocked the answer).
 
     Out-of-scope queries are refused first, before any retrieval. The Grader scores retrieved Chunks into a Verdict. Correct: answer from Chunks.
     Ambiguous: Chunks plus Fallback results. Incorrect: Fallback results only. A
@@ -221,7 +210,6 @@ def answer_query(
     "cannot answer" (incorrect).
     """
     stage = on_stage or (lambda _id: None)
-    note = trace if trace is not None else {}
     language = detect_language(query)
     stage("scope_check")
     scope = llm.classify(query)
@@ -251,13 +239,14 @@ def answer_query(
             trust_label="corpus",
             language=language,
             on_stage=on_stage,
-            trace=note,
+            decisions=decisions,
         )
 
     stage("grading")
     score = llm.grade(query, provisions)
     verdict = verdict_for(score)
-    note.update(grader_score=round(score, 2), verdict=verdict)
+    decisions.grader_score = round(score, 2)
+    decisions.verdict = verdict
     if verdict == "correct":
         return _answer(
             query,
@@ -268,12 +257,12 @@ def answer_query(
             trust_label="corpus",
             language=language,
             on_stage=on_stage,
-            trace=note,
+            decisions=decisions,
         )
 
     stage("fallback")
     sources = _search_fallback(query, llm=llm, fallback=fallback)
-    note["fallback_sources"] = len(sources)
+    decisions.fallback_sources = len(sources)
     if verdict == "ambiguous":
         if not sources:
             return _answer(
@@ -285,7 +274,7 @@ def answer_query(
                 trust_label="corpus",
                 language=language,
                 on_stage=on_stage,
-                trace=note,
+                decisions=decisions,
             )
         return _answer(
             query,
@@ -296,7 +285,7 @@ def answer_query(
             trust_label="corpus_and_fallback",
             language=language,
             on_stage=on_stage,
-            trace=note,
+            decisions=decisions,
         )
     if not sources:
         return _refusal(CANNOT_ANSWER_NO_SOURCES, language)
@@ -309,5 +298,5 @@ def answer_query(
         trust_label="fallback",
         language=language,
         on_stage=on_stage,
-        trace=note,
+        decisions=decisions,
     )

@@ -1,11 +1,8 @@
 """A long Provision is found by a Query that matches only one part of it."""
 
-import pytest
-from fastapi.testclient import TestClient
-from test_ask import FakeEmbedder, FakeFallback, FakeLLM
+from conftest import FakeEmbedder
 
 from legallens.corpus import Corpus
-from legallens.main import create_app
 from legallens.models import Provision
 
 
@@ -13,7 +10,9 @@ class WideEmbedder(FakeEmbedder):
     dim = 4096
 
 
-FILLER = " ".join(["registers records authority prescribed notice period"] * 14)  # ~790 chars
+FILLER = " ".join(
+    ["registers records authority prescribed notice period"] * 14
+)  # ~790 chars
 KEY = "(7) Whoever dishonestly takes a movable phone commits theft."
 LONG = Provision(
     act="Test Code",
@@ -32,22 +31,6 @@ DECOYS = [
     )
     for i in range(12)
 ]
-
-
-@pytest.fixture
-def client(tmp_path):
-    corpus = Corpus(tmp_path / "chroma", WideEmbedder())
-    corpus.add([LONG, *DECOYS])
-    return TestClient(create_app(corpus=corpus, llm=FakeLLM(), fallback=FakeFallback()))
-
-
-def test_query_matching_one_part_of_a_long_provision_cites_the_whole_provision(client):
-    body = client.post(
-        "/ask", json={"query": "Whoever dishonestly takes a movable phone commits theft"}
-    ).json()
-    c = body["citations"][0]
-    assert (c["act"], c["number"]) == ("Test Code", "303")
-    assert c["text"] == LONG.text  # the full verbatim Provision, not the matching part
 
 
 def test_each_provision_is_counted_once(tmp_path):

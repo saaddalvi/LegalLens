@@ -1,5 +1,5 @@
-"""Evaluation harness: a golden Q&A set run through the question endpoint in plain-RAG and
-CRAG modes against a Corpus, scored on retrieval hit-rate, answer accuracy and citation validity.
+"""Evaluation harness: a golden Q&A set answered by an Answerer in plain-RAG and CRAG modes
+against a Corpus, scored on retrieval hit-rate, answer accuracy and citation validity.
 
 Run it with `python -m legallens.evaluate`.
 """
@@ -13,14 +13,13 @@ from functools import partial
 from pathlib import Path
 from typing import Literal, Protocol
 
-from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
+from .answering import Answerer
 from .citation_check import check_citations
 from .corpus import Corpus
 from .fallback import WebFallback
 from .llm import LLM, ProvisionRef
-from .main import create_app
 from .models import AskResponse
 
 Category = Literal[
@@ -51,9 +50,10 @@ class Metrics(BaseModel):
     cases: int
     retrieval_hit_rate: float | None  # None when no case has expected Provisions
     answer_accuracy: float
-    citation_validity: float  # after the endpoint blocks Hallucinated citations
+    # A guard, 100% by construction: the Answerer blocks any answer with an unverified Citation.
+    citation_validity: float
     # Share of generated answers whose first generation cited a Provision missing from the Corpus
-    # (before the endpoint's block); None when no case reached a checked generation.
+    # (before the Answerer's block); None when no case reached a checked generation.
     hallucinated_before_block_rate: float | None
 
 
@@ -118,29 +118,6 @@ def _metrics(outcomes: list[CaseOutcome]) -> Metrics:
     )
 
 
-class _GenerationRecorder:
-    """Wraps an LLM, recording whether the first generation of each Query that had Provisions
-    cited a Provision missing from the Corpus: what the endpoint's block hides from the response."""
-
-    def __init__(self, llm: LLM, corpus: Corpus):
-        self._llm, self._corpus = llm, corpus
-        self.first_hallucinated: bool | None = None
-
-    def reset(self) -> None:
-        self.first_hallucinated = None
-
-    def generate(self, query, provisions, *args, **kwargs):
-        gen = self._llm.generate(query, provisions, *args, **kwargs)
-        if provisions and self.first_hallucinated is None:
-            self.first_hallucinated = not check_citations(
-                gen.citations, corpus=self._corpus
-            ).all_valid
-        return gen
-
-    def __getattr__(self, name):
-        return getattr(self._llm, name)
-
-
 def _evaluate_case(
     case: GoldenCase,
     response: AskResponse,
@@ -173,12 +150,6 @@ def _evaluate_case(
     )
 
 
-def _ask(client: TestClient, query: str) -> AskResponse:
-    r = client.post("/ask", json={"query": query})
-    r.raise_for_status()
-    return AskResponse(**r.json())
-
-
 def run_evaluation(
     cases: list[GoldenCase],
     *,
@@ -187,25 +158,23 @@ def run_evaluation(
     fallback: WebFallback,
     judge: Judge,
 ) -> EvaluationResult:
-    """Ask every case through the endpoint in both modes and score the responses."""
+    """Answer every case in both modes, with no answer cache, and score the responses."""
     modes: dict[str, ModeResult] = {}
     for mode, crag in (("plain", False), ("crag", True)):
-        recorder = _GenerationRecorder(llm, corpus)
-        client = TestClient(
-            create_app(corpus=corpus, llm=recorder, fallback=fallback, crag=crag)
-        )
+        answerer = Answerer(corpus=corpus, llm=llm, fallback=fallback, crag=crag)
         outcomes = []
         for case in cases:
             try:
-                recorder.reset()
-                r = _with_retries(partial(_ask, client, case.query))
+                answered = _with_retries(
+                    partial(answerer.answer, case.query, endpoint="evaluation")
+                )
                 outcomes.append(
                     _evaluate_case(
                         case,
-                        r,
+                        answered.response,
                         corpus=corpus,
                         judge=judge,
-                        hallucinated_before_block=recorder.first_hallucinated,
+                        hallucinated_before_block=answered.decisions.citation_recheck,
                     )
                 )
             except Exception as exc:
@@ -243,7 +212,7 @@ def render_report(result: EvaluationResult) -> str:
     metrics = (
         ("Retrieval hit-rate", "retrieval_hit_rate"),
         ("Answer accuracy", "answer_accuracy"),
-        ("Citation validity (after blocking)", "citation_validity"),
+        ("Citation validity (guard: 100% by construction)", "citation_validity"),
         (
             "Hallucinated citations before blocking",
             "hallucinated_before_block_rate",

@@ -28,9 +28,7 @@ class AnswerCache:
         self.max_entries = max_entries
         self.ttl_seconds = ttl_seconds
         self._clock = clock
-        self._entries: OrderedDict[tuple[str, bool], tuple[float, AskResponse]] = (
-            OrderedDict()
-        )
+        self._entries: OrderedDict[str, tuple[float, AskResponse]] = OrderedDict()
         self._lock = threading.Lock()
 
     @classmethod
@@ -42,8 +40,8 @@ class AnswerCache:
             return None
         return cls(size, float(os.environ.get("ANSWER_CACHE_TTL_SECONDS", "86400")))
 
-    def get(self, query: str, crag: bool) -> AskResponse | None:
-        key = (_normalise(query), crag)
+    def get(self, query: str) -> AskResponse | None:
+        key = _normalise(query)
         with self._lock:
             entry = self._entries.get(key)
             if entry is None:
@@ -55,13 +53,13 @@ class AnswerCache:
             self._entries.move_to_end(key)
             return response
 
-    def put(self, query: str, crag: bool, response: AskResponse) -> None:
+    def put(self, query: str, response: AskResponse) -> None:
         # A "cannot answer" may come from a temporary outage of the Fallback or of
         # Citation checking, and may succeed next time. A refusal of an Out-of-scope
         # query is settled, so it is kept.
         if response.response_type == "answer" and response.trust_label == "none":
             return
-        key = (_normalise(query), crag)
+        key = _normalise(query)
         with self._lock:
             self._entries[key] = (self._clock(), response)
             self._entries.move_to_end(key)

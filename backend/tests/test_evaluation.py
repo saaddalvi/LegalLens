@@ -1,4 +1,4 @@
-from test_ask import ART_21, IPC_302, FakeEmbedder, FakeLLM
+from conftest import ART_21, IPC_302, FakeEmbedder, FakeLLM
 
 from legallens.corpus import Corpus
 from legallens.evaluation import GoldenCase, render_report, run_evaluation
@@ -105,7 +105,7 @@ def test_citation_validity_is_reported_per_mode(tmp_path):
     for mode in result.modes.values():
         assert (
             mode.citation_validity == 1.0
-        )  # the endpoint never lets a hallucination through
+        )  # the Answerer never lets a hallucination through
 
 
 def test_report_shows_plain_versus_crag_on_every_metric(tmp_path):
@@ -140,11 +140,13 @@ def test_report_shows_case_counts_per_mode_when_modes_error_on_different_cases(
     assert result.modes["plain"].cases == 4
     assert result.modes["crag"].cases == 3
     report = render_report(result)
-    overall = next(line for line in report.splitlines() if line.startswith("## Overall"))
+    overall = next(
+        line for line in report.splitlines() if line.startswith("## Overall")
+    )
     assert "Plain RAG: 4" in overall and "CRAG: 3" in overall
 
 
-def test_report_shows_hallucinated_citation_rate_before_the_endpoint_blocks_them(
+def test_report_shows_hallucinated_citation_rate_before_the_answerer_blocks_them(
     tmp_path,
 ):
     result = run(tmp_path)
