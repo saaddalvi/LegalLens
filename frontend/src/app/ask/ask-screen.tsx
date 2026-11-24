@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import AccountNav from "../account-nav";
 import { BUTTON_CLASS, FIELD_CLASS } from "../ask-box";
 import { ProvisionNotes, ReplacesNote, STATUS_TEXT } from "../provision-notes";
 import Stamp from "../stamp";
@@ -23,6 +25,8 @@ function detectedLang(q: string): string {
 function errorMessage(status: number | null): string {
   if (status === null)
     return "We could not reach the LegalLens service. Check your connection and try again.";
+  if (status === 401)
+    return "Your session has expired. Please sign in again, then ask your question.";
   if (status === 429)
     return "You have asked too many questions in a short time. Please wait a minute and try again.";
   if (status === 503 || status >= 500)
@@ -398,6 +402,7 @@ function Refusal({
 
 export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
   const router = useRouter();
+  const { getToken } = useAuth();
   const [query, setQuery] = useState(initialQuery ?? "");
   // The Query being answered. A new object per submission, so asking the same
   // Query again asks again.
@@ -431,9 +436,14 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
     };
     (async () => {
       try {
+        // Clerk hands back a fresh token when the cached one is about to expire.
+        const token = await getToken();
         const res = await fetch(`${API_URL}/ask/stream`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
           body: JSON.stringify({ query: asked.q }),
           signal: controller.signal,
         });
@@ -462,7 +472,7 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
       }
     })();
     return () => controller.abort();
-  }, [asked]);
+  }, [asked, getToken]);
 
   const current = outcome?.for === asked ? outcome : null;
   const loading = asked !== null && current === null;
@@ -493,7 +503,10 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
           <h1 className="condensed text-2xl">
             <Link href="/">LegalLens</Link>
           </h1>
-          <ThemeToggle />
+          <div className="flex items-center gap-4">
+            <AccountNav />
+            <ThemeToggle />
+          </div>
         </div>
         <p role="note" className="text-sm text-muted">
           {DISCLAIMER}

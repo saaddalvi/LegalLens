@@ -10,11 +10,12 @@ from conftest import (
     BrokenLLM,
     FakeFallback,
     FakeLLM,
+    FakeVerifier,
     HallucinatingThenValidLLM,
     OutOfScopeLLM,
     RecordingFallback,
+    signed_in,
 )
-from fastapi.testclient import TestClient
 
 from legallens.answer_cache import AnswerCache
 from legallens.answering import Cancelled, StageFailed
@@ -63,8 +64,13 @@ def test_each_request_writes_one_structured_record(make_answerer, logged, endpoi
 
 
 def test_the_routes_label_their_records(make_corpus, logged):
-    client = TestClient(
-        create_app(corpus=make_corpus(), llm=FakeLLM(), fallback=FakeFallback())
+    client = signed_in(
+        create_app(
+            verifier=FakeVerifier(),
+            corpus=make_corpus(),
+            llm=FakeLLM(),
+            fallback=FakeFallback(),
+        )
     )
     client.post("/ask", json={"query": QUERY})
     client.post("/ask/stream", json={"query": QUERY})

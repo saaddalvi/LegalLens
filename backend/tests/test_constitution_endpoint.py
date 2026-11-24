@@ -1,8 +1,7 @@
 import json
 from pathlib import Path
 
-from conftest import FakeEmbedder, FakeFallback, FakeLLM
-from fastapi.testclient import TestClient
+from conftest import FakeEmbedder, FakeFallback, FakeLLM, FakeVerifier, signed_in
 
 from legallens.build_corpus import build
 from legallens.corpus import Corpus
@@ -16,8 +15,13 @@ RAW = json.loads(
 def test_constitutional_query_against_built_corpus_cites_expected_article(tmp_path):
     corpus = Corpus(tmp_path / "chroma", FakeEmbedder())
     build(corpus, RAW, patches=[])
-    client = TestClient(
-        create_app(corpus=corpus, llm=FakeLLM(), fallback=FakeFallback())
+    client = signed_in(
+        create_app(
+            verifier=FakeVerifier(),
+            corpus=corpus,
+            llm=FakeLLM(),
+            fallback=FakeFallback(),
+        )
     )
 
     body = client.post(
@@ -39,8 +43,13 @@ def test_constitutional_query_against_built_corpus_cites_expected_article(tmp_pa
 def test_repealed_article_is_cited_with_repealed_status(tmp_path):
     corpus = Corpus(tmp_path / "chroma", FakeEmbedder())
     build(corpus, RAW, patches=[])
-    client = TestClient(
-        create_app(corpus=corpus, llm=FakeLLM(), fallback=FakeFallback())
+    client = signed_in(
+        create_app(
+            verifier=FakeVerifier(),
+            corpus=corpus,
+            llm=FakeLLM(),
+            fallback=FakeFallback(),
+        )
     )
 
     body = client.post(

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import AccountNav from "./account-nav";
 import AskBox from "./ask-box";
 import Stamp from "./stamp";
 import ThemeToggle from "./theme-toggle";
@@ -71,6 +72,7 @@ export default function LandingPage() {
             <Link href="/ask" className="text-sm font-medium underline underline-offset-4">
               Go to the asking screen
             </Link>
+            <AccountNav />
             <ThemeToggle />
           </div>
         </header>

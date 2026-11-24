@@ -1,4 +1,4 @@
-"""Per-client request limits that protect the Gemini free tier on a public demo."""
+"""Per-user request limits that protect the Gemini free tier on a public demo."""
 
 import math
 import os
@@ -13,7 +13,7 @@ _SWEEP_ABOVE = 10_000  # clients tracked before idle ones are dropped
 
 
 class RateLimiter:
-    """In-memory sliding windows, per client key: `per_minute` over 60 seconds and
+    """In-memory sliding windows, per key (the signed-in user's id): `per_minute` over 60 seconds and
     `per_day` over 24 hours. State is per process, so a restart clears it.
 
     Rejected requests are not recorded, so retrying early does not extend the wait.

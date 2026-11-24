@@ -4,8 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from conftest import FakeEmbedder, FakeFallback, FakeLLM
-from fastapi.testclient import TestClient
+from conftest import FakeEmbedder, FakeFallback, FakeLLM, FakeVerifier, signed_in
 
 from legallens.build_corpus import build
 from legallens.corpus import Corpus
@@ -34,7 +33,14 @@ class WideEmbedder(FakeEmbedder):
 def client(tmp_path):
     corpus = Corpus(tmp_path / "chroma", WideEmbedder())
     build(corpus, CONSTITUTION, patches=[], everyday_acts=EVERYDAY)
-    return TestClient(create_app(corpus=corpus, llm=FakeLLM(), fallback=FakeFallback()))
+    return signed_in(
+        create_app(
+            verifier=FakeVerifier(),
+            corpus=corpus,
+            llm=FakeLLM(),
+            fallback=FakeFallback(),
+        )
+    )
 
 
 def first_citation(client, query):
@@ -71,7 +77,11 @@ def test_model_act_provision_reaches_the_llm_with_its_status(tmp_path):
     corpus = Corpus(tmp_path / "chroma", WideEmbedder())
     build(corpus, CONSTITUTION, patches=[], everyday_acts=EVERYDAY)
     llm = FakeLLM()
-    app_client = TestClient(create_app(corpus=corpus, llm=llm, fallback=FakeFallback()))
+    app_client = signed_in(
+        create_app(
+            verifier=FakeVerifier(), corpus=corpus, llm=llm, fallback=FakeFallback()
+        )
+    )
     first_citation(
         app_client,
         "How many months rent can a security deposit be and when must it be refunded?",

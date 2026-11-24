@@ -2,8 +2,15 @@
 How a Query is answered is tested at the Answerer (test_answering.py)."""
 
 import pytest
-from conftest import ART_21, FakeEmbedder, FakeFallback, FakeLLM, GenerationFailsLLM
-from fastapi.testclient import TestClient
+from conftest import (
+    ART_21,
+    FakeEmbedder,
+    FakeFallback,
+    FakeLLM,
+    FakeVerifier,
+    GenerationFailsLLM,
+    signed_in,
+)
 
 from legallens import main
 from legallens.corpus import Corpus
@@ -13,8 +20,9 @@ from legallens.main import create_app
 @pytest.fixture
 def make_client(make_corpus):
     def make(llm=None, **kw):
-        return TestClient(
+        return signed_in(
             create_app(
+                verifier=FakeVerifier(),
                 corpus=make_corpus(),
                 llm=llm or FakeLLM(),
                 fallback=FakeFallback(),
@@ -54,6 +62,8 @@ def test_unavailable_dependencies_return_503(tmp_path, monkeypatch):
 
     monkeypatch.setattr(main, "GeminiLLM", broken_llm)
     app = create_app(
-        corpus=Corpus(tmp_path / "c", FakeEmbedder()), fallback=FakeFallback()
+        verifier=FakeVerifier(),
+        corpus=Corpus(tmp_path / "c", FakeEmbedder()),
+        fallback=FakeFallback(),
     )
-    assert TestClient(app).post("/ask", json={"query": "liberty"}).status_code == 503
+    assert signed_in(app).post("/ask", json={"query": "liberty"}).status_code == 503

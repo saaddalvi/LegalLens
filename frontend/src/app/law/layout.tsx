@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import AccountNav from "../account-nav";
 import ThemeToggle from "../theme-toggle";
 import { DISCLAIMER } from "@/lib/answer-text";
 
@@ -26,6 +27,7 @@ export default function LawLayout({ children }: { children: React.ReactNode }) {
                 Browse the law
               </Link>
             </nav>
+            <AccountNav />
             <ThemeToggle />
           </div>
         </div>

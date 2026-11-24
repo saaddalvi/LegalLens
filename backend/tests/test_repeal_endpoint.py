@@ -2,8 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
-from conftest import FakeEmbedder, FakeFallback, FakeLLM
-from fastapi.testclient import TestClient
+from conftest import FakeEmbedder, FakeFallback, FakeLLM, FakeVerifier, signed_in
 
 from legallens.build_corpus import build
 from legallens.corpus import Corpus
@@ -22,7 +21,11 @@ def served(tmp_path):
     corpus = Corpus(tmp_path / "chroma", FakeEmbedder())
     build(corpus, CONSTITUTION, patches=[], criminal_codes=CODES, mappings=MAPPINGS)
     llm = FakeLLM()
-    client = TestClient(create_app(corpus=corpus, llm=llm, fallback=FakeFallback()))
+    client = signed_in(
+        create_app(
+            verifier=FakeVerifier(), corpus=corpus, llm=llm, fallback=FakeFallback()
+        )
+    )
     return client, llm
 
 

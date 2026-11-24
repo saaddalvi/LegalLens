@@ -78,7 +78,7 @@ cd frontend && npm install && npm run dev
 
 ### Settings
 
-All are environment variables for the backend (`backend/.env.example` has them with their defaults).
+These are environment variables for the backend (`backend/.env.example` has them with their defaults). The frontend's are in the second table.
 
 | Variable | Default | What it does |
 |---|---|---|
@@ -87,10 +87,22 @@ All are environment variables for the backend (`backend/.env.example` has them w
 | `GEMINI_FALLBACK_MODEL` | none | A second model tried once when the first still fails after 3 retries (503, spent quota). |
 | `CORS_ORIGINS` | `http://localhost:3000` | Comma-separated frontend addresses allowed to call the backend. |
 | `CHROMA_PATH` | `backend/data/chroma` | Where the built Corpus is. |
-| `RATE_LIMIT_PER_MINUTE`, `RATE_LIMIT_PER_DAY` | 5 and 50 | Per client address, on `/ask` and `/ask/stream`; over the limit gets HTTP 429 with `Retry-After`. Set both to 0 to turn it off, for example for local work. |
+| `CLERK_ISSUER` | none | Your Clerk instance's Frontend API URL (for example `https://example.clerk.accounts.dev`). The backend verifies session tokens against its JWKS and checks this issuer. Without it `/ask` and `/ask/stream` refuse every request. |
+| `CLERK_AUTHORIZED_PARTIES` | `http://localhost:3000` | Comma-separated frontend origins whose tokens are accepted (the token's `azp` claim). |
+| `RATE_LIMIT_PER_MINUTE`, `RATE_LIMIT_PER_DAY` | 5 and 50 | Per signed-in user, on `/ask` and `/ask/stream`; over the limit gets HTTP 429 with `Retry-After`. Set both to 0 to turn it off, for example for local work. |
 | `ANSWER_CACHE_SIZE`, `ANSWER_CACHE_TTL_SECONDS` | 500 and 86400 | Answers to repeated Queries are remembered in memory. Size 0 turns it off. A "cannot answer" is never remembered. |
 | `REQUIRE_CORPUS` | off | Set to `1` to fail, instead of seeding the 3-Provision sample Corpus, when the store is empty. |
 | `WARM_START` | off | Set to `1` to load the Corpus and embedding model at startup instead of on the first question. |
+
+Sign-in uses [Clerk](https://clerk.com). `/ask` and `/ask/stream` need a Clerk session token as a bearer token (the frontend sends it); `/health`, `/ready` and the `/law` data endpoints (`/acts`, `/provision`) need none. In the frontend (`frontend/.env.local`):
+
+| Variable | What it does |
+|---|---|
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Your Clerk instance's publishable key. |
+| `CLERK_SECRET_KEY` | Your Clerk instance's secret key, used by the frontend server. A secret. |
+| `NEXT_PUBLIC_API_URL` | The backend's address (default `http://localhost:8000`). |
+
+Signed-out visitors to `/ask` are sent to Clerk's sign-in and come back to it; `/` and `/law` stay public.
 
 `GET /health` says the process is up. `GET /ready` says the Corpus loads, how many Provisions it has,
 and whether it is only the sample (`"fixture": true`). Use `/ready` as a deployment health probe.
@@ -139,7 +151,7 @@ What it does, if you would rather do it by hand:
    Space's address. It is read at build time, so changing it needs a redeploy.
 
 The Space sleeps when idle, so the first question after a quiet spell is slow. The container starts uvicorn
-with `--proxy-headers`, so the rate limit sees each visitor's real address; the streaming endpoint sends
+with `--proxy-headers`, so the request log sees each visitor's real address; the streaming endpoint sends
 `X-Accel-Buffering: no` so proxies do not hold back Stage updates.
 
 To run the image locally (needs a built Corpus at `backend/data/chroma` and Docker running):

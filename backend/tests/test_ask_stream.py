@@ -15,11 +15,12 @@ from conftest import (
     FakeEmbedder,
     FakeFallback,
     FakeLLM,
+    FakeVerifier,
     GenerationFailsLLM,
     ScopeFailsLLM,
     parse_sse,
+    signed_in,
 )
-from fastapi.testclient import TestClient
 
 from legallens import main
 from legallens.answer_cache import AnswerCache
@@ -32,13 +33,19 @@ from legallens.request_log import LOGGER_NAME
 @pytest.fixture
 def make_app(make_corpus):
     def make(llm, **kw):
-        return create_app(corpus=make_corpus(), llm=llm, fallback=FakeFallback(), **kw)
+        return create_app(
+            verifier=FakeVerifier(),
+            corpus=make_corpus(),
+            llm=llm,
+            fallback=FakeFallback(),
+            **kw,
+        )
 
     return make
 
 
 def stream(app, query=QUERY):
-    r = TestClient(app).post("/ask/stream", json={"query": query})
+    r = signed_in(app).post("/ask/stream", json={"query": query})
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/event-stream")
     return parse_sse(r.text)
@@ -56,7 +63,7 @@ def test_stages_then_one_answer_frame_equal_to_ask(make_app):
         "stage",
         {"id": "scope_check", "label": "Checking your question"},
     )
-    assert events[-1][1] == TestClient(app).post("/ask", json={"query": QUERY}).json()
+    assert events[-1][1] == signed_in(app).post("/ask", json={"query": QUERY}).json()
 
 
 def test_a_failure_streams_the_stages_so_far_then_one_error_frame_naming_the_stage(
@@ -90,9 +97,11 @@ def test_unavailable_dependencies_give_503_before_the_stream_starts(
 
     monkeypatch.setattr(main, "GeminiLLM", broken_llm)
     app = create_app(
-        corpus=Corpus(tmp_path / "c", FakeEmbedder()), fallback=FakeFallback()
+        verifier=FakeVerifier(),
+        corpus=Corpus(tmp_path / "c", FakeEmbedder()),
+        fallback=FakeFallback(),
     )
-    r = TestClient(app).post("/ask/stream", json={"query": QUERY})
+    r = signed_in(app).post("/ask/stream", json={"query": QUERY})
     assert r.status_code == 503
     assert not r.headers["content-type"].startswith("text/event-stream")
 
@@ -105,14 +114,14 @@ def test_a_slow_stage_is_covered_by_keepalive_comments(make_app, monkeypatch):
             time.sleep(0.2)
             return super().classify(query)
 
-    r = TestClient(make_app(SlowLLM())).post("/ask/stream", json={"query": QUERY})
+    r = signed_in(make_app(SlowLLM())).post("/ask/stream", json={"query": QUERY})
     assert ": keepalive\n\n" in r.text
     assert names(parse_sse(r.text))[-1] == "answer"
 
 
 def test_a_cache_hit_streams_a_single_answer_frame(make_app):
     app = make_app(FakeLLM(), cache=AnswerCache())
-    answer = TestClient(app).post("/ask", json={"query": QUERY}).json()
+    answer = signed_in(app).post("/ask", json={"query": QUERY}).json()
     assert stream(app) == [("answer", answer)]
 
 

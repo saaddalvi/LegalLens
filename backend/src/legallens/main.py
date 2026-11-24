@@ -14,6 +14,7 @@ from fastapi.responses import StreamingResponse
 
 from .answer_cache import AnswerCache
 from .answering import Answerer, Cancelled, Stage, StageFailed
+from .auth import ClerkVerifier, InvalidToken, TokenVerifier
 from .corpus import Corpus
 from .embeddings import LocalEmbedder
 from .fallback import WebFallback, default_fallback
@@ -87,12 +88,15 @@ def create_app(
     fallback: WebFallback | None = None,
     crag: bool = True,
     rate_limiter: RateLimiter | None = None,
+    verifier: TokenVerifier | None = None,
     cache: AnswerCache | None = None,
 ) -> FastAPI:
     """Dependencies not supplied are built lazily on the first question.
 
     crag=False serves the plain-RAG baseline (no Grader, no Fallback) for evaluation.
-    rate_limiter limits /ask and /ask/stream per client address; None means no limit.
+    verifier turns a Clerk bearer token into a user id; /ask and /ask/stream require one, and
+    with None they refuse every request.
+    rate_limiter limits /ask and /ask/stream per signed-in user; None means no limit.
     cache remembers answers to repeated Queries; None means every Query is answered afresh.
     """
 
@@ -135,11 +139,27 @@ def create_app(
         c, l, f = deps()
         return Answerer(corpus=c, llm=l, fallback=f, crag=crag, cache=cache)
 
-    def limit(request: Request) -> None:
+    def current_user(request: Request) -> str:
+        """The Clerk user id behind the bearer token; 401 before any work starts."""
+        scheme, _, token = request.headers.get("Authorization", "").partition(" ")
+        token = token.strip()
+        unauthorized = HTTPException(
+            401,
+            "Sign in to use LegalLens.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        if scheme.lower() != "bearer" or not token or verifier is None:
+            raise unauthorized
+        try:
+            return verifier.verify(token)
+        except InvalidToken as exc:
+            raise unauthorized from exc
+
+    def limit(user: str = Depends(current_user)) -> None:
         """Rejects with 429 before any work starts, so a streamed answer never begins."""
         if rate_limiter is None:
             return
-        wait = rate_limiter.check(request.client.host if request.client else "unknown")
+        wait = rate_limiter.check(user)
         if wait is not None:
             raise HTTPException(
                 429,
@@ -281,4 +301,8 @@ def create_app(
     return app
 
 
-app = create_app(rate_limiter=RateLimiter.from_env(), cache=AnswerCache.from_env())
+app = create_app(
+    rate_limiter=RateLimiter.from_env(),
+    verifier=ClerkVerifier.from_env(),
+    cache=AnswerCache.from_env(),
+)

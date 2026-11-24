@@ -1,6 +1,14 @@
 import pytest
-from conftest import ART_21, IPC_302, QUERY, FakeEmbedder, FakeFallback, FakeLLM
-from fastapi.testclient import TestClient
+from conftest import (
+    ART_21,
+    IPC_302,
+    QUERY,
+    FakeEmbedder,
+    FakeFallback,
+    FakeLLM,
+    FakeVerifier,
+    signed_in,
+)
 
 from legallens.answer_cache import AnswerCache
 from legallens.corpus import Corpus
@@ -74,8 +82,9 @@ def test_a_refusal_is_stored():
 def test_the_rate_limit_still_applies_to_cached_answers(tmp_path):
     corpus = Corpus(tmp_path / "chroma", FakeEmbedder())
     corpus.add([ART_21, IPC_302])
-    client = TestClient(
+    client = signed_in(
         create_app(
+            verifier=FakeVerifier(),
             corpus=corpus,
             llm=FakeLLM(),
             fallback=FakeFallback(),

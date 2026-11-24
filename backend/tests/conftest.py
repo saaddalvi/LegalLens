@@ -6,8 +6,10 @@ import json
 import re
 
 import pytest
+from fastapi.testclient import TestClient
 
 from legallens.answering import Answerer
+from legallens.auth import InvalidToken
 from legallens.corpus import Corpus
 from legallens.llm import Generation, ProvisionRef, ScopeDecision
 from legallens.models import FallbackSource, Provision
@@ -26,6 +28,31 @@ IPC_302 = Provision(
     status="repealed",
     text="Whoever commits murder shall be punished with death, or imprisonment for life, and shall also be liable to fine.",
 )
+
+TOKEN_PREFIX = "test-token-"
+
+
+def auth_for(user_id: str) -> dict[str, str]:
+    """The Authorization header FakeVerifier accepts for `user_id`."""
+    return {"Authorization": f"Bearer {TOKEN_PREFIX}{user_id}"}
+
+
+AUTH = auth_for("user_test")
+
+
+class FakeVerifier:
+    """Accepts `test-token-<user id>` and nothing else, standing in for Clerk."""
+
+    def verify(self, token: str) -> str:
+        if not token.startswith(TOKEN_PREFIX):
+            raise InvalidToken("not a test token")
+        return token[len(TOKEN_PREFIX) :]
+
+
+def signed_in(app, **kw):
+    """A TestClient that sends AUTH on every request."""
+    return TestClient(app, headers=AUTH, **kw)
+
 
 QUERY = "Can I be deprived of personal liberty?"
 HINDI_QUERY = "क्या मुझे जीवन और स्वतंत्रता का अधिकार है?"

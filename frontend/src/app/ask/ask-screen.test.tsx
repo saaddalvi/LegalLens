@@ -1,10 +1,13 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AskScreen from "./ask-screen";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+
+const getToken = vi.fn();
+vi.mock("@clerk/nextjs", () => ({ useAuth: () => ({ getToken }) }));
 
 const base = {
   response_type: "answer",
@@ -74,9 +77,12 @@ async function ask() {
   return user;
 }
 
+beforeEach(() => getToken.mockResolvedValue("session-token"));
+
 afterEach(() => {
   vi.unstubAllGlobals();
   push.mockReset();
+  getToken.mockReset();
 });
 
 describe("AskScreen", () => {
@@ -160,6 +166,21 @@ describe("AskScreen", () => {
     mockFetch({ ok: false, status: 429 });
     await ask();
     expect(await screen.findByRole("alert")).toHaveTextContent(/too many questions/i);
+  });
+
+  it("sends the Clerk session token as a bearer token", async () => {
+    const fn = mockFetch({ ok: true, status: 200, body: base });
+    await ask();
+    await screen.findByText("From statute text");
+    expect(fn.mock.calls[0][1].headers).toMatchObject({
+      Authorization: "Bearer session-token",
+    });
+  });
+
+  it("asks the reader to sign in again when the service answers 401", async () => {
+    mockFetch({ ok: false, status: 401 });
+    await ask();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/sign in again/i);
   });
 
   it("explains service errors", async () => {
