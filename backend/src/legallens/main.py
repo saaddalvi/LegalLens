@@ -5,6 +5,7 @@ import os
 import queue
 import threading
 import uuid
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
@@ -27,6 +28,7 @@ from svix.webhooks import Webhook, WebhookVerificationError
 from .answer_cache import AnswerCache
 from .answering import Answerer, Cancelled, Stage, StageFailed
 from .auth import ClerkVerifier, InvalidToken, TokenVerifier
+from .contract_answering import ContractAnswerer
 from .contract_intake import MAX_UPLOAD_BYTES, ContractIntake, Refused, Source
 from .corpus import Corpus
 from .db import Database
@@ -108,6 +110,25 @@ _SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
 def _refusal(r: Refused) -> dict:
     return {"reason": r.code, "message": r.message}
+
+
+async def _async_frames(
+    events: asyncio.Queue[tuple[str, dict] | None], on_close: Callable[[], None]
+):
+    """The frames of an event queue that ends with None, with keepalives while it is quiet.
+    `on_close` runs when the stream ends or the client leaves."""
+    try:
+        while True:
+            try:
+                event = await asyncio.wait_for(events.get(), timeout=KEEPALIVE_SECONDS)
+            except TimeoutError:
+                yield ": keepalive\n\n"  # keeps proxies from idling out
+                continue
+            if event is None:
+                return
+            yield _frame(*event)
+    finally:
+        on_close()
 
 
 def _single_event_response(name: str, data: dict) -> StreamingResponse:
@@ -473,24 +494,86 @@ def create_app(
 
         task = asyncio.create_task(run())
 
-        async def frames():
-            try:
-                while True:
-                    try:
-                        event = await asyncio.wait_for(
-                            events.get(), timeout=KEEPALIVE_SECONDS
-                        )
-                    except TimeoutError:
-                        yield ": keepalive\n\n"
-                        continue
-                    if event is None:
-                        return
-                    yield _frame(*event)
-            finally:
-                task.cancel()  # the client left: stop at the next await
-
         return StreamingResponse(
-            frames(), media_type="text/event-stream", headers=_SSE_HEADERS
+            _async_frames(
+                events, task.cancel
+            ),  # the client left: stop at the next await
+            media_type="text/event-stream",
+            headers=_SSE_HEADERS,
+        )
+
+    @lru_cache(maxsize=1)
+    def contract_answerer() -> ContractAnswerer:
+        db = contracts_db()
+        c, l, f = deps()
+        return ContractAnswerer(
+            corpus=c, llm=l, fallback=f, store=db, embedder=embedder or c.embedder
+        )
+
+    background: set[asyncio.Task] = set()  # keeps running answers from being collected
+
+    @app.post(
+        "/contracts/{contract_id}/ask/stream",
+        dependencies=[Depends(limit)],
+    )
+    async def ask_contract(
+        contract_id: str, req: AskRequest, user: str = Depends(current_user)
+    ) -> StreamingResponse:
+        """Answers a follow-up Query about one of the caller's Contracts, streaming Stages and
+        ending in `answer` (or `error`). A Contract that is not theirs is a 404."""
+        db = contracts_db()
+        try:
+            uuid.UUID(contract_id)
+        except ValueError:
+            raise HTTPException(404, "No such Contract.") from None
+        if not await db.owns_contract(user, contract_id):
+            raise HTTPException(404, "No such Contract.")
+        try:
+            a = contract_answerer()  # 503 here, before any stream starts
+        except Exception as exc:
+            logging.getLogger(__name__).exception("dependencies unavailable")
+            raise HTTPException(503, UNAVAILABLE) from exc
+
+        events: asyncio.Queue[tuple[str, dict] | None] = asyncio.Queue()
+        cancelled = threading.Event()
+
+        def on_stage(stage: Stage) -> None:
+            events.put_nowait(("stage", {"id": stage.id, "label": stage.label}))
+
+        async def run() -> None:
+            try:
+                answered = await a.answer(
+                    user,
+                    contract_id,
+                    req.query,
+                    endpoint="contract_ask_stream",
+                    on_stage=on_stage,
+                    cancel=cancelled,
+                )
+                events.put_nowait(("answer", answered.response.model_dump(mode="json")))
+            except Cancelled:
+                pass  # the reader is gone
+            except StageFailed as exc:
+                events.put_nowait(
+                    ("error", {"stage": exc.stage, "message": UNAVAILABLE})
+                )
+            except Exception as exc:  # noqa: BLE001
+                # Type only: the text of an error can quote the Contract.
+                logging.getLogger(__name__).error(
+                    "contract answering failed outside a Stage: %s", type(exc).__name__
+                )
+                events.put_nowait(("error", {"stage": None, "message": UNAVAILABLE}))
+            finally:
+                events.put_nowait(None)
+
+        task = asyncio.create_task(run())
+        background.add(task)
+        task.add_done_callback(background.discard)
+        # The client leaving stops the work at its next Stage; nothing is saved then.
+        return StreamingResponse(
+            _async_frames(events, cancelled.set),
+            media_type="text/event-stream",
+            headers=_SSE_HEADERS,
         )
 
     @app.get("/contracts", response_model=list[ContractSummary])

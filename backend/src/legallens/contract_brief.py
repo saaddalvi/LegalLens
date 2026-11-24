@@ -51,7 +51,7 @@ def clause_texts(pieces: list[ClausePiece]) -> dict[str, str]:
     return out
 
 
-def _number(raw: str) -> str:
+def clause_number(raw: str) -> str:
     """ "Clause 7.2." -> "7.2": a leading word and a trailing full stop are not part of it."""
     return re.sub(
         r"^(clause|section|article)\s+", "", raw.strip(), flags=re.IGNORECASE
@@ -70,7 +70,7 @@ def check_brief(draft: BriefDraft, clauses: dict[str, str], corpus: Corpus) -> C
 
     def known(raw: str) -> str | None:
         nonlocal bad
-        n = _number(raw)
+        n = clause_number(raw)
         if n in clauses:
             return n
         bad = True

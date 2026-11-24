@@ -89,6 +89,8 @@ def _decided(d: Decisions | None) -> dict:
     if d is None:
         return {}
     out: dict = {}
+    if d.clause_score is not None:
+        out["clause_grader_score"] = d.clause_score
     if d.grader_score is not None:
         out["grader_score"] = d.grader_score
         out["verdict"] = d.verdict

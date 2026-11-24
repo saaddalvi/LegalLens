@@ -13,7 +13,7 @@ When no Clause is relevant, the answer says the Contract does not address the qu
 
 **Status:** ready-for-agent
 
-- [ ] Endpoint tests, one per path:
+- [x] Endpoint tests, one per path:
   - a Clause-supported answer
   - a Contract-silent answer
   - a law-only answer from the Corpus
@@ -21,9 +21,9 @@ When no Clause is relevant, the answer says the Contract does not address the qu
   - personal advice refused
   - an unrelated Query pointed to `/ask`
   - a Hindi Query (Hindi labels, English Clause text)
-- [ ] Endpoint test: the previous turns reach generation, and turns from another Contract never do
-- [ ] Endpoint test: the Fallback's web Query never contains Clause text
-- [ ] Endpoint test: another user's Contract id gets 404
-- [ ] Each Trust label value maps to frontend copy, and the landing page's Trust-label explanation covers the Contract-backed values
-- [ ] Component tests: the conversation renders in order after reload, Stages stream for each Query, and a new Query cancels one in flight
-- [ ] Lint, typecheck and tests pass
+- [x] Endpoint test: the previous turns reach generation, and turns from another Contract never do
+- [x] Endpoint test: the Fallback's web Query never contains Clause text
+- [x] Endpoint test: another user's Contract id gets 404
+- [x] Each Trust label value maps to frontend copy, and the landing page's Trust-label explanation covers the Contract-backed values
+- [x] Component tests: the conversation renders in order after reload, Stages stream for each Query, and a new Query cancels one in flight
+- [x] Lint, typecheck and tests pass

@@ -31,7 +31,14 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.pool import NullPool
 
 from .clauses import ClausePiece
-from .models import ClauseOut, ContractBrief, ContractDetail, ContractSummary
+from .models import (
+    ClauseOut,
+    ContractAnswer,
+    ContractBrief,
+    ContractDetail,
+    ContractSummary,
+    ConversationTurn,
+)
 
 EMBEDDING_DIMENSIONS = 1024  # Qwen3-Embedding-0.6B (ADR 0003)
 
@@ -97,6 +104,25 @@ class ContractMessage(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+def _turns(rows) -> list[ConversationTurn]:
+    """The Queries and answers among a Contract's messages, oldest answer first. A Query and
+    its answer share a `turn` id, so two Queries saved at once are never mixed up."""
+    queries: dict[str, str] = {}
+    answered: list[tuple[str, dict]] = []
+    for role, payload in rows:
+        if role == "user":
+            queries[payload["turn"]] = payload["text"]
+        else:
+            answered.append((payload["turn"], payload["response"]))
+    return [
+        ConversationTurn(
+            query=queries[turn], response=ContractAnswer.model_validate(response)
+        )
+        for turn, response in answered
+        if turn in queries
+    ]
 
 
 @dataclass(frozen=True)
@@ -234,6 +260,15 @@ class Database:
                 .where(Clause.contract_id == contract_id)
                 .order_by(Clause.id)
             )
+            messages = await conn.execute(
+                select(ContractMessage.role, ContractMessage.payload)
+                .where(
+                    ContractMessage.contract_id == contract_id,
+                    ContractMessage.payload["type"].astext.in_(["query", "answer"]),
+                )
+                .order_by(ContractMessage.id)
+            )
+            conversation = _turns(messages)
             stored = (
                 await conn.execute(
                     select(ContractMessage.payload)
@@ -259,6 +294,7 @@ class Database:
             clause_count=len(clauses),
             clauses=list(clauses.values()),
             brief=ContractBrief.model_validate(stored) if stored else None,
+            conversation=conversation,
         )
 
     async def search_clauses(
@@ -275,6 +311,86 @@ class Database:
                 .limit(k)
             )
             return [ClauseHit(*r) for r in rows]
+
+    async def owns_contract(self, user_id: str, contract_id: str) -> bool:
+        async with self.engine.connect() as conn:
+            found = await conn.execute(
+                select(Contract.id).where(
+                    Contract.id == contract_id, Contract.user_id == user_id
+                )
+            )
+            return found.first() is not None
+
+    async def get_clauses(self, user_id: str, contract_id: str) -> dict[str, str]:
+        """Every Clause of the user's Contract with its whole verbatim text, in order. Empty
+        when the Contract does not exist or is not the user's."""
+        async with self.engine.connect() as conn:
+            rows = await conn.execute(
+                select(Clause.number, Clause.text)
+                .join(Contract, Contract.id == Clause.contract_id)
+                .where(Contract.id == contract_id, Contract.user_id == user_id)
+                .order_by(Clause.id)
+            )
+            clauses: dict[str, str] = {}
+            for number, text in rows:
+                clauses[number] = clauses.get(number, "") + text
+            return clauses
+
+    async def recent_turns(
+        self, user_id: str, contract_id: str, count: int
+    ) -> list[ConversationTurn]:
+        """The last `count` Queries of this Contract's conversation with their answers, oldest
+        first. Never another Contract's, and never someone else's."""
+        async with self.engine.connect() as conn:
+            rows = await conn.execute(
+                select(ContractMessage.role, ContractMessage.payload)
+                .join(Contract, Contract.id == ContractMessage.contract_id)
+                .where(
+                    Contract.id == contract_id,
+                    Contract.user_id == user_id,
+                    ContractMessage.payload["type"].astext.in_(["query", "answer"]),
+                )
+                .order_by(ContractMessage.id)
+            )
+            return _turns(rows)[-count:] if count > 0 else []
+
+    async def add_turn(
+        self,
+        user_id: str,
+        contract_id: str,
+        query: str,
+        response: ContractAnswer,
+    ) -> None:
+        """Appends a Query and its answer to the Contract's conversation, together or not at
+        all. Raises LookupError when the Contract is not the user's (or was just deleted)."""
+        turn = str(uuid.uuid4())
+        async with self.engine.begin() as conn:
+            owned = await conn.execute(
+                select(Contract.id).where(
+                    Contract.id == contract_id, Contract.user_id == user_id
+                )
+            )
+            if owned.first() is None:
+                raise LookupError("no such Contract")
+            await conn.execute(
+                insert(ContractMessage),
+                [
+                    {
+                        "contract_id": contract_id,
+                        "role": "user",
+                        "payload": {"type": "query", "turn": turn, "text": query},
+                    },
+                    {
+                        "contract_id": contract_id,
+                        "role": "assistant",
+                        "payload": {
+                            "type": "answer",
+                            "turn": turn,
+                            "response": response.model_dump(mode="json"),
+                        },
+                    },
+                ],
+            )
 
     async def dispose(self) -> None:
         await self.engine.dispose()

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import LandingPage from "./landing-page";
 import { CORPUS_ACTS, askHref, EXAMPLE_QUERIES, lawHref, REPEAL_NOTE, SPECIMEN } from "@/lib/corpus";
-import { TRUST_TEXT } from "@/lib/trust-labels";
+import { TRUST_EXPLANATION, TRUST_TEXT } from "@/lib/trust-labels";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
@@ -67,6 +67,15 @@ describe("LandingPage", () => {
     const section = screen.getByRole("region", { name: /trust labels/i });
     for (const text of Object.values(TRUST_TEXT)) {
       expect(within(section).getByText(text)).toBeInTheDocument();
+    }
+  });
+
+  it("explains the Contract-backed Trust labels too", () => {
+    render(<LandingPage />);
+    const section = screen.getByRole("region", { name: /trust labels/i });
+    for (const label of ["contract", "contract_and_corpus", "contract_and_fallback", "contract_corpus_and_fallback"] as const) {
+      expect(within(section).getByText(TRUST_TEXT[label])).toBeInTheDocument();
+      expect(within(section).getByText(TRUST_EXPLANATION[label])).toBeInTheDocument();
     }
   });
 

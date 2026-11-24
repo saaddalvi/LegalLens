@@ -59,6 +59,8 @@ class Decisions:
     was never reached (no Grader in plain RAG, no Fallback after a Correct verdict)."""
 
     grader_score: float | None = None
+    # In a Contract conversation: the Grader's score for the Contract's Clauses.
+    clause_score: float | None = None
     verdict: Verdict | None = None
     fallback_sources: int | None = None  # how many sources the Fallback returned
     # Whether the first generation cited a Provision missing from the Corpus and so needed a
@@ -83,7 +85,7 @@ def verdict_for(score: float) -> Verdict:
     return "ambiguous"
 
 
-def _refusal(message: dict[Language, str], language: Language) -> AskResponse:
+def refusal(message: dict[Language, str], language: Language) -> AskResponse:
     """A "cannot answer" message: no source supports it, so its Trust label is "none"."""
     return AskResponse(
         answer=message[language],
@@ -94,7 +96,7 @@ def _refusal(message: dict[Language, str], language: Language) -> AskResponse:
     )
 
 
-def _retrieve(query: str, corpus: Corpus) -> list[Provision]:
+def retrieve(query: str, corpus: Corpus) -> list[Provision]:
     """Chunks for a Query: Provisions it names, then matches without a Superseding provision, then the superseded ones.
 
     A repealed Provision brings along its Superseding provision so the answer can point
@@ -117,7 +119,7 @@ def _ids(provisions: list[Provision]) -> set[tuple[str, str]]:
     return {(p.act, p.number) for p in provisions}
 
 
-def _with_superseding(citations: list[Citation], corpus: Corpus) -> list[Citation]:
+def with_superseding(citations: list[Citation], corpus: Corpus) -> list[Citation]:
     """Add the current Provision for every cited repealed one, so users see its text."""
     out = list(citations)
     cited = {(c.act, c.number) for c in citations}
@@ -129,7 +131,7 @@ def _with_superseding(citations: list[Citation], corpus: Corpus) -> list[Citatio
     return out
 
 
-def _search_fallback(
+def search_fallback(
     query: str, *, llm: LLM, fallback: WebFallback
 ) -> list[FallbackSource]:
     """Rewrite the Query and run the Fallback; any provider failure yields no sources."""
@@ -179,12 +181,12 @@ def _answer(
     if not result.all_valid:
         decisions.citation_blocked = True
         log.warning("answer blocked: a Citation could not be verified after a rewrite")
-        return _refusal(CANNOT_ANSWER_RELIABLY, language)
+        return refusal(CANNOT_ANSWER_RELIABLY, language)
     return AskResponse(
         answer=gen.answer,
         answer_language=language,
         trust_label=trust_label,
-        citations=_with_superseding(result.valid, corpus),
+        citations=with_superseding(result.valid, corpus),
         fallback_sources=sources,
     )
 
@@ -228,7 +230,7 @@ def answer_query(
         )
 
     stage("retrieval")
-    provisions = _retrieve(query, corpus)
+    provisions = retrieve(query, corpus)
     if not crag:
         return _answer(
             query,
@@ -261,7 +263,7 @@ def answer_query(
         )
 
     stage("fallback")
-    sources = _search_fallback(query, llm=llm, fallback=fallback)
+    sources = search_fallback(query, llm=llm, fallback=fallback)
     decisions.fallback_sources = len(sources)
     if verdict == "ambiguous":
         if not sources:
@@ -288,7 +290,7 @@ def answer_query(
             decisions=decisions,
         )
     if not sources:
-        return _refusal(CANNOT_ANSWER_NO_SOURCES, language)
+        return refusal(CANNOT_ANSWER_NO_SOURCES, language)
     return _answer(
         query,
         [],

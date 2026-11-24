@@ -24,7 +24,7 @@ __all__ = ["Answered", "Answerer", "Cancelled", "Decisions", "Stage", "StageFail
 log = logging.getLogger(__name__)
 
 # The Stages of answering a Query, with plain-language labels.
-_STAGE_LABELS: dict[str, dict[Language, str]] = {
+STAGE_LABELS: dict[str, dict[Language, str]] = {
     "scope_check": {
         "en": "Checking your question",
         "hi": "आपके प्रश्न की जाँच हो रही है",
@@ -125,7 +125,7 @@ class Answerer:
             current[:] = [stage_id]
             rlog.stage(stage_id)
             if on_stage:
-                on_stage(Stage(stage_id, _STAGE_LABELS[stage_id][language]))
+                on_stage(Stage(stage_id, STAGE_LABELS[stage_id][language]))
 
         try:
             response = answer_query(

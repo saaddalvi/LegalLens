@@ -26,7 +26,16 @@ const STEPS = [
   },
 ];
 
-const TRUST_ORDER: TrustLabel[] = ["corpus", "corpus_and_fallback", "fallback", "none"];
+const TRUST_ORDER: TrustLabel[] = [
+  "corpus",
+  "corpus_and_fallback",
+  "fallback",
+  "contract",
+  "contract_and_corpus",
+  "contract_and_fallback",
+  "contract_corpus_and_fallback",
+  "none",
+];
 
 // The hero's specimen: what an answer's support looks like, typeset like a
 // bare-act page, with the repealed IPC section struck through.

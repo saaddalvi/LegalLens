@@ -5,8 +5,18 @@ from pydantic import BaseModel, Field, field_validator
 
 Status = Literal["in_force", "repealed", "model"]
 ResponseType = Literal["answer", "refusal"]
-# "none": the answer is a "cannot answer" message that no source supports.
-TrustLabel = Literal["corpus", "fallback", "corpus_and_fallback", "none"]
+# "none": the answer is a "cannot answer" message that no source supports. The "contract" values
+# are for answers in a Contract conversation that rest, at least in part, on the user's Clauses.
+TrustLabel = Literal[
+    "corpus",
+    "fallback",
+    "corpus_and_fallback",
+    "contract",
+    "contract_and_corpus",
+    "contract_and_fallback",
+    "contract_corpus_and_fallback",
+    "none",
+]
 
 
 class Provision(BaseModel):
@@ -95,6 +105,22 @@ class ClauseReference(BaseModel):
     text: str
 
 
+class ContractAnswer(AskResponse):
+    """An answer in a Contract conversation: an AskResponse that also quotes the Clauses of the
+    user's Contract it rests on, each with its verbatim stored text."""
+
+    clause_references: list[ClauseReference] = []
+    # A Query about neither the Contract nor its law: the user is pointed to /ask.
+    redirect_to_ask: bool = False
+
+
+class ConversationTurn(BaseModel):
+    """One Query in a Contract conversation and the answer it got."""
+
+    query: str
+    response: ContractAnswer
+
+
 class BriefTerm(BaseModel):
     label: str
     value: str
@@ -144,3 +170,6 @@ class ContractDetail(ContractSummary):
     brief: ContractBrief | None = (
         None  # None for a Contract uploaded before briefs existed
     )
+    conversation: list[
+        ConversationTurn
+    ] = []  # the Queries after the brief, oldest first

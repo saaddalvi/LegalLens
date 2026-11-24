@@ -7,6 +7,7 @@ import { API_URL } from "@/lib/api-url";
 import { DISCLAIMER } from "@/lib/answer-text";
 import type { ContractDetail } from "@/lib/contract-types";
 import BriefView from "./contract-brief";
+import ContractConversation from "./contract-conversation";
 
 type State = { contract: ContractDetail } | { error: string } | null;
 
@@ -17,7 +18,8 @@ function failure(status: number | null): string {
   return "The service is unavailable right now. Please try again shortly.";
 }
 
-// The Contract brief, then the Contract's Clauses verbatim. The Contract conversation comes later.
+// The Contract brief, the Contract conversation (saved Queries and answers, and the box for the
+// next one), then the Contract's Clauses verbatim.
 export default function ContractView({ id }: { id: string }) {
   const { getToken } = useAuth();
   const [state, setState] = useState<State>(null);
@@ -66,6 +68,7 @@ export default function ContractView({ id }: { id: string }) {
         {DISCLAIMER}
       </p>
       {contract.brief && <BriefView brief={contract.brief} />}
+      <ContractConversation contractId={contract.id} initial={contract.conversation ?? []} />
       <h2 className="condensed text-xl">The Contract, Clause by Clause</h2>
       <ol className="flex flex-col gap-6">
         {contract.clauses.map((c) => (

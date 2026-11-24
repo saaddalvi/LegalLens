@@ -1,4 +1,4 @@
-import type { Citation } from "./ask-types";
+import type { AskResponse, Citation } from "./ask-types";
 
 // The shapes the backend returns from /contracts.
 export type ContractSummary = {
@@ -32,8 +32,21 @@ export type ContractBrief = {
   flagged_clauses: FlaggedClause[];
 };
 
-// brief is null for a Contract uploaded before briefs existed.
-export type ContractDetail = ContractSummary & { clauses: ClauseOut[]; brief: ContractBrief | null };
+// An answer in a Contract conversation: an AskResponse that also quotes the Clauses it rests on.
+// redirect_to_ask is set on the refusal of a Query about neither the Contract nor its law.
+export type ContractAnswer = AskResponse & {
+  clause_references: ClauseReference[];
+  redirect_to_ask: boolean;
+};
+export type ConversationTurn = { query: string; response: ContractAnswer };
+
+// brief is null for a Contract uploaded before briefs existed. conversation is the Queries after
+// the brief, oldest first.
+export type ContractDetail = ContractSummary & {
+  clauses: ClauseOut[];
+  brief: ContractBrief | null;
+  conversation: ConversationTurn[];
+};
 
 // The final `answer` event of POST /contracts/stream.
 export type UploadedContract = {
