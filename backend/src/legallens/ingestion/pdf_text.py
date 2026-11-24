@@ -811,3 +811,118 @@ def model_tenancy_sections(pages: list[str], gap: int = 1) -> list[dict]:
             i += 1
         rec["text"] = "\n".join(kept).strip()
     return records
+
+
+# --- Indian Contract Act 1872, from the Legislative Department print ---
+
+_CA_START = "[25th April, 1872.]"  # the contents list comes before this line
+_CA_FURNITURE = re.compile(r"^This Bare Act is a government source")
+_CA_HEAD = re.compile(
+    r"^(?:\d+\[)?(\d+)([A-Z]{0,2})\.\s*(\S.*?)\.?\s*[—–]+\s*(.*)$", re.DOTALL
+)  # "27. Agreement in restraint of trade, void.—Every agreement ..."; the title may wrap
+_CA_REPEALED = re.compile(
+    r"^(?:\d+\[)?(\d+)([A-Z]{0,2})\.\s*\["
+)  # "76.[‘Goods’ defined.] Rep. by"
+_CA_CHAPTER = re.compile(r"^CHAPTER\s+([IVXL]+)\s*$")
+_CA_REPEALED_CHAPTER = re.compile(
+    r"^\[?CHAPTER\s+[IVXL]+\."
+)  # "[CHAPTER VII.—SALES OF GOODS.] Rep."
+_CA_SCHEDULE = re.compile(r"^SCHEDULE\b")
+_CA_DELETED = re.compile(
+    r"\d*\*(?:\s*\*)*\.?"
+)  # "1*  *  *.", "3*****", "4***": text a repeal removed
+_CA_NOTE_DIGIT = re.compile(
+    r"(?<=[A-Za-z’”])\d{1,2}(?!\d)"
+)  # "arbitration4.": a footnote mark
+
+
+def contract_act_sections(pages: list[str], gap: int = 1) -> list[dict]:
+    """Sections of the Indian Contract Act from the Legislative Department print, in order.
+
+    Skips the contents list (everything before the date line), page numbers, the footer line
+    and the footnotes under a line of spaces. Repealed sections (76-123 and 239-266 have no
+    text, only a note of the repealing Act) are not returned. Each record also carries the
+    section's `title`; the chapter is "Preliminary" before Chapter I. `gap` > 1 lets a short
+    excerpt skip section numbers (tests only; the whole Act must have none missing).
+    """
+    lines: list[str] = []
+    for page in pages:
+        for line in page.splitlines():
+            if not line.strip() and len(line) >= _FOOTNOTE_RULE_MIN:
+                break  # footnotes follow
+            line = line.strip()
+            if line and not line.isdigit() and not _CA_FURNITURE.match(line):
+                lines.append(line)
+    start = next((i for i, l in enumerate(lines) if _CA_START in l), None)
+    if start is None:
+        raise ValueError(f"no line has the date marker {_CA_START!r}")
+    records: list[dict] = []
+    chapter, prev = "Preliminary", None
+    current: dict | None = None  # None while inside a repealed entry or chapter
+    i = start + 1
+    while i < len(lines):
+        line = lines[i]
+        if _CA_SCHEDULE.match(line):
+            break
+        m = _CA_CHAPTER.match(line)
+        if m:
+            chapter, current = f"Chapter {m.group(1)}", None
+            i += 1
+            while i < len(lines) and lines[i].isupper():  # the chapter's title
+                i += 1
+            continue
+        if _CA_REPEALED_CHAPTER.match(line):
+            current = None
+            i += 1
+            continue
+        rep = _CA_REPEALED.match(line)
+        if rep and follows(prev, int(rep.group(1)), rep.group(2), gap):
+            prev, current = (int(rep.group(1)), rep.group(2)), None
+            i += 1
+            continue
+        head, used, number = None, 0, None
+        for used in (1, 2, 3):
+            head = _CA_HEAD.match(" ".join(lines[i : i + used]))
+            if head:
+                break
+        if head:
+            # a footnote mark can be glued to the number: "1151." is 151
+            number = next(
+                (
+                    n
+                    for n in (head.group(1), head.group(1)[1:], head.group(1)[2:])
+                    if n and follows(prev, int(n), head.group(2), gap)
+                ),
+                None,
+            )
+        if head and number:
+            prev = (int(number), head.group(2))
+            current = {
+                "section": number + head.group(2),
+                "chapter": chapter,
+                "title": head.group(3),
+                "text": head.group(4),
+            }
+            records.append(current)
+            i += used
+            continue
+        if current is not None:
+            current["text"] += "\n" + line
+        i += 1
+    return [
+        {
+            **r,
+            "title": _tidy_contract_act(r["title"]),
+            "text": _tidy_contract_act(r["text"]),
+        }
+        for r in records
+    ]
+
+
+def _tidy_contract_act(text: str) -> str:
+    """Drop deleted-text stars, amendment markers ("2[" ... "]") and glued footnote digits."""
+    text = "\n".join(
+        l for l in (_CA_DELETED.sub("", l) for l in text.splitlines()) if l.strip()
+    )
+    text = _CA_NOTE_DIGIT.sub("", text)
+    return _tidy_iea(text.replace("\n", "\n ")).replace("\n ", "\n")

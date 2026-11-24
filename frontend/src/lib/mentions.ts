@@ -14,6 +14,7 @@ const ACT_ALIASES: Record<string, string[]> = {
   "Bharatiya Nyaya Sanhita": ["bharatiya nyaya sanhita", "bns"],
   "Bharatiya Nagarik Suraksha Sanhita": ["bharatiya nagarik suraksha sanhita", "bnss"],
   "Bharatiya Sakshya Adhiniyam": ["bharatiya sakshya adhiniyam", "bsa"],
+  "Indian Contract Act": ["indian contract act", "contract act"],
   "Consumer Protection Act": ["consumer protection act"],
   "Transfer of Property Act": ["transfer of property act", "tpa"],
   "Model Tenancy Act": ["model tenancy act", "mta"],

@@ -9,9 +9,12 @@ from .criminal_codes import CriminalAct, parse_section_records
 
 # Exact counts: the section totals of the pinned texts, checked against the Acts' own numbering
 # by scripts/verify_everyday_acts.py. The Transfer of Property Act is Chapter V only (leases,
-# sections 105-117 and the inserted 114A). All are stored as in force except the Model Tenancy Act ("model"); the four
+# sections 105-117 and the inserted 114A). The Indian Contract Act is the 192 sections in the
+# Legislative Department print: 1-75 and 124-238 with the inserted 19A and 178A (Chapter VII,
+# sale of goods, and Chapter XI, partnership, were repealed and have no text). All are stored as in force except the Model Tenancy Act ("model"); the four
 # Labour Codes were brought into force on 21 November 2025.
 EVERYDAY_ACTS: dict[str, CriminalAct] = {
+    "contract": CriminalAct("Indian Contract Act", "in_force", (192, 192)),
     "cpa": CriminalAct("Consumer Protection Act", "in_force", (107, 107)),
     "tpa": CriminalAct("Transfer of Property Act", "in_force", (14, 14)),
     # A template for States to adopt, not law in force by itself (see sources/everyday_acts.json),

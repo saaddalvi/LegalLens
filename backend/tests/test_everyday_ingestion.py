@@ -62,6 +62,7 @@ def test_report_flags_an_act_with_the_wrong_count():
 
 def test_every_act_has_an_exact_expected_count():
     assert {k: v.expected_count for k, v in EVERYDAY_ACTS.items()} == {
+        "contract": (192, 192),
         "cpa": (107, 107),
         "tpa": (14, 14),
         "mta": (47, 47),
@@ -70,3 +71,27 @@ def test_every_act_has_an_exact_expected_count():
         "ss": (164, 164),
         "osh": (143, 143),
     }
+
+
+def test_contract_act_sections_27_and_74_come_out_with_their_numbers_and_text():
+    by_number = {c.number: c for c in provisions("contract")}
+    assert sorted(by_number) == ["19A", "27", "74"]
+    s27, s74 = by_number["27"], by_number["74"]
+    assert s27.act == "Indian Contract Act" and s27.status == "in_force"
+    assert s27.chapter == "Chapter II" and s74.chapter == "Chapter VI"
+    assert s27.text.startswith(
+        "Every agreement by which any one is restrained from\nexercising a lawful profession"
+    )
+    assert "Exception 1.—Saving of agreement not to carry on business" in s27.text
+    assert s74.text.startswith("When a contract has\nbeen broken, if a sum is named")
+    assert "reasonable compensation not exceeding the amount so named" in s74.text
+    # no marginal title or page furniture inside the Provision text
+    assert "Agreement in restraint of trade" not in s27.text
+    assert "Bare Act" not in s74.text
+
+
+def test_report_flags_a_contract_act_with_the_wrong_count():
+    report = build_report(provisions("contract"))  # 3 of 192
+    assert any(
+        "Indian Contract Act: 3 Chunks, expected 192-192" in w for w in report.warnings
+    )

@@ -7,6 +7,7 @@ export const CORPUS_ACTS = [
   "Indian Penal Code",
   "Code of Criminal Procedure",
   "Indian Evidence Act",
+  "Indian Contract Act",
   "Consumer Protection Act",
   "Transfer of Property Act",
   "Model Tenancy Act",

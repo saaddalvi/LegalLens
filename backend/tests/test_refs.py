@@ -36,6 +36,8 @@ def test_split_refs_round_trips_multiple_references():
             "section 106 of the Transfer of Property Act",
             [("Transfer of Property Act", "106")],
         ),
+        ("section 27 of the Indian Contract Act", [("Indian Contract Act", "27")]),
+        ("Contract Act section 74", [("Indian Contract Act", "74")]),
         ("section 11 of the Model Tenancy Act", [("Model Tenancy Act", "11")]),
         ("Consumer Protection Act section 35", [("Consumer Protection Act", "35")]),
         ("section 17 of the Code on Wages", [("Code on Wages", "17")]),

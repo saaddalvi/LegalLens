@@ -2,7 +2,8 @@
 
 Downloads the pinned Constitution dataset (checking its hash), applies the recorded patches,
 reads the pinned criminal-law PDFs from `<raw-dir>/criminal/` (all six Acts and the three
-old-to-new mappings) and the consumer, tenancy and labour PDFs from `<raw-dir>/everyday/`, reports Chunk counts per Act, and writes a fresh vector store. Exits
+old-to-new mappings) and the Contract Act, consumer, tenancy and labour PDFs from
+`<raw-dir>/everyday/`, reports Chunk counts per Act, and writes a fresh vector store. Exits
 non-zero if any count or Chunk looks wrong, so a bad parse is not silently shipped.
 """
 
@@ -45,8 +46,8 @@ def build(
     everyday_acts: dict[str, list[dict]] | None = None,
 ) -> Report:
     """`criminal_codes` maps an Act key (ipc, crpc, iea, bns, bnss, bsa) to section records;
-    `everyday_acts` does the same for the consumer, tenancy and labour Acts (cpa, tpa, mta, wages,
-    ir, ss, osh)."""
+    `everyday_acts` does the same for the Contract Act and the consumer, tenancy and labour Acts
+    (contract, cpa, tpa, mta, wages, ir, ss, osh)."""
     provisions = parse_constitution(constitution_records, patches)
     for key, records in (criminal_codes or {}).items():
         provisions += parse_criminal_code(key, records)

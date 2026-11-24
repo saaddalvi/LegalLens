@@ -14,6 +14,7 @@ from .mapping_tables import (
     parse_corresponding_table,
 )
 from .pdf_text import (
+    contract_act_sections,
     crpc_sections,
     gazette_sections,
     iea_sections,
@@ -147,6 +148,12 @@ def _read_pinned(folder: Path, pdf: PinnedPdf) -> list[str]:
 # The CPA and the four Labour Codes are the Gazette of India Extraordinary prints as enacted.
 # India Code serves 504s, so the Transfer of Property Act is an unofficial print instead.
 EVERYDAY_PDFS: dict[str, PinnedPdf] = {
+    "contract": PinnedPdf(
+        "contract_act_ld.pdf",
+        "e04d6ab4616b0e083957d78b0ce70a5354d3171738a57e1db6dd60285b577373",
+        "Indian Contract Act, 1872 (No. 9 of 1872): the Legislative Department's bare-act text with "
+        "its amendment footnotes, as mirrored by Drishti Judiciary (not served by India Code, which 504s)",
+    ),
     "cpa": PinnedPdf(
         "cpa_prs.pdf",
         "0ae7f82ab5b77d50087cd4cd2dd2dbc12755c0bdb31371fdefd042b020d50756",
@@ -195,11 +202,14 @@ def read_everyday_pdf_pages(raw_dir: Path, key: str) -> list[str]:
 
 
 def load_everyday_acts(raw_dir: Path) -> dict[str, list[dict]]:
-    """Section records for the seven consumer, tenancy and labour Acts, by `EVERYDAY_ACTS` key."""
+    """Section records for the Contract Act and the consumer, tenancy and labour Acts, by `EVERYDAY_ACTS` key."""
     gazette = ("cpa", "wages", "ir", "ss", "osh")
     records = {
         key: gazette_sections(read_everyday_pdf_pages(raw_dir, key)) for key in gazette
     }
+    records["contract"] = contract_act_sections(
+        read_everyday_pdf_pages(raw_dir, "contract")
+    )
     records["tpa"] = tpa_lease_sections(read_everyday_pdf_pages(raw_dir, "tpa"))
     records["mta"] = model_tenancy_sections(read_everyday_pdf_pages(raw_dir, "mta"))
     assert set(records) == set(EVERYDAY_ACTS)
