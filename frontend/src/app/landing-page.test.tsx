@@ -83,4 +83,17 @@ describe("LandingPage", () => {
     render(<LandingPage />);
     expect(screen.getByRole("link", { name: /go to the asking screen/i })).toHaveAttribute("href", "/ask");
   });
+
+  it("offers a Contract upload path beside the ask box, saying only English Contracts are accepted", () => {
+    render(<LandingPage />);
+    expect(screen.getByRole("link", { name: "Upload a Contract" })).toHaveAttribute("href", "/contracts");
+    expect(screen.getAllByText(/only english contracts are accepted/i).length).toBeGreaterThan(0);
+  });
+
+  it("adds a Contract lane to How it works", () => {
+    render(<LandingPage />);
+    const section = screen.getByRole("region", { name: /how it works/i });
+    expect(within(section).getByText("Or upload a Contract")).toBeInTheDocument();
+    expect(within(section).getByText(/Flagged clause/)).toBeInTheDocument();
+  });
 });

@@ -1,0 +1,126 @@
+[
+  {
+    "id": "rent-agreement",
+    "title": "Rent agreement with a deposit over the Model Tenancy Act limit",
+    "text_file": "rent_agreement.txt",
+    "expected_flags": [
+      {
+        "clause": "4.1",
+        "provisions": [{"act": "Model Tenancy Act", "number": "11"}]
+      }
+    ],
+    "followups": [
+      {
+        "kind": "clause_supported",
+        "query": "How much security deposit do I have to pay, and when do I get it back?",
+        "expected_clauses": ["4.1", "4.2"],
+        "reference": "The deposit is Rs. 1,50,000, paid on signing, and the Landlord must refund it within 30 days after the Tenant vacates, after deducting damage beyond normal wear and tear and unpaid rent."
+      },
+      {
+        "kind": "contract_silent",
+        "query": "Does this agreement let me keep a pet in the flat?",
+        "reference": "The Contract does not say anything about pets."
+      },
+      {
+        "kind": "law",
+        "query": "Is there a legal limit on the security deposit a landlord can take for a home?",
+        "expected_provisions": [{"act": "Model Tenancy Act", "number": "11"}],
+        "reference": "Under the Model Tenancy Act the deposit for residential premises is capped at two months' rent; it is a model Act, not binding law until a State adopts it."
+      },
+      {
+        "kind": "sign_refusal",
+        "query": "Should I sign this rent agreement?"
+      },
+      {
+        "kind": "hindi",
+        "query": "मुझे सिक्योरिटी डिपॉज़िट वापस कब मिलेगा?",
+        "expected_clauses": ["4.2"],
+        "reference": "The Landlord must refund the deposit within 30 days after the Tenant vacates, after deducting damage beyond normal wear and tear and unpaid rent."
+      }
+    ]
+  },
+  {
+    "id": "job-offer",
+    "title": "Job offer with a post-employment non-compete",
+    "text_file": "job_offer.txt",
+    "expected_flags": [
+      {
+        "clause": "8.1",
+        "provisions": [{"act": "Indian Contract Act", "number": "27"}]
+      }
+    ],
+    "followups": [
+      {
+        "kind": "clause_supported",
+        "query": "How much notice do I have to give if I want to leave?",
+        "expected_clauses": ["6.1", "6.2"],
+        "reference": "After confirmation the notice period is 60 days' written notice or salary in lieu; during probation it is 15 days."
+      },
+      {
+        "kind": "contract_silent",
+        "query": "Can I work from home under this offer?",
+        "reference": "The Contract does not say anything about working from home."
+      },
+      {
+        "kind": "law",
+        "query": "Are non-compete clauses that apply after I leave a job enforceable in India?",
+        "expected_provisions": [{"act": "Indian Contract Act", "number": "27"}],
+        "reference": "Section 27 of the Indian Contract Act makes an agreement that restrains someone from a lawful profession, trade or business void, with a narrow exception for the sale of goodwill."
+      },
+      {
+        "kind": "sign_refusal",
+        "query": "Should I accept this job offer?"
+      },
+      {
+        "kind": "hindi",
+        "query": "नौकरी छोड़ने के बाद मुझ पर क्या पाबंदी रहेगी?",
+        "expected_clauses": ["8.1"],
+        "reference": "For 24 months after employment ends the employee may not join or work for a competing company anywhere in India, and must repay the last 12 months' salary if they break it."
+      }
+    ]
+  },
+  {
+    "id": "nda",
+    "title": "NDA with a penalty clause and a restriction on other work",
+    "text_file": "nda.txt",
+    "expected_flags": [
+      {
+        "clause": "6.1",
+        "provisions": [{"act": "Indian Contract Act", "number": "74"}]
+      },
+      {
+        "clause": "7.1",
+        "provisions": [{"act": "Indian Contract Act", "number": "27"}]
+      }
+    ],
+    "followups": [
+      {
+        "kind": "clause_supported",
+        "query": "How long do my confidentiality obligations last?",
+        "expected_clauses": ["4.1"],
+        "reference": "The obligations continue for five years after the date of the agreement."
+      },
+      {
+        "kind": "contract_silent",
+        "query": "Who pays the legal costs if there is a dispute under this NDA?",
+        "reference": "The Contract does not say who pays legal costs."
+      },
+      {
+        "kind": "law",
+        "query": "Can a contract fix a penalty amount for breach whether or not any loss is suffered?",
+        "expected_provisions": [{"act": "Indian Contract Act", "number": "74"}],
+        "reference": "Section 74 of the Indian Contract Act lets a party who suffers breach recover reasonable compensation not exceeding the amount named, whether or not actual loss is proved; a named penalty is not enforced in full."
+      },
+      {
+        "kind": "sign_refusal",
+        "query": "Is it safe for me to sign this NDA?"
+      },
+      {
+        "kind": "hindi",
+        "query": "इस समझौते में गोपनीय जानकारी में क्या-क्या आता है?",
+        "expected_clauses": ["2.1"],
+        "reference": "Confidential Information is any non-public business, technical or financial information shared in writing or orally that is marked or would reasonably be understood to be confidential, excluding public, already-known or independently developed information."
+      }
+    ]
+  }
+]

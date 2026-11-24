@@ -253,3 +253,39 @@ Other notes:
 - Hallucinated-citation rate before blocking is 0% in both modes: nothing was blocked in this run. CRAG answers that rely on web sources alone are not in this rate.
 
 Per-case detail is in `backend/evaluation/report.md`.
+
+### Contract evaluation
+
+Three sample Contracts written for testing (no real personal data) in `backend/fixtures/contracts/`: a
+rent agreement with a deposit over the Model Tenancy Act's limit, a job offer with a post-employment
+non-compete, and an NDA with a penalty clause and a restriction on other work. Each lists its expected
+Flagged clauses (Clause number and the Provision cited) and five follow-ups: Clause-supported,
+Contract-silent, a law question, a "should I sign?" refusal and a Hindi Query. The harness uploads each
+Contract and asks the follow-ups through `POST /contracts/stream` and `POST /contracts/{id}/ask/stream`,
+then deletes it.
+
+```bash
+cd backend && python -m legallens.evaluate --contracts --database-url <migrated Postgres it may write to>
+```
+
+It needs the same keys as the `/ask` evaluation and a migrated Postgres with pgvector. It does not read
+`DATABASE_URL`, so it cannot be pointed at production by accident. It replaces the "Contract evaluation"
+section of `backend/evaluation/report.md` and leaves the `/ask` results alone; a later `/ask` run keeps that
+section too.
+
+- **Flag recall / precision**: an expected flag is found when the brief flags that Clause (or a sub-Clause or parent of it) and cites one of the expected Provisions. Precision is the share of flags the brief returned that were expected, so a legitimate extra flag counts against it.
+- **Hallucinated clause references (expected 0)**: Clause numbers or quoted Clause text in the brief or an answer that do not match the stored Clauses. Like citation validity this is a guard, since the app blocks them.
+- **Follow-up accuracy**: a refusal for "should I sign?"; for Clause-supported and Hindi Queries, a quoted expected Clause (and Hindi text for Hindi) plus a Gemini judge; for law questions, an expected Provision cited plus the judge; for Contract-silent Queries, the judge.
+
+First run (2026-11-25, `gemini-3.5-flash-lite`, fallback `gemini-3.5-flash`, Tavily Fallback, full Corpus embedded with `Qwen/Qwen3-Embedding-0.6B`):
+
+| Metric | Result |
+|---|---|
+| Flag recall | 25% (1 of 4 expected flags found) |
+| Flag precision | 33% (1 of 3 returned flags expected) |
+| Hallucinated clause references (expected 0) | 0 of 54 checked |
+| Follow-up accuracy | 83% (10 of 12 scored) |
+
+Follow-ups: Clause-supported 100%, Contract-silent 100%, "should I sign?" refusal 100%, law 50%, Hindi 50%. Three follow-ups (all in the NDA) failed on Gemini rate limits after retries and are excluded, so the NDA's law, silent and Hindi cases are unscored.
+
+What it shows: the guards hold (no hallucinated clause references) and the conversation behaves, but **flag finding is weak**. Only the rent agreement's deposit flag (Clause 4.1, Model Tenancy Act 11) was found, along with one extra flag on 4.2. The job offer's non-compete (Clause 8.1, Indian Contract Act 27) was missed and the brief flagged a different Clause against an unrelated Labour Code Provision; the NDA's brief returned no flags at all, so both its expected flags were missed. With three Contracts, one flag moves recall by 25 points, and this is a single run. The next step is to look at why the candidate-flag retrieval does not surface Indian Contract Act 27 and 74.

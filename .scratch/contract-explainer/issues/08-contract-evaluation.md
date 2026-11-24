@@ -11,9 +11,9 @@ The harness drives the Contract endpoints through the app, as it drives `/ask`, 
 
 **Blocked by:** 03 (Indian Contract Act), 06 (Contract conversation)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The three sample Contracts and their expected cases are checked in, with no real personal data
-- [ ] The evaluation runs the Contract cases with `--contracts` (or similar), and the existing `/ask` evaluation is unchanged
-- [ ] The report lists, per Contract: expected against found flags, Hallucinated clause references (expected 0) and the follow-up results
-- [ ] A first run is recorded in the README results with the model name and date
+- [x] The three sample Contracts and their expected cases are checked in, with no real personal data
+- [x] The evaluation runs the Contract cases with `--contracts` (or similar), and the existing `/ask` evaluation is unchanged
+- [x] The report lists, per Contract: expected against found flags, Hallucinated clause references (expected 0) and the follow-up results
+- [x] A first run is recorded in the README results with the model name and date

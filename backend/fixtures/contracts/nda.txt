@@ -1,0 +1,30 @@
+MUTUAL NON-DISCLOSURE AGREEMENT
+
+This agreement is made on 15 May 2025 between Sample Analytics Private Limited (the "Company") and Sample Consultant Desai (the "Consultant"). It is a sample written for testing and names no real person or company.
+
+1. Purpose
+1.1 The Company and the Consultant wish to discuss a possible consulting engagement on the Company's data-analysis project (the "Purpose"). Each may share confidential information with the other for the Purpose only.
+
+2. Confidential information
+2.1 "Confidential Information" means any non-public business, technical or financial information that one party discloses to the other in writing or orally and that is marked or would reasonably be understood to be confidential.
+2.2 Confidential Information does not include information that is public without breach of this agreement, was already known to the receiving party, or is independently developed by it.
+
+3. Obligations
+3.1 The receiving party shall keep the Confidential Information secret, use it only for the Purpose and not copy it except as the Purpose requires.
+3.2 The receiving party may share Confidential Information with its employees and advisers who need to know it and are bound to keep it confidential.
+3.3 The receiving party may disclose Confidential Information where a court or authority requires it by law, after giving the other party prompt notice where permitted.
+
+4. Duration
+4.1 The obligations in this agreement continue for five years after the date of this agreement.
+
+5. Return of information
+5.1 When the other party asks, the receiving party shall return or destroy the Confidential Information and confirm in writing that it has done so.
+
+6. Breach
+6.1 If the Consultant discloses Confidential Information in breach of this agreement, the Consultant shall pay the Company Rs. 50,00,000 as a penalty, whether or not the Company suffers any loss.
+
+7. Restriction on other work
+7.1 For three years after this agreement ends, the Consultant shall not carry on, or work for, any business similar to the Company's business anywhere in India.
+
+8. General
+8.1 This agreement is the entire agreement between the parties on its subject. It may be changed only in writing signed by both parties.

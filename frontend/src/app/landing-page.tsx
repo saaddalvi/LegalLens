@@ -15,7 +15,10 @@ import {
 import { TRUST_EXPLANATION, type TrustLabel } from "@/lib/trust-labels";
 
 const STEPS = [
-  { title: "You ask", body: "Type your question about Indian law in English or Hindi." },
+  {
+    title: "You ask",
+    body: "Type your question about Indian law in English or Hindi.",
+  },
   {
     title: "It is checked against the statute text",
     body: "LegalLens finds the relevant Provisions and checks every Citation against the Corpus before showing anything.",
@@ -25,6 +28,11 @@ const STEPS = [
     body: "Each Citation quotes the Provision itself, so you can read the law and not just a summary.",
   },
 ];
+
+const CONTRACT_LANE = {
+  title: "Or upload a Contract",
+  body: "LegalLens writes a Contract brief: the parties, key terms and obligations, with each Flagged clause shown beside the Clause it comes from and how it differs from Indian law. Then ask follow-up Queries about it. Only English Contracts are accepted.",
+};
 
 const TRUST_ORDER: TrustLabel[] = [
   "corpus",
@@ -48,17 +56,25 @@ function Specimen() {
     >
       <p className="text-muted">{SPECIMEN.query}</p>
       <div className="mt-5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1">
-        <span className="condensed text-5xl text-ink sm:text-6xl">{SPECIMEN.number}.</span>
+        <span className="condensed text-5xl text-ink sm:text-6xl">
+          {SPECIMEN.number}.
+        </span>
         <div className="flex flex-col gap-2 pt-1">
           <p className="text-sm text-muted">{SPECIMEN.act}</p>
-          <p className="font-serif text-xl leading-snug italic">{SPECIMEN.marginalNote}</p>
+          <p className="font-serif text-xl leading-snug italic">
+            {SPECIMEN.marginalNote}
+          </p>
         </div>
-        <p className="col-start-2 mt-2 font-serif text-lg leading-relaxed">{SPECIMEN.text}</p>
+        <p className="col-start-2 mt-2 font-serif text-lg leading-relaxed">
+          {SPECIMEN.text}
+        </p>
       </div>
       <div className="mt-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-6">
         <p className="text-sm">
           <s className="text-redtape decoration-2">{SPECIMEN.repealed}</s>{" "}
-          <span className="text-muted">is repealed and replaced by {SPECIMEN.current}</span>
+          <span className="text-muted">
+            is repealed and replaced by {SPECIMEN.current}
+          </span>
         </p>
         <span className="pr-2">
           <Stamp trust="corpus" large />
@@ -78,7 +94,10 @@ export default function LandingPage() {
         <header className="flex items-baseline justify-between gap-4 border-b border-rule py-5">
           <span className="condensed text-2xl">LegalLens</span>
           <div className="flex items-center gap-4 sm:gap-6">
-            <Link href="/ask" className="text-sm font-medium underline underline-offset-4">
+            <Link
+              href="/ask"
+              className="text-sm font-medium underline underline-offset-4"
+            >
               Go to the asking screen
             </Link>
             <AccountNav />
@@ -92,11 +111,27 @@ export default function LandingPage() {
               Ask about Indian law. Read the law itself.
             </h1>
             <p className="max-w-[52ch] text-lg text-muted">
-              Plain-language answers in English or Hindi, each backed by the statute text it comes
-              from. Every Citation is checked against that text before you see it.
+              Plain-language answers in English or Hindi, each backed by the
+              statute text it comes from. Every Citation is checked against that
+              text before you see it.
             </p>
-            <div className="max-w-xl">
-              <AskBox />
+            <div className="grid gap-8 sm:grid-cols-[minmax(0,1fr)_13rem] sm:gap-0">
+              <div className="sm:pr-8">
+                <AskBox />
+              </div>
+              <div className="flex flex-col items-start gap-3 border-t border-rule pt-6 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-6">
+                <h2 className="font-medium">Have a Contract?</h2>
+                <p className="text-sm text-muted">
+                  Get a Contract brief with its Flagged clauses. Only English
+                  Contracts are accepted.
+                </p>
+                <Link
+                  href="/contracts"
+                  className="text-base font-semibold underline underline-offset-4"
+                >
+                  Upload a Contract
+                </Link>
+              </div>
             </div>
           </div>
           <div className="lg:pt-3">
@@ -112,14 +147,21 @@ export default function LandingPage() {
             <ul className="grid max-w-3xl gap-x-10 sm:grid-cols-2">
               {EXAMPLE_QUERIES.en.map((q) => (
                 <li key={q} className="border-b border-rule">
-                  <Link href={askHref(q)} className="block py-3 hover:text-stamp">
+                  <Link
+                    href={askHref(q)}
+                    className="block py-3 hover:text-stamp"
+                  >
                     {q}
                   </Link>
                 </li>
               ))}
               {EXAMPLE_QUERIES.hi.map((q) => (
                 <li key={q} className="border-b border-rule">
-                  <Link href={askHref(q)} lang="hi" className="block py-3 hover:text-stamp">
+                  <Link
+                    href={askHref(q)}
+                    lang="hi"
+                    className="block py-3 hover:text-stamp"
+                  >
                     {q}
                   </Link>
                 </li>
@@ -131,17 +173,30 @@ export default function LandingPage() {
             <h2 id="how" className="margin-note condensed text-xl">
               How it works
             </h2>
-            <ol className="grid max-w-3xl gap-8 sm:grid-cols-3 sm:gap-6">
-              {STEPS.map((s, i) => (
-                <li key={s.title} className="flex flex-col gap-2">
-                  <span className="condensed text-4xl text-muted" aria-hidden="true">
-                    {i + 1}.
-                  </span>
-                  <h3 className="font-semibold leading-snug">{s.title}</h3>
-                  <p className="text-muted">{s.body}</p>
-                </li>
-              ))}
-            </ol>
+            <div>
+              <ol className="grid max-w-3xl gap-8 sm:grid-cols-3 sm:gap-6">
+                {STEPS.map((s, i) => (
+                  <li key={s.title} className="flex flex-col gap-2">
+                    <span
+                      className="condensed text-4xl text-muted"
+                      aria-hidden="true"
+                    >
+                      {i + 1}.
+                    </span>
+                    <h3 className="font-semibold leading-snug">{s.title}</h3>
+                    <p className="text-muted">{s.body}</p>
+                  </li>
+                ))}
+              </ol>
+              <div className="mt-8 max-w-3xl border-t border-rule pt-6 sm:mt-10">
+                <h3 className="font-semibold leading-snug">
+                  {CONTRACT_LANE.title}
+                </h3>
+                <p className="mt-2 max-w-[68ch] text-muted">
+                  {CONTRACT_LANE.body}
+                </p>
+              </div>
+            </div>
           </section>
 
           <section aria-labelledby="corpus" className="margin-grid">
@@ -158,8 +213,12 @@ export default function LandingPage() {
                     >
                       {REPLACED_BY[act] ? (
                         <>
-                          <s className="text-muted decoration-redtape decoration-2">{act}</s>
-                          <span className="shrink-0 text-sm text-muted">now {REPLACED_BY[act]}</span>
+                          <s className="text-muted decoration-redtape decoration-2">
+                            {act}
+                          </s>
+                          <span className="shrink-0 text-sm text-muted">
+                            now {REPLACED_BY[act]}
+                          </span>
                         </>
                       ) : (
                         <span>{act}</span>
@@ -177,7 +236,9 @@ export default function LandingPage() {
               Trust labels explained
             </h2>
             <div className="flex max-w-3xl flex-col gap-6">
-              <p>Every answer carries a label saying where its support came from.</p>
+              <p>
+                Every answer carries a label saying where its support came from.
+              </p>
               <dl className="flex flex-col">
                 {TRUST_ORDER.map((t) => (
                   <div
@@ -195,9 +256,12 @@ export default function LandingPage() {
           </section>
         </div>
 
-        <p role="note" className="border-t-4 border-ink py-6 text-lg font-medium">
-          LegalLens is for information only and is not legal advice. Consult a qualified lawyer about
-          your situation.
+        <p
+          role="note"
+          className="border-t-4 border-ink py-6 text-lg font-medium"
+        >
+          LegalLens is for information only and is not legal advice. Consult a
+          qualified lawyer about your situation.
         </p>
       </main>
       <footer className="border-t border-rule px-4 py-6 text-center text-sm text-muted">
