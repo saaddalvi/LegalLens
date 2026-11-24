@@ -138,6 +138,7 @@ class ContractIntake:
                 await asyncio.to_thread(self._llm.read_document, pdf, "application/pdf")
             )
         if not text:
+            log.warning("no text came back from reading the %s", source.kind)
             raise Refused("unreadable")
 
         on_stage("contract_check", STAGE_LABELS["contract_check"])
@@ -175,6 +176,7 @@ class ContractIntake:
             try:
                 pages = len(PdfReader(io.BytesIO(source.data)).pages)
             except (PyPdfError, ValueError, OSError) as exc:
+                log.warning("PDF could not be parsed: %s", type(exc).__name__)
                 raise Refused("unreadable") from exc
             if pages > MAX_PAGES:
                 raise Refused("too_long")

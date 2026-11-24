@@ -442,6 +442,7 @@ def create_app(
                     )
                 )
             except Refused as r:
+                logging.getLogger(__name__).info("contract upload refused: %s", r.code)
                 rlog.finish("refused")
                 events.put_nowait(("refusal", _refusal(r)))
             except asyncio.CancelledError:
