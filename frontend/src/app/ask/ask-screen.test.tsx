@@ -226,7 +226,8 @@ describe("AskScreen", () => {
     mockFetch({ ok: false, status: 401 });
     render(<AskScreen initialQuery="What is Article 14?" />);
     const alert = await screen.findByRole("alert");
-    expect(within(alert).getByRole("button", { name: "Sign in" })).toBeInTheDocument();
+    expect(alert).toHaveTextContent("Your session has expired. Sign in again to ask your question.");
+    expect(within(alert).getByRole("button", { name: "Sign in again" })).toBeInTheDocument();
     expect(within(alert).queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
   });
 
@@ -247,6 +248,15 @@ describe("AskScreen", () => {
     expect(screen.queryByText(/characters left/)).not.toBeInTheDocument();
     fireEvent.change(box, { target: { value: "a".repeat(1900) } });
     expect(screen.getByText("100 characters left")).toBeInTheDocument();
+  });
+
+  it("does not call a reply that found no source a ready answer", async () => {
+    mockFetch({ ok: true, status: 200, body: { ...base, trust_label: "none", citations: [] } });
+    await ask();
+    expect(
+      await screen.findByText("LegalLens found no supporting source for that question."),
+    ).toHaveAttribute("role", "status");
+    expect(screen.queryByText("Your answer is ready.")).not.toBeInTheDocument();
   });
 
   it("announces that the answer is ready", async () => {
@@ -318,11 +328,31 @@ describe("AskScreen", () => {
     });
   });
 
-  it("asks the reader to sign in again when the service answers 401", async () => {
+  it("offers Try again, not sign-in, when a signed-in reader is answered 401", async () => {
+    session.isSignedIn = true;
     mockFetch({ ok: false, status: 401 });
     await ask();
-    expect(await screen.findByRole("alert")).toHaveTextContent(/sign in again/i);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("We could not confirm your sign-in. Please try again.");
+    expect(within(alert).getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    expect(within(alert).queryByRole("button", { name: "Sign in again" })).not.toBeInTheDocument();
   });
+
+  it.each(["{Meta>}{Enter}{/Meta}", "{Control>}{Enter}{/Control}"])(
+    "sends the question on %s, while Enter alone adds a line",
+    async (keys) => {
+      const fn = mockFetch({ ok: true, status: 200, body: base });
+      const user = userEvent.setup();
+      render(<AskScreen />);
+      const box = screen.getByLabelText(/ask a question/i);
+      await user.type(box, "What is Article 14?{Enter}");
+      expect(box).toHaveValue("What is Article 14?\n");
+      expect(fn).not.toHaveBeenCalled();
+      await user.keyboard(keys);
+      await screen.findByText("From statute text");
+      expect(fn).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("explains service errors", async () => {
     mockFetch({ ok: false, status: 503 });
@@ -995,7 +1025,7 @@ describe("returning to a Query", () => {
     });
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     await waitFor(() =>
-      expect(within(screen.getByRole("alert")).getByRole("button", { name: "Sign in" })).toBeInTheDocument(),
+      expect(within(screen.getByRole("alert")).getByRole("button", { name: "Sign in again" })).toBeInTheDocument(),
     );
     expect(screen.getByText("First answer.")).toBeInTheDocument();
   });

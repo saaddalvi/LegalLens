@@ -123,6 +123,8 @@ function Mention({
 const IN_FORCE =
   "text-stamp underline decoration-stamp/50 decoration-2 underline-offset-4 hover:decoration-stamp";
 const STRUCK = "line-through decoration-redtape decoration-2";
+// A short name, such as "BNS 318", stays on one line; a long one has to be able to wrap.
+const unbroken = (text: string) => (text.length <= 12 ? "whitespace-nowrap" : "");
 
 // What LegalLens adds beside a repealed mention, in the answer's language.
 const REPEALED_WORDS = {
@@ -149,7 +151,7 @@ function RepealedMention({
   onMention: OnMention;
 }) {
   const words = REPEALED_WORDS[language === "hi" ? "hi" : "en"];
-  const struck = <s className={STRUCK}>{text}</s>;
+  const struck = <s className={`${STRUCK} ${unbroken(text)}`}>{text}</s>;
   return (
     <>
       {cited.has(provisionKey(provision)) ? (
@@ -248,7 +250,12 @@ function RevealedParagraphs({
                     onMention={onMention}
                   />
                 ) : (
-                  <Mention key={j} to={seg} onMention={onMention} className={IN_FORCE}>
+                  <Mention
+                    key={j}
+                    to={seg}
+                    onMention={onMention}
+                    className={`${IN_FORCE} ${unbroken(seg.text)}`}
+                  >
                     {seg.text}
                   </Mention>
                 );

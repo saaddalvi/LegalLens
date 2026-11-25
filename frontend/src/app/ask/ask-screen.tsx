@@ -1,16 +1,18 @@
 "use client";
 
-import { SignInButton, useAuth } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
-import { BUTTON_CLASS, FIELD_CLASS } from "../ask-box";
+import { BUSY_BUTTON_CLASS, BUTTON_CLASS, FIELD_CLASS } from "../ask-box";
 import { Answer, Refusal } from "../answer-view";
 import type { Stage } from "../stage-list";
 import StageList from "../stage-list";
+import SignInAgain, { sessionMessage } from "../contracts/sign-in-again";
 import SiteHeader from "../site-header";
 import { API_URL } from "@/lib/api-url";
 import { DISCLAIMER } from "@/lib/answer-text";
+import { askHref } from "@/lib/corpus";
 import type { AskResponse } from "@/lib/ask-types";
 import { detectedLang, errorMessage } from "@/lib/ask-stream";
 import { retryAfterSeconds } from "@/lib/daily-cap";
@@ -33,6 +35,8 @@ type Outcome = {
   error: string | null;
   // The service refused the session token.
   unauthorized?: boolean;
+  // A limit that will not lift for more than a minute, so trying again now cannot work.
+  longWait?: boolean;
   // The Stage that was running when answering failed, when there was one.
   failedStage?: string | null;
   // The answer arrived while the page was being read, so it is revealed word by word.
@@ -141,8 +145,12 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
           signal: controller.signal,
         });
         if (!res.ok) {
-          const error = errorMessage(res.status, retryAfterSeconds(res));
-          return settle({ error, unauthorized: res.status === 401 });
+          const wait = retryAfterSeconds(res);
+          return settle({
+            error: errorMessage(res.status, wait),
+            unauthorized: res.status === 401,
+            longWait: res.status === 429 && wait !== null && wait > 60,
+          });
         }
         if (!res.body) return fail(errorMessage(null));
         let finished = false;
@@ -180,7 +188,10 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
   const loading =
     asked !== null && current === null && !waiting && (asked.again || result === null);
   const busy = loading || waiting;
-  const error = current?.error ?? null;
+  // A refused token ends a session, or is a passing fault while still signed in.
+  const error = current?.unauthorized
+    ? sessionMessage(isSignedIn, "ask your question")
+    : (current?.error ?? null);
   const stages = progress?.for === asked ? progress.stages : [];
   const failedStage = current?.failedStage ?? null;
   const showStages = loading || (error !== null && stages.length > 0);
@@ -261,6 +272,13 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
     send(q);
   }
 
+  // Enter starts a new line in this box, so sending from the keyboard takes Cmd or Ctrl too.
+  function sendFromKeyboard(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey) || e.nativeEvent.isComposing) return;
+    e.preventDefault();
+    e.currentTarget.form?.requestSubmit();
+  }
+
   const left = MAX_QUERY - query.length;
 
   return (
@@ -283,42 +301,54 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
             type="button"
             aria-label="Edit question"
             onClick={edit}
-            className={QUIET_BUTTON_CLASS}
+            className={`${QUIET_BUTTON_CLASS} justify-end!`}
           >
             Edit
           </button>
         </div>
       ) : (
-        <form onSubmit={submit} className="flex flex-col gap-3">
+        // Ruled off from the earlier answer while the question is being edited above it.
+        <form
+          onSubmit={submit}
+          className={`flex flex-col gap-3 ${asked ? "border-b border-rule pb-8" : ""}`}
+        >
           <h1 className="condensed text-balance text-3xl">
             <label htmlFor="query">Ask a question about Indian law</label>
           </h1>
           <p lang="hi" className="-mt-1 text-muted">
             आप हिंदी में भी पूछ सकते हैं।
           </p>
-          <textarea
-            id="query"
-            ref={fieldRef}
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setMissing(false);
-            }}
-            lang={query ? detectedLang(query) : undefined}
-            rows={3}
-            maxLength={MAX_QUERY}
-            aria-required="true"
-            aria-invalid={missing || undefined}
-            aria-describedby="query-hint query-count"
-            placeholder="In English or Hindi"
-            className={FIELD_CLASS}
-          />
+          <div className="flex flex-col">
+            <textarea
+              id="query"
+              ref={fieldRef}
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setMissing(false);
+              }}
+              lang={query ? detectedLang(query) : undefined}
+              rows={3}
+              maxLength={MAX_QUERY}
+              aria-required="true"
+              aria-invalid={missing || undefined}
+              aria-describedby="query-hint query-count"
+              placeholder="In English or Hindi"
+              onKeyDown={sendFromKeyboard}
+              // Grows with a long question where the browser can, between three and about ten lines.
+              className={`${FIELD_CLASS} field-sizing-content max-h-72 min-h-27`}
+            />
+            {/* Always in the page so a screen reader announces the text when it appears. */}
+            <p id="query-hint" role="status" className="font-medium not-empty:mt-2">
+              {missing ? "Type your question first, in English or Hindi." : ""}
+            </p>
+          </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <button
               ref={submitRef}
               type="submit"
               aria-disabled={busy || undefined}
-              className={`${BUTTON_CLASS} aria-disabled:cursor-progress aria-disabled:bg-ledger aria-disabled:text-muted aria-disabled:hover:bg-ledger`}
+              className={`${BUTTON_CLASS} ${BUSY_BUTTON_CLASS}`}
             >
               {loading ? "Thinking…" : "Ask"}
             </button>
@@ -327,10 +357,6 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
                 Cancel
               </button>
             )}
-            {/* Always in the page so a screen reader announces the text when it appears. */}
-            <p id="query-hint" role="status" className="font-medium">
-              {missing ? "Type your question first, in English or Hindi." : ""}
-            </p>
             <p id="query-count" className="ml-auto text-sm text-muted tabular-nums">
               {left <= COUNT_FROM ? `${left} ${left === 1 ? "character" : "characters"} left` : ""}
             </p>
@@ -342,9 +368,11 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
       <p role="status" className="sr-only">
         {!result || loading || error
           ? ""
-          : result.response_type === "answer"
-            ? "Your answer is ready."
-            : "LegalLens could not answer that question."}
+          : result.response_type === "refusal"
+            ? "LegalLens could not answer that question."
+            : foundNothing(result)
+              ? "LegalLens found no supporting source for that question."
+              : "Your answer is ready."}
       </p>
 
       {waiting && <p className="text-muted">Loading…</p>}
@@ -365,13 +393,14 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
             {result && ` ${EARLIER_STANDS}`}
           </p>
           {current?.unauthorized && isSignedIn === false ? (
-            <SignInButton>
-              <button type="button" className={BUTTON_CLASS}>
-                Sign in
-              </button>
-            </SignInButton>
+            <SignInAgain returnTo={askHref(asked?.q ?? "")} />
           ) : (
-            <button type="button" onClick={tryAgain} className={BUTTON_CLASS}>
+            // Stands back where the wait is long, as pressing it now would only fail again.
+            <button
+              type="button"
+              onClick={tryAgain}
+              className={current?.longWait ? QUIET_BUTTON_CLASS : BUTTON_CLASS}
+            >
               Try again
             </button>
           )}

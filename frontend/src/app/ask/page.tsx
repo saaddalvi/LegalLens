@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import SiteHeader from "../site-header";
 import AskScreen from "./ask-screen";
 
 export const metadata: Metadata = {
@@ -15,7 +16,14 @@ async function AskFromAddress({ searchParams }: Pick<PageProps<"/ask">, "searchP
 
 export default function AskPage({ searchParams }: PageProps<"/ask">) {
   return (
-    <Suspense>
+    // The header holds its place while the address is read, as the screen draws it there too.
+    <Suspense
+      fallback={
+        <main className="mx-auto w-full max-w-3xl flex-1 px-4 sm:px-8">
+          <SiteHeader current="ask" />
+        </main>
+      }
+    >
       <AskFromAddress searchParams={searchParams} />
     </Suspense>
   );
