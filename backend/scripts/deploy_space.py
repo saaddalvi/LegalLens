@@ -41,11 +41,15 @@ def check_corpus(store: Path) -> int:
     from legallens.main import is_fixture_corpus
 
     if not (store / "chroma.sqlite3").exists():
-        sys.exit(f"No built Corpus at {store}. Run `python -m legallens.build_corpus` first.")
+        sys.exit(
+            f"No built Corpus at {store}. Run `python -m legallens.build_corpus` first."
+        )
     corpus = Corpus(store, LocalEmbedder())  # counting does not load the model
     count = corpus.count()
     if count == 0 or is_fixture_corpus(corpus):
-        sys.exit(f"The Corpus at {store} is empty or only the sample fixture; not shipping it.")
+        sys.exit(
+            f"The Corpus at {store} is empty or only the sample fixture; not shipping it."
+        )
     return count
 
 
@@ -75,7 +79,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("stage_dir", type=Path)
     ap.add_argument("--corpus", type=Path, default=BACKEND_DIR / "data" / "chroma")
-    ap.add_argument("--push", metavar="USER/SPACE", help="create the Space and upload to it")
+    ap.add_argument(
+        "--push", metavar="USER/SPACE", help="create the Space and upload to it"
+    )
     args = ap.parse_args()
     count = stage(args.stage_dir, args.corpus)
     print(f"Staged {count} Provisions and the code in {args.stage_dir}")
