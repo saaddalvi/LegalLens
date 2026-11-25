@@ -32,7 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_en
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.pool import NullPool
 
-from .clauses import ClausePiece
+from .clauses import ClausePiece, count_clauses
 from .models import (
     ClauseOut,
     ContractAnswer,
@@ -278,8 +278,8 @@ class Database:
 
     async def list_contracts(self, user_id: str) -> list[ContractSummary]:
         """The user's own Contracts, newest first."""
-        clause_count = (
-            select(func.count(func.distinct(Clause.number)))
+        numbers = (
+            select(func.array_agg(Clause.number))
             .where(Clause.contract_id == Contract.id)
             .scalar_subquery()
         )
@@ -290,12 +290,21 @@ class Database:
                     Contract.title,
                     Contract.created_at,
                     Contract.page_count,
-                    clause_count.label("clause_count"),
+                    numbers.label("numbers"),
                 )
                 .where(Contract.user_id == user_id)
                 .order_by(Contract.created_at.desc())
             )
-            return [ContractSummary(**r._mapping) for r in rows]
+            return [
+                ContractSummary(
+                    id=r.id,
+                    title=r.title,
+                    created_at=r.created_at,
+                    page_count=r.page_count,
+                    clause_count=count_clauses(r.numbers or []),
+                )
+                for r in rows
+            ]
 
     async def get_contract(
         self, user_id: str, contract_id: str
@@ -341,7 +350,7 @@ class Database:
             title=head.title,
             created_at=head.created_at,
             page_count=head.page_count,
-            clause_count=len(clauses),
+            clause_count=count_clauses(clauses),
             clauses=list(clauses.values()),
             brief=ContractBrief.model_validate(head.brief) if head.brief else None,
             conversations=conversations,

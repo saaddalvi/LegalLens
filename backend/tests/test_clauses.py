@@ -1,6 +1,6 @@
 """Splitting a Contract's text into Clauses: deterministic code, tested on fixture Contracts."""
 
-from legallens.clauses import PIECE_CHARS, split_clauses
+from legallens.clauses import PIECE_CHARS, count_clauses, split_clauses
 
 NUMBERED = """RENT AGREEMENT
 This agreement is made between Asha Rao (Landlord) and Ravi Kumar (Tenant).
@@ -103,3 +103,10 @@ def test_a_long_clause_is_split_into_pieces_that_keep_its_number():
 
 def test_paragraphs_one_per_line_are_numbered_when_there_are_no_blank_lines():
     assert numbers("The tenant pays rent.\nThe landlord repairs.\n") == ["1", "2"]
+
+
+def test_the_count_is_of_top_level_numbers_without_the_recitals():
+    assert count_clauses(["0", "1", "1.1", "1.2", "2", "2(a)", "2(a)(i)", "10.1"]) == 3
+    assert count_clauses(["1.1", "1.2", "2.1"]) == 2  # no parent lines of their own
+    assert count_clauses(["1", "1", "2"]) == 2  # the pieces of a long Clause
+    assert count_clauses([]) == 0

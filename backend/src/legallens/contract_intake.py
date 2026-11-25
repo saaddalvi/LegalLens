@@ -21,7 +21,7 @@ from xml.etree import ElementTree
 from pypdf import PdfReader
 from pypdf.errors import PyPdfError
 
-from .clauses import split_clauses
+from .clauses import count_clauses, split_clauses
 from .contract_brief import BriefWriter
 from .corpus import Corpus
 from .db import Database
@@ -180,7 +180,8 @@ class ContractIntake:
             vectors=vectors,
             brief=brief,
         )
-        return Stored(contract_id, title, len({p.number for p in pieces}), pages, brief)
+        count = count_clauses(p.number for p in pieces)
+        return Stored(contract_id, title, count, pages, brief)
 
     @staticmethod
     def _precheck(source: Source) -> tuple[str, int, bytes | None]:

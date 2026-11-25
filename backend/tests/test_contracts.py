@@ -291,7 +291,9 @@ def test_a_valid_upload_streams_the_stages_and_stores_the_contract(pg_client, db
     assert [d["id"] for e, d in events if e == "stage"] == STAGES + BRIEF_STAGES
     _, answer = events[-1]
     assert answer["title"] == "Rent agreement"
-    assert answer["clause_count"] == 4  # recitals as Clause 0, then 1, 2, 3
+    assert (
+        answer["clause_count"] == 3
+    )  # 1, 2, 3; the recitals (Clause 0) are not counted
     assert db("SELECT count(*) FROM contracts") == 1
     assert db("SELECT count(*) FROM clauses") == 4
     assert db("SELECT count(*) FROM clauses WHERE vector_dims(embedding) = 1024") == 4
@@ -313,7 +315,7 @@ def test_pdf_and_docx_uploads_work(pg_client, db):
     )
     events = parse_sse(r.text)
     assert events[-1][0] == "answer"
-    assert events[-1][1]["clause_count"] == 4
+    assert events[-1][1]["clause_count"] == 3
 
 
 @pytest.mark.parametrize(
@@ -354,7 +356,7 @@ def test_listing_shows_only_the_callers_contracts(pg_client):
     listed = a.get("/contracts").json()
     assert [c["id"] for c in listed] == [id_a]
     assert listed[0]["title"] == "Rent agreement"
-    assert listed[0]["clause_count"] == 4
+    assert listed[0]["clause_count"] == 3
     assert [c["id"] for c in b.get("/contracts").json()] == [id_b]
     assert pg_client("user_c").get("/contracts").json() == []
 

@@ -11,6 +11,7 @@ pieces of a Clause gives its text exactly.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 PIECE_CHARS = 800
@@ -58,6 +59,13 @@ def split_clauses(text: str) -> list[ClausePiece]:
         for number, heading, body in marked
         for piece in _pieces(number, heading, body)
     ]
+
+
+def count_clauses(numbers: Iterable[str]) -> int:
+    """How many Clauses a reader would count on paper: the distinct top-level numbers.
+    "7.2" and "7(a)" count under 7, and Clause "0" (the recitals) is not counted. `numbers`
+    may repeat, as the pieces of a long Clause do."""
+    return len({re.match(r"\d+", n)[0] for n in numbers if n != "0"})
 
 
 def _paragraphs(text: str) -> list[str]:
