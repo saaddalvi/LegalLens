@@ -35,6 +35,31 @@ from legallens.models import FallbackSource
 DEPOSIT_CLAUSE = "3. Deposit\nThe Tenant pays a deposit of Rs. 1,00,000."
 ASK = "What is the deposit?"
 ID_NEVER = "00000000-0000-0000-0000-000000000000"
+LEASE = """LEASE
+Made between Asha Rao (Landlord) and Ravi Kumar (Tenant).
+
+1. Term
+The tenancy lasts eleven months.
+
+2. Rent
+The Tenant shall pay Rs. 20,000 each month.
+
+3. Deposit
+The Tenant pays a deposit of Rs. 1,00,000.
+
+4. Utilities
+The Tenant shall pay for electricity and water.
+
+5. Repairs
+The Landlord shall repair the roof.
+
+6. Use
+The flat is for residence only.
+
+7. Lock-in
+Neither party may leave within the first six months.
+"""
+FOLLOW_UP = "what about the notice period for that?"
 WEB = FallbackSource(title="Explainer", url="https://example.org/x", snippet="Snippet.")
 ALL_STAGES = [
     "scope_check",
@@ -64,13 +89,25 @@ class ConversationLLM(ContractLLM):
         self.sources_seen: list = []
         self.languages: list[str] = []
         self.rewritten: list[str] = []
+        self.clause_graded: list[str] = []  # the Query each Grader was asked about
+        self.corpus_graded: list[str] = []
+        self.graded_clauses: list = []  # the Clauses the Grader was last given
 
     def classify_contract_query(self, query, history):
         self.histories.append(list(history))
         return self.scope
 
     def grade_clauses(self, query, clauses):
+        self.clause_graded.append(query)
+        self.graded_clauses = clauses
         return self.clause_score
+
+    def grade(self, query, provisions):
+        self.corpus_graded.append(query)
+        return super().grade(query, provisions)
+
+    def standalone_query(self, query, history, language):
+        return query
 
     def rewrite(self, query):
         self.rewritten.append(query)
@@ -102,8 +139,8 @@ def make_client(tmp_path, pg):
     with connect() as conn:
         conn.execute("TRUNCATE users CASCADE")
 
-    def make(user="user_a", llm=None, fallback=None, cache=None):
-        corpus = Corpus(tmp_path / "chroma", FakeEmbedder())
+    def make(user="user_a", llm=None, fallback=None, cache=None, corpus_embedder=None):
+        corpus = Corpus(tmp_path / "chroma", corpus_embedder or FakeEmbedder())
         corpus.add([ART_21, IPC_302])
         app = create_app(
             corpus=corpus,
@@ -515,6 +552,152 @@ def test_the_same_query_twice_is_answered_twice_with_no_cache(make_client):
     ask(c, cid)
     ask(c, cid)
     assert llm.generations == 2
+
+
+# --- Follow-ups --------------------------------------------------------------------------------
+
+
+class RecordingEmbedder(FakeEmbedder):
+    """Remembers the Queries the Corpus was searched with."""
+
+    def __init__(self):
+        self.queries: list[str] = []
+
+    def embed(self, texts, *, is_query):
+        if is_query:
+            self.queries.extend(texts)
+        return super().embed(texts, is_query=is_query)
+
+
+class RewritingFollowUps(ConversationLLM):
+    """Names what a Follow-up's "that" referred to: the Clause the last answer quoted."""
+
+    def standalone_query(self, query, history, language):
+        number = history[-1].response.clause_references[0].number
+        return query.replace("that?", f"Clause {number}?")
+
+
+def test_a_follow_up_is_searched_and_graded_as_a_standalone_query(make_client):
+    llm = RewritingFollowUps()
+    searched = RecordingEmbedder()
+    c = make_client(llm=llm, corpus_embedder=searched)
+    cid = upload(c, LEASE)
+    conversation = conversation_of(ask(c, cid, "What does Clause 7 say?"))
+    events = ask(c, cid, FOLLOW_UP, conversation)
+    assert stage_ids(events) == ["scope_check", "follow_up", *ALL_STAGES[1:]]
+    [label] = [d["label"] for e, d in events if d.get("id") == "follow_up"]
+    assert label == "Understanding your follow-up"
+    standalone = "what about the notice period for Clause 7?"
+    assert llm.clause_graded[-1] == standalone
+    assert llm.graded_clauses[0].number == "7"  # the named Clause comes first
+    assert searched.queries[-1] == standalone
+    assert llm.corpus_graded[-1] == standalone
+
+
+def test_a_first_query_is_not_rewritten(make_client):
+    class Counting(ConversationLLM):
+        calls = 0
+
+        def standalone_query(self, query, history, language):
+            self.calls += 1
+            return query
+
+    llm = Counting()
+    c = make_client(llm=llm)
+    events = ask(c, upload(c, LEASE), FOLLOW_UP)
+    assert stage_ids(events) == ALL_STAGES
+    assert llm.calls == 0
+
+
+def test_a_follow_up_is_saved_shown_and_answered_in_the_users_own_words(make_client):
+    c = make_client(llm=RewritingFollowUps())
+    cid = upload(c, LEASE)
+    conversation = conversation_of(ask(c, cid, "What does Clause 7 say?"))
+    answer = final(ask(c, cid, FOLLOW_UP, conversation))
+    # Generation was given the user's wording (the fake repeats what it was asked).
+    assert answer["answer"] == f"Plain answer to: {FOLLOW_UP}"
+    saved = turns(c, cid, conversation)[-1]
+    assert saved["query"] == FOLLOW_UP
+    assert saved["response"] == answer
+
+
+def test_the_web_query_of_a_follow_up_is_built_from_the_users_queries_alone(
+    make_client,
+):
+    class QuotingFollowUps(ConversationLLM):
+        """A rewrite that carries the quoted Clause's text, as one built from answers can."""
+
+        def standalone_query(self, query, history, language):
+            return f"{query} ({history[-1].response.clause_references[0].text})"
+
+        def generate_contract_answer(self, query, clauses, *a):
+            gen = super().generate_contract_answer(query, clauses, *a)
+            quoted = clauses[0].text
+            return gen.model_copy(update={"answer": f"It says: {quoted}"})
+
+    fb = RecordingFallback(results=[WEB])
+    llm = QuotingFollowUps(score=0.0)
+    c = make_client(llm=llm, fallback=fb)
+    cid = upload(c)
+    first = "What is the deposit?"
+    conversation = conversation_of(ask(c, cid, first))
+    assert "Rs. 1,00,000" in turns(c, cid, conversation)[0]["response"]["answer"]
+    ask(c, cid, "And the law on that?", conversation)
+    assert "Rs. 1,00,000" in llm.clause_graded[-1]  # the rewrite did carry it
+    # The web Query is made from both of the user's Queries, the latest one marked as such.
+    asked = llm.rewritten[-1]
+    assert asked.startswith("And the law on that?")
+    assert first in asked
+    assert fb.queries[-1] == f"rewritten: {asked}"
+    for text in [*llm.rewritten, *fb.queries]:
+        assert "1,00,000" not in text and "Tenant" not in text
+
+
+@pytest.mark.parametrize("failure", ["raises", "blank"])
+def test_a_failed_rewrite_searches_with_the_users_own_query(
+    make_client, caplog, failure
+):
+    class Broken(ConversationLLM):
+        def standalone_query(self, query, history, language):
+            if failure == "raises":
+                raise RuntimeError(f"gemini 503 on: {DEPOSIT_CLAUSE}")
+            return "  "
+
+    llm = Broken()
+    searched = RecordingEmbedder()
+    c = make_client(llm=llm, corpus_embedder=searched)
+    cid = upload(c)
+    conversation = conversation_of(ask(c, cid))
+    events = ask(c, cid, "And the law on that?", conversation)
+    assert final(events)["answer"] == "Plain answer to: And the law on that?"
+    assert llm.clause_graded[-1] == "And the law on that?"
+    assert llm.corpus_graded[-1] == "And the law on that?"
+    assert searched.queries[-1] == "And the law on that?"
+    assert "1,00,000" not in caplog.text  # the error may quote the Contract
+
+
+def test_a_hindi_follow_up_has_a_hindi_stage_and_is_rewritten_in_hindi(make_client):
+    standalone = "Clause 3 की जमा राशि कब वापस मिलेगी?"
+
+    class Hindi(ConversationLLM):
+        asked_in = None
+
+        def standalone_query(self, query, history, language):
+            self.asked_in = language
+            return standalone
+
+    llm = Hindi()
+    c = make_client(llm=llm)
+    cid = upload(c)
+    # The earlier turn is English: the Follow-up's own language is what counts.
+    conversation = conversation_of(ask(c, cid))
+    events = ask(c, cid, HINDI_QUERY, conversation)
+    [label] = [d["label"] for e, d in events if d.get("id") == "follow_up"]
+    assert label == "आपका अगला प्रश्न समझा जा रहा है"
+    assert llm.asked_in == "hi"
+    assert llm.clause_graded[-1] == standalone
+    assert llm.corpus_graded[-1] == standalone
+    assert final(events)["answer_language"] == "hi"
 
 
 # --- privacy and access ----------------------------------------------------------------------

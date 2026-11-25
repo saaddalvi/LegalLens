@@ -197,13 +197,13 @@ The list gives each Contract's `id`, `title`, `created_at`, `page_count` and `cl
 ```
 
 - `query`: as for `/ask`.
-- `conversation_id`: optional. Without it the Query starts a new Contract conversation; with it the Query is appended to that one, and the model is shown that conversation's last 10 turns only. One that is not this Contract's is **404**.
+- `conversation_id`: optional. Without it the Query starts a new Contract conversation; with it the Query is appended to that one, and the model is shown that conversation's last 10 turns only. One that is not this Contract's is **404**. Such a Follow-up is rewritten into a standalone Query for the searches and Graders; the saved and returned `query` stays as sent.
 
 **404**, **429** (per-minute limit, or the daily cap, marked `X-Limit-Scope: daily`) and **503** come before the stream starts. The events are:
 
 | Event | Data | When |
 |---|---|---|
-| `stage` | `{ id, label }` | `scope_check`, `clause_retrieval`, `clause_grading`, `retrieval`, `grading`, `fallback`, `generation`, `citation_check`, `citation_recheck` |
+| `stage` | `{ id, label }` | `scope_check`, `follow_up` (only when the conversation has earlier turns), `clause_retrieval`, `clause_grading`, `retrieval`, `grading`, `fallback`, `generation`, `citation_check`, `citation_recheck` |
 | `conversation` | `{ id, title }` | Once, just before `answer`: the conversation the Query was saved to |
 | `answer` | An `AskResponse` plus `clause_references` (`{ number, text }[]`) and `redirect_to_ask` (bool) | Final result; the stream then closes |
 | `error` | `{ stage, message }` | Answering failed; the stream then closes |

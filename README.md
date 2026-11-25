@@ -261,10 +261,12 @@ Per-case detail is in `backend/evaluation/report.md`.
 Three sample Contracts written for testing (no real personal data) in `backend/fixtures/contracts/`: a
 rent agreement with a deposit over the Model Tenancy Act's limit, a job offer with a post-employment
 non-compete, and an NDA with a penalty clause and a restriction on other work. Each lists its expected
-Flagged clauses (Clause number and the Provision cited) and five follow-ups: Clause-supported,
-Contract-silent, a law question, a "should I sign?" refusal and a Hindi Query. The harness uploads each
-Contract and asks the follow-ups through `POST /contracts/stream` and `POST /contracts/{id}/ask/stream`,
-then deletes it.
+Flagged clauses (Clause number and the Provision cited) and five cases: Clause-supported,
+Contract-silent, a law question, a "should I sign?" refusal and a Hindi Query, each asked in a
+conversation of its own. Each also has a `follow_up` case: a Follow-up asked after an earlier Query in the
+same conversation. The harness uploads each Contract and asks them through `POST /contracts/stream` and
+`POST /contracts/{id}/ask/stream`, then deletes it. A `follow_up` case's Clause references are counted and
+checked across all its answers; it is scored on the last one.
 
 ```bash
 cd backend && python -m legallens.evaluate --contracts --database-url <migrated Postgres it may write to>
@@ -277,17 +279,25 @@ section too.
 
 - **Flag recall / precision**: an expected flag is found when the brief flags that Clause (or a sub-Clause or parent of it) and cites one of the expected Provisions. Precision is the share of flags the brief returned that were expected, so a legitimate extra flag counts against it.
 - **Hallucinated clause references (expected 0)**: Clause numbers or quoted Clause text in the brief or an answer that do not match the stored Clauses. Like citation validity this is a guard, since the app blocks them.
-- **Follow-up accuracy**: a refusal for "should I sign?"; for Clause-supported and Hindi Queries, a quoted expected Clause (and Hindi text for Hindi) plus a Gemini judge; for law questions, an expected Provision cited plus the judge; for Contract-silent Queries, the judge.
+- **Follow-up accuracy**: a refusal for "should I sign?"; for Clause-supported and Hindi Queries, a quoted expected Clause (and Hindi text for Hindi) plus a Gemini judge; for law questions, an expected Provision cited plus the judge; for Contract-silent Queries, the judge; for `follow_up` cases, whichever expected Clause or Provision the case names, plus the judge.
 
-First run (2026-11-25, `gemini-3.5-flash-lite`, fallback `gemini-3.5-flash`, Tavily Fallback, full Corpus embedded with `Qwen/Qwen3-Embedding-0.6B`):
+Latest run (2026-11-25, `gemini-3.5-flash-lite`, fallback `gemini-3.1-flash-lite`, Tavily Fallback, full Corpus embedded with `Qwen/Qwen3-Embedding-0.6B`):
 
 | Metric | Result |
 |---|---|
 | Flag recall | 25% (1 of 4 expected flags found) |
 | Flag precision | 33% (1 of 3 returned flags expected) |
-| Hallucinated clause references (expected 0) | 0 of 54 checked |
-| Follow-up accuracy | 83% (10 of 12 scored) |
+| Hallucinated clause references (expected 0) | 0 of 68 checked |
+| Follow-up accuracy | 83% (15 of 18 scored) |
 
-Follow-ups: Clause-supported 100%, Contract-silent 100%, "should I sign?" refusal 100%, law 50%, Hindi 50%. Three follow-ups (all in the NDA) failed on Gemini rate limits after retries and are excluded, so the NDA's law, silent and Hindi cases are unscored.
+By kind: Clause-supported 100%, "should I sign?" refusal 100%, Hindi 100%, Contract-silent 67%, law 67%, `follow_up` 67%.
+The three misses are all in the job offer. Its non-compete law case and the `follow_up` case that asks the
+same thing were answered from the web Fallback without citing Indian Contract Act 27. Its "Can I work from
+home?" case was refused as personal advice: the scope check is not consistent on that Query (3 of 6 repeat
+calls refused it, with the reason written in Hindi although the Query is English).
+
+The first-Query cases did not get worse than in the first run (before the Follow-up rewrite): the 12 scored
+then are 10 correct in both runs, and the three that failed on rate limits then are now scored and
+correct. One miss moved: the job offer's Hindi case is now correct and its work-from-home case is now wrong.
 
 What it shows: the guards hold (no hallucinated clause references) and the conversation behaves, but **flag finding is weak**. Only the rent agreement's deposit flag (Clause 4.1, Model Tenancy Act 11) was found, along with one extra flag on 4.2. The job offer's non-compete (Clause 8.1, Indian Contract Act 27) was missed and the brief flagged a different Clause against an unrelated Labour Code Provision; the NDA's brief returned no flags at all, so both its expected flags were missed. With three Contracts, one flag moves recall by 25 points, and this is a single run. The next step is to look at why the candidate-flag retrieval does not surface Indian Contract Act 27 and 74.

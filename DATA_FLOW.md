@@ -235,7 +235,9 @@ flowchart TD
     A[Query + optional conversation_id] --> H[Read the last 10 turns<br/>of that conversation only]
     H --> S{Scope check}
     S -->|personal advice / unrelated| R[Refusal]
-    S -->|in scope| C[Search the Contract's Clauses<br/>and grade them]
+    S -->|in scope, earlier turns| F[Rewrite the Follow-up<br/>into a standalone Query]
+    S -->|in scope, first Query| C[Search the Contract's Clauses<br/>and grade them]
+    F --> C
     C --> L[Corpus retrieval, grading,<br/>web Fallback if needed]
     L --> G[Generate, with the history]
     G --> V[Check Clause references<br/>and Citations]
@@ -246,9 +248,11 @@ flowchart TD
 
 - A conversation is created only by its first answered Query, in the same transaction. A failure, or the client leaving, saves nothing.
 - A new conversation starts with no history. The Contract brief is never part of any conversation's history.
-- The searches, Graders and web Fallback see the new Query alone; the history reaches the scope check and generation.
+- A **Follow-up** is first rewritten by Gemini, from the Query and the history, into a standalone Query in the Query's language (Stage `follow_up`). That rewrite drives the Clause search (a named "Clause 7" included), the Clause Grader, Corpus retrieval and the Corpus Grader. What is saved, shown and given to generation is the user's own wording, with the history. If the rewrite fails, the Query is searched as asked.
+- A conversation's first Query is not rewritten.
+- The web Fallback never sees the rewrite: its search is made from the user's own Queries in the conversation (the current one and the last 10 before it).
 
 ### Privacy
 
-Contract text goes to the model and the database only. It is never logged, and the web Fallback's search is built from the user's Query, never from Clause text or earlier answers (ADR 0006). There is no answer cache for Contract answers.
+Contract text goes to the model and the database only. It is never logged, and the web Fallback's search is built from the user's own Queries, never from Clause text, answers or the Follow-up rewrite (ADR 0006). There is no answer cache for Contract answers.
 

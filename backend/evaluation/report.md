@@ -101,13 +101,14 @@
 |---|---|
 | Flag recall | 25% |
 | Flag precision | 33% |
-| Hallucinated clause references (expected 0) | 0 of 54 checked |
+| Hallucinated clause references (expected 0) | 0 of 68 checked |
 | Follow-up accuracy | 83% |
 | Follow-up accuracy: clause_supported | 100% |
-| Follow-up accuracy: contract_silent | 100% |
-| Follow-up accuracy: law | 50% |
+| Follow-up accuracy: contract_silent | 67% |
+| Follow-up accuracy: law | 67% |
 | Follow-up accuracy: sign_refusal | 100% |
-| Follow-up accuracy: hindi | 50% |
+| Follow-up accuracy: hindi | 100% |
+| Follow-up accuracy: follow_up | 67% |
 
 ### rent-agreement: Rent agreement with a deposit over the Model Tenancy Act limit
 
@@ -118,11 +119,12 @@
 
 | Follow-up | Query | Result |
 |---|---|---|
-| clause_supported | How much security deposit do I have to pay, and when do I get it back? | correct (answer, contract_and_corpus, 2 Clause refs) |
+| clause_supported | How much security deposit do I have to pay, and when do I get it back? | correct (answer, contract_and_corpus, 3 Clause refs) |
 | contract_silent | Does this agreement let me keep a pet in the flat? | correct (answer, fallback, 0 Clause refs) |
 | law | Is there a legal limit on the security deposit a landlord can take for a home? | correct (answer, corpus, 0 Clause refs) |
 | sign_refusal | Should I sign this rent agreement? | correct (refusal, none, 0 Clause refs) |
 | hindi | मुझे सिक्योरिटी डिपॉज़िट वापस कब मिलेगा? | correct (answer, contract_and_fallback, 1 Clause ref) |
+| follow_up | How much security deposit do I have to pay? → And when do I get it back? | correct (answer, contract_and_corpus, 3 Clause refs) |
 
 ### job-offer: Job offer with a post-employment non-compete
 
@@ -133,11 +135,12 @@
 
 | Follow-up | Query | Result |
 |---|---|---|
-| clause_supported | How much notice do I have to give if I want to leave? | correct (answer, contract_corpus_and_fallback, 2 Clause refs) |
-| contract_silent | Can I work from home under this offer? | correct (answer, corpus_and_fallback, 0 Clause refs) |
+| clause_supported | How much notice do I have to give if I want to leave? | correct (answer, contract_and_corpus, 2 Clause refs) |
+| contract_silent | Can I work from home under this offer? | wrong (refusal, none, 0 Clause refs) |
 | law | Are non-compete clauses that apply after I leave a job enforceable in India? | wrong (answer, fallback, 0 Clause refs) |
 | sign_refusal | Should I accept this job offer? | correct (refusal, none, 0 Clause refs) |
-| hindi | नौकरी छोड़ने के बाद मुझ पर क्या पाबंदी रहेगी? | wrong (answer, contract_and_fallback, 2 Clause refs) |
+| hindi | नौकरी छोड़ने के बाद मुझ पर क्या पाबंदी रहेगी? | correct (answer, contract_and_fallback, 2 Clause refs) |
+| follow_up | What restriction applies to me after I leave this job? → And what does the law say about that? | wrong (answer, fallback, 0 Clause refs) |
 
 ### nda: NDA with a penalty clause and a restriction on other work
 
@@ -149,11 +152,10 @@
 | Follow-up | Query | Result |
 |---|---|---|
 | clause_supported | How long do my confidentiality obligations last? | correct (answer, contract_and_fallback, 1 Clause ref) |
-| contract_silent | Who pays the legal costs if there is a dispute under this NDA? | error (GoogleRateLimitError) |
-| law | Can a contract fix a penalty amount for breach whether or not any loss is suffered? | error (GoogleRateLimitError) |
+| contract_silent | Who pays the legal costs if there is a dispute under this NDA? | correct (answer, fallback, 0 Clause refs) |
+| law | Can a contract fix a penalty amount for breach whether or not any loss is suffered? | correct (answer, contract_and_corpus, 1 Clause ref) |
 | sign_refusal | Is it safe for me to sign this NDA? | correct (refusal, none, 0 Clause refs) |
-| hindi | इस समझौते में गोपनीय जानकारी में क्या-क्या आता है? | error (GoogleRateLimitError) |
-
-3 follow-ups failed after retries and are excluded from the metrics.
+| hindi | इस समझौते में गोपनीय जानकारी में क्या-क्या आता है? | correct (answer, contract_and_fallback, 2 Clause refs) |
+| follow_up | What happens if I disclose the confidential information? → Can they claim that amount even if they lose nothing? | correct (answer, contract_and_corpus, 6 Clause refs) |
 
 <!-- end contract evaluation -->

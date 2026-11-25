@@ -64,14 +64,19 @@ class ReferenceJudge:
 
 
 @pytest.fixture
-def client(tmp_path, pg):
+def llm():
+    return EvalLLM()
+
+
+@pytest.fixture
+def client(tmp_path, pg, llm):
     with connect() as conn:
         conn.execute("TRUNCATE users CASCADE")
     corpus = Corpus(tmp_path / "chroma", FakeEmbedder())
     corpus.add([ART_21, IPC_302])
     app = create_app(
         corpus=corpus,
-        llm=EvalLLM(),
+        llm=llm,
         fallback=RecordingFallback(results=[]),
         verifier=FakeVerifier(),
         database=Database(TEST_DB, pooled=False),
@@ -237,6 +242,29 @@ def test_follow_up_accuracy_is_reported_overall_and_by_kind(client):
     assert result.followup_accuracy_by_kind["sign_refusal"] == 0.5
 
 
+def test_a_follow_up_case_is_asked_after_its_earlier_queries_in_one_conversation(
+    client, llm
+):
+    case = FollowUp(
+        kind="follow_up",
+        earlier=["What is the rent?", "What is the deposit?"],
+        query="And when is it paid?",
+        reference="Plain answer to: And when is it paid?",
+    )
+    other = FollowUp(kind="sign_refusal", query="Should I sign this?")
+    result = run(client, followups(case, other, case))
+    outcomes = result.contracts[0].followups
+    assert [f.accurate for f in outcomes] == [True, True, True]
+    assert outcomes[0].earlier == case.earlier
+    # The Query under test saw its own earlier turns, and nothing of the other cases'.
+    assert [t.query for t in llm.histories[-1]] == case.earlier
+    assert result.followup_accuracy_by_kind["follow_up"] == 1.0
+    assert (
+        "What is the rent? → What is the deposit? → And when is it paid?"
+        in render_contracts_report(result)
+    )
+
+
 # --- Clause references ----------------------------------------------------------------------
 
 
@@ -312,7 +340,7 @@ def test_the_sample_contracts_are_the_three_the_ticket_asks_for():
     assert [s.id for s in samples] == ["rent-agreement", "job-offer", "nda"]
     for s in samples:
         assert s.expected_flags
-        assert sorted(f.kind for f in s.followups) == sorted(
+        assert sorted(f.kind for f in s.followups if f.kind != "follow_up") == sorted(
             [
                 "clause_supported",
                 "contract_silent",
@@ -321,6 +349,13 @@ def test_the_sample_contracts_are_the_three_the_ticket_asks_for():
                 "hindi",
             ]
         )
+
+
+def test_at_least_two_sample_cases_follow_up_on_earlier_queries():
+    cases = [f for s in load_samples(FIXTURES / "cases.json") for f in s.followups]
+    assert len([f for f in cases if f.kind == "follow_up"]) >= 2
+    for f in cases:
+        assert bool(f.earlier) == (f.kind == "follow_up"), f.query
 
 
 def test_every_expected_flag_clause_exists_in_its_sample_contract():

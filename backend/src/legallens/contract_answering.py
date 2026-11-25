@@ -4,11 +4,12 @@ A ContractAnswerer takes the same collaborators as an Answerer (Corpus, LLM, Web
 store of the user's Contract, and speaks the same interface: Stages through `on_stage`,
 cancellation through `cancel`, an `Answered` or a typed error back, and one request log line.
 
-The steps: the scope check (extended for Contract conversations), retrieval of the Contract's
-Clauses and the Grader on them, the existing corrective loop on the Corpus (the Fallback
-included), generation with the last few turns as context, and the Clause reference check and
-the Citation check. Contract text stays inside this module's calls to the model and the
-store: it is never logged, and the Fallback's web Query is built from the user's Query alone.
+The steps: the scope check (extended for Contract conversations), for a Follow-up its rewrite
+into a standalone Query, retrieval of the Contract's Clauses and the Grader on them, the
+existing corrective loop on the Corpus (the Fallback included), generation with the last few
+turns as context, and the Clause reference check and the Citation check. Contract text stays
+inside this module's calls to the model and the store: it is never logged, and the Fallback's
+web Query is built from the user's own Queries alone (ADR 0006).
 """
 
 from __future__ import annotations
@@ -66,6 +67,10 @@ STAGE_LABELS_CONTRACT: dict[str, dict[Language, str]] = {
     **{
         k: STAGE_LABELS[k]
         for k in ("scope_check", "retrieval", "grading", "fallback", "generation")
+    },
+    "follow_up": {
+        "en": "Understanding your follow-up",
+        "hi": "आपका अगला प्रश्न समझा जा रहा है",
     },
     "clause_retrieval": {
         "en": "Searching your Contract",
@@ -168,6 +173,19 @@ def _trust(clauses: bool, provisions: bool, sources: bool) -> TrustLabel:
         (False, True, False): "corpus",
         (False, False, True): "fallback",
     }[(clauses, provisions, sources)]
+
+
+def _web_query(query: str, history: list[ConversationTurn]) -> str:
+    """What the Fallback's web search is made from: the user's own Queries in this Contract
+    conversation and nothing else. Answers and the standalone Query can carry Contract text,
+    so neither may come in here (ADR 0006)."""
+    if not history:
+        return query
+    earlier = "\n".join(t.query for t in history)
+    return (
+        f"{query}\n\nAsked earlier in the same conversation, only to show what this "
+        f"question refers to:\n{earlier}"
+    )
 
 
 def _as_contract(response: AskResponse, **extra) -> ContractAnswer:
@@ -276,31 +294,39 @@ class ContractAnswerer:
                 redirect_to_ask=True,
             )
 
+        # What is searched for and graded: a Follow-up made to stand on its own.
+        standalone = query
+        if history:
+            stage("follow_up")
+            standalone = await self._rewrite_follow_up(query, history, language)
+
         stage("clause_retrieval")
         all_clauses = await self._store.get_clauses(user_id, contract_id)
         if not all_clauses:
             raise LookupError("no such Contract")
-        found = await self._find_clauses(user_id, contract_id, query, all_clauses)
+        found = await self._find_clauses(user_id, contract_id, standalone, all_clauses)
 
         stage("clause_grading")
-        clause_score = await asyncio.to_thread(llm.grade_clauses, query, found)
+        clause_score = await asyncio.to_thread(llm.grade_clauses, standalone, found)
         decisions.clause_score = round(clause_score, 2)
         # Clauses that do not bear on the Query are not shown to the model at all.
         clauses = found if verdict_for(clause_score) != "incorrect" else []
 
         stage("retrieval")
-        provisions = await asyncio.to_thread(retrieve, query, self._corpus)
+        provisions = await asyncio.to_thread(retrieve, standalone, self._corpus)
         stage("grading")
-        score = await asyncio.to_thread(llm.grade, query, provisions)
+        score = await asyncio.to_thread(llm.grade, standalone, provisions)
         verdict = verdict_for(score)
         decisions.grader_score = round(score, 2)
         decisions.verdict = verdict
         sources: list[FallbackSource] = []
         if verdict != "correct":
             stage("fallback")
-            # The Query alone goes to the rewrite and the web: never any Clause text.
             sources = await asyncio.to_thread(
-                search_fallback, query, llm=llm, fallback=self._fallback
+                search_fallback,
+                _web_query(query, history),
+                llm=llm,
+                fallback=self._fallback,
             )
             decisions.fallback_sources = len(sources)
             if verdict == "incorrect":
@@ -320,6 +346,21 @@ class ContractAnswerer:
             stage,
             decisions,
         )
+
+    async def _rewrite_follow_up(
+        self, query: str, history: list[ConversationTurn], language: Language
+    ) -> str:
+        """The Follow-up rewritten to stand on its own, or the Query as asked when the
+        rewrite fails: a vaguer search is better than no answer."""
+        try:
+            rewritten = await asyncio.to_thread(
+                self._llm.standalone_query, query, history, language
+            )
+        except Exception as exc:  # noqa: BLE001  any provider failure
+            # By type only: the message may quote the Contract.
+            log.warning("follow-up rewrite failed: %s", type(exc).__name__)
+            return query
+        return rewritten.strip() or query
 
     async def _find_clauses(
         self, user_id: str, contract_id: str, query: str, all_clauses: dict[str, str]

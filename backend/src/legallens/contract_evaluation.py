@@ -1,9 +1,11 @@
 """Evaluation of Contract answering: sample Contracts uploaded through the app, then asked about.
 
 Each sample Contract (written for testing, with no real personal data) lists the Flagged clauses
-a good brief should find and one follow-up Query of each kind: a Clause-supported answer, a
-Contract-silent answer, a law question, a "should I sign?" refusal and a Hindi Query. The harness
-drives `POST /contracts/stream` and `POST /contracts/{id}/ask/stream` through the app, as the
+a good brief should find and one case of each kind: a Clause-supported answer, a
+Contract-silent answer, a law question, a "should I sign?" refusal and a Hindi Query. Each of
+those starts a Contract conversation of its own. A sample may also have `follow_up` cases: a
+Follow-up, asked after its `earlier` Queries in one conversation and scored on its own answer.
+The harness drives `POST /contracts/stream` and `POST /contracts/{id}/ask/stream` through the app, as the
 `/ask` evaluation drives `/ask`, and scores:
 
 - flag recall and precision: an expected flag is found when the brief flags that Clause (or a
@@ -33,7 +35,7 @@ from .models import AskResponse, ClauseOut, ClauseReference, ContractAnswer
 log = logging.getLogger(__name__)
 
 FollowUpKind = Literal[
-    "clause_supported", "contract_silent", "law", "sign_refusal", "hindi"
+    "clause_supported", "contract_silent", "law", "sign_refusal", "hindi", "follow_up"
 ]
 SECTION_TITLE = "## Contract evaluation"
 SECTION_END = "<!-- end contract evaluation -->"
@@ -48,11 +50,13 @@ class ExpectedFlag(BaseModel):
 class FollowUp(BaseModel):
     kind: FollowUpKind
     query: str
+    # follow_up: the Queries asked first, in order, in the same Contract conversation.
+    earlier: list[str] = []
     # Key points a correct answer states, for the judge. Not used for a refusal.
     reference: str = ""
-    # clause_supported and hindi: the answer must quote at least one of these Clauses.
+    # When given, the answer must quote at least one of these Clauses.
     expected_clauses: list[str] = []
-    # law: the answer must cite at least one of these Provisions.
+    # When given, the answer must cite at least one of these Provisions.
     expected_provisions: list[ProvisionRef] = []
 
 
@@ -81,6 +85,7 @@ class FoundFlag(BaseModel):
 class FollowUpOutcome(BaseModel):
     kind: FollowUpKind
     query: str
+    earlier: list[str] = []
     accurate: bool = False
     error: str | None = None  # set when it could not be scored; left out of the metrics
     response_type: str = "-"
@@ -203,6 +208,11 @@ def _flag_scores(
     )
 
 
+def _asked(earlier: list[str], query: str) -> str:
+    """A case's Queries in the order asked: what its last one means depends on the others."""
+    return " → ".join([*earlier, query])
+
+
 def _followup_accurate(
     case: FollowUp, response: ContractAnswer, judge: Judge, sample_id: str
 ) -> bool:
@@ -226,7 +236,7 @@ def _followup_accurate(
     golden = GoldenCase(
         id=f"{sample_id}-{case.kind}",
         category="hindi" if case.kind == "hindi" else "english",
-        query=case.query,
+        query=_asked(case.earlier, case.query),
         reference=case.reference,
     )
     return _with_retries(lambda: judge.is_accurate(golden, _as_ask(response)))
@@ -278,17 +288,30 @@ def _upload(client: _Client, sample: SampleContract, sleep) -> dict:
     )
 
 
-def _ask(client: _Client, contract_id: str, query: str, sleep) -> ContractAnswer:
-    """Asks with no `conversation_id`, so each case starts a Contract conversation of its own
-    and none sees another's turns."""
-    data = _with_retries(
-        lambda: _final_event(
-            client.post(f"/contracts/{contract_id}/ask/stream", json={"query": query}),
-            want="answer",
-        ),
-        sleep=sleep,
-    )
-    return ContractAnswer(**data)
+def _ask(
+    client: _Client, contract_id: str, queries: list[str], sleep
+) -> list[ContractAnswer]:
+    """Asks `queries` in turn in one new Contract conversation and returns their answers. The
+    first has no `conversation_id`, so no case sees another's turns."""
+    answers: list[ContractAnswer] = []
+    body: dict[str, str] = {}
+    for query in queries:
+        body["query"] = query
+        conversation, answer = _with_retries(
+            lambda: _answered(
+                client.post(f"/contracts/{contract_id}/ask/stream", json=body)
+            ),
+            sleep=sleep,
+        )
+        body["conversation_id"] = conversation
+        answers.append(ContractAnswer(**answer))
+    return answers
+
+
+def _answered(response) -> tuple[str, dict]:
+    """The conversation a Query was saved to, and its answer."""
+    answer = _final_event(response, want="answer")
+    return dict(_parse_sse(response.text))["conversation"]["id"], answer
 
 
 def _evaluate_contract(
@@ -381,23 +404,30 @@ def _evaluate_followup(
     sleep,
 ) -> FollowUpOutcome:
     try:
-        response = _ask(client, contract_id, case.query, sleep)
+        answers = _ask(client, contract_id, [*case.earlier, case.query], sleep)
+        response = answers[-1]  # the case is scored on this one
+        # Hallucinated clause references are looked for in every answer, earlier ones too.
+        refs = [r for a in answers for r in a.clause_references]
         return FollowUpOutcome(
             kind=case.kind,
             query=case.query,
+            earlier=case.earlier,
             accurate=_followup_accurate(case, response, judge, sample.id),
             response_type=response.response_type,
             trust_label=response.trust_label,
             answer_language=response.answer_language,
-            clause_references=len(response.clause_references),
+            clause_references=len(refs),
             unverified_clause_references=len(
-                unverified_clause_references(response.clause_references, stored)
+                unverified_clause_references(refs, stored)
             ),
         )
     except Exception as exc:
         log.exception("follow-up %s/%s failed", sample.id, case.kind)
         return FollowUpOutcome(
-            kind=case.kind, query=case.query, error=type(exc).__name__
+            kind=case.kind,
+            query=case.query,
+            earlier=case.earlier,
+            error=type(exc).__name__,
         )
 
 
@@ -457,7 +487,7 @@ def render_contracts_report(result: ContractEvaluation) -> str:
             "|---|---|---|",
         ]
         for f in c.followups:
-            out.append(f"| {f.kind} | {f.query} | {_cell(f)} |")
+            out.append(f"| {f.kind} | {_asked(f.earlier, f.query)} | {_cell(f)} |")
         out.append("")
     errored = [f for c in result.contracts for f in c.followups if f.error]
     if errored:

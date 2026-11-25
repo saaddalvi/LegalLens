@@ -36,6 +36,13 @@
         "query": "मुझे सिक्योरिटी डिपॉज़िट वापस कब मिलेगा?",
         "expected_clauses": ["4.2"],
         "reference": "The Landlord must refund the deposit within 30 days after the Tenant vacates, after deducting damage beyond normal wear and tear and unpaid rent."
+      },
+      {
+        "kind": "follow_up",
+        "earlier": ["How much security deposit do I have to pay?"],
+        "query": "And when do I get it back?",
+        "expected_clauses": ["4.2"],
+        "reference": "The Landlord must refund the deposit within 30 days after the Tenant vacates, after deducting damage beyond normal wear and tear and unpaid rent."
       }
     ]
   },
@@ -76,6 +83,13 @@
         "query": "नौकरी छोड़ने के बाद मुझ पर क्या पाबंदी रहेगी?",
         "expected_clauses": ["8.1"],
         "reference": "For 24 months after employment ends the employee may not join or work for a competing company anywhere in India, and must repay the last 12 months' salary if they break it."
+      },
+      {
+        "kind": "follow_up",
+        "earlier": ["What restriction applies to me after I leave this job?"],
+        "query": "And what does the law say about that?",
+        "expected_provisions": [{"act": "Indian Contract Act", "number": "27"}],
+        "reference": "Section 27 of the Indian Contract Act makes an agreement that restrains someone from a lawful profession, trade or business void, with a narrow exception for the sale of goodwill."
       }
     ]
   },
@@ -120,6 +134,13 @@
         "query": "इस समझौते में गोपनीय जानकारी में क्या-क्या आता है?",
         "expected_clauses": ["2.1"],
         "reference": "Confidential Information is any non-public business, technical or financial information shared in writing or orally that is marked or would reasonably be understood to be confidential, excluding public, already-known or independently developed information."
+      },
+      {
+        "kind": "follow_up",
+        "earlier": ["What happens if I disclose the confidential information?"],
+        "query": "Can they claim that amount even if they lose nothing?",
+        "expected_provisions": [{"act": "Indian Contract Act", "number": "74"}],
+        "reference": "Section 74 of the Indian Contract Act lets a party who suffers breach recover reasonable compensation not exceeding the amount named, whether or not actual loss is proved; a named penalty is not enforced in full."
       }
     ]
   }
