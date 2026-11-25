@@ -36,8 +36,12 @@ const NUMBER = "(\\d+[a-z]{0,3})";
 const SECTION = "(?:sections?|sec\\.?|s\\.|धारा)";
 const ARTICLE = "(?:articles?|अनुच्छेद)";
 
-// "IPC 302", "BNS section 103"
-const ACT_FIRST = new RegExp(`(?<!\\w)(${ALIAS})\\s*(?:${SECTION}\\s*)?${NUMBER}(?!\\w)`, "gi");
+// "IPC 302", "BNS section 103", "Constitution of India, Section 22". A comma is
+// only allowed before the section word, so "BNS, 5 people" does not match.
+const ACT_FIRST = new RegExp(
+  `(?<!\\w)(${ALIAS})(?:\\s*,\\s*${SECTION}\\s*|\\s*(?:${SECTION}\\s*)?)${NUMBER}(?!\\w)`,
+  "gi",
+);
 // "section 103 of the BNS", "धारा 103 BNS"
 const NUMBER_FIRST = new RegExp(
   `(?<!\\w)${SECTION}\\s*${NUMBER}\\s+(?:of\\s+(?:the\\s+)?)?(${ALIAS})(?!\\w)`,
