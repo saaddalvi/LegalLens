@@ -103,7 +103,7 @@ Both routes take the same body and answer through the same `Answerer` (`backend/
 |---|---|---|
 | `response_type` | `"answer"` \| `"refusal"` | `refusal` when the Query is out of scope |
 | `refusal_reason` | string \| null | Set on a refusal |
-| `suggested_reformulation` | string \| null | Set on a refusal: a better way to ask |
+| `suggested_reformulation` | string \| null | On a refusal, a Query that can be asked as it stands; null when there is none to suggest |
 | `answer` | string | The answer text, or the refusal message |
 | `answer_language` | string | `en` or `hi` |
 | `trust_label` | `"corpus"` \| `"fallback"` \| `"corpus_and_fallback"` \| `"none"` | Where the answer came from; `none` means "cannot answer", no source supports it |

@@ -305,15 +305,23 @@ def test_a_non_indian_law_query_is_refused_with_a_reason_and_a_reformulation(
 
 
 @pytest.mark.parametrize("category", ["personal_advice", "not_indian_law"])
-def test_a_refusal_without_a_reason_gets_a_default_reason_and_reformulation(
-    make_answerer, category
-):
+def test_a_refusal_without_a_reason_gets_a_default_reason(make_answerer, category):
     llm = ScopedLLM(ScopeDecision(category=category))
     r = ask(make_answerer(llm), "Best pizza in Rome?").response
     assert r.response_type == "refusal"
     assert r.refusal_reason
-    assert r.suggested_reformulation
     assert not llm.generated
+
+
+@pytest.mark.parametrize("suggestion", ["", "   "])
+def test_a_refusal_with_no_suggested_query_offers_none(make_answerer, suggestion):
+    # A suggestion is asked as it stands, so a stock one that cannot name the
+    # reader's situation is worse than none.
+    llm = ScopedLLM(
+        ScopeDecision(category="personal_advice", suggested_reformulation=suggestion)
+    )
+    r = ask(make_answerer(llm), "Should I sue?").response
+    assert r.suggested_reformulation is None
 
 
 def test_an_in_scope_query_is_not_refused(make_answerer):
@@ -395,7 +403,8 @@ def test_a_hindi_refusal_is_in_hindi(hindi_answerer):
 
     r = ask(hindi_answerer(Refusing()), "क्या मुझे मुकदमा करना चाहिए?").response
     assert (r.response_type, r.answer_language) == ("refusal", "hi")
-    assert devanagari(r.refusal_reason) and devanagari(r.suggested_reformulation)
+    assert devanagari(r.refusal_reason)
+    assert r.suggested_reformulation is None
 
 
 def test_a_hindi_refusal_keeps_the_reason_the_llm_gave(hindi_answerer):

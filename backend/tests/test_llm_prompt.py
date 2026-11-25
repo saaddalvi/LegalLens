@@ -3,7 +3,7 @@
 import pytest
 from langchain_core.runnables import RunnableLambda
 
-from legallens.llm import _PROMPT, GeminiLLM, RelevanceScore
+from legallens.llm import _PROMPT, GeminiLLM, RelevanceScore, ScopeDecision
 from legallens.models import Provision
 
 
@@ -209,3 +209,66 @@ def test_a_list_of_paragraphs_becomes_an_answer_with_blank_lines_between_them():
         "q", [provision("in_force")], []
     )
     assert generation.answer == "You have rights:\n\n1. Be told why.\n\n2. Call a lawyer."
+
+
+# ── Asking what can be done is not asking for a choice ─────────────────────
+
+
+def sent_to_the_llm(call):
+    """The prompt `call` sends, with the model faked."""
+    prompts = []
+
+    class PromptChat:
+        def with_structured_output(self, schema):
+            def run(prompt):
+                prompts.append(prompt)
+                if schema is ScopeDecision:
+                    return ScopeDecision(category="in_scope")
+                return schema(paragraphs=["ok"], citations=[])
+
+            return RunnableLambda(run)
+
+    call(GeminiLLM("primary", chat_factory=lambda name: PromptChat()))
+    return " ".join(prompts[0].split())
+
+
+def test_the_scope_check_is_told_that_asking_what_can_be_done_is_in_scope():
+    prompt = sent_to_the_llm(lambda llm: llm.classify("What can I do?"))
+    in_scope = prompt[prompt.index('- "in_scope"') :]
+    assert '"What can I do?"' in in_scope
+    assert "remedies" in in_scope
+
+
+def test_the_scope_check_keeps_refusing_to_choose_for_the_reader():
+    prompt = sent_to_the_llm(lambda llm: llm.classify("Should I sue?"))
+    advice = prompt[prompt.index('- "personal_advice"') : prompt.index('- "in_scope"')]
+    assert "choose" in advice and "sue" in advice and "plead" in advice
+
+
+def test_the_scope_check_wants_a_suggestion_that_can_be_asked_as_it_stands():
+    prompt = sent_to_the_llm(lambda llm: llm.classify("Should I sue?"))
+    assert "asked as it stands" in prompt
+
+
+def test_the_scope_check_counts_asking_whether_the_law_allows_a_step_as_in_scope():
+    prompt = sent_to_the_llm(lambda llm: llm.classify("Can I sue my landlord?"))
+    in_scope = prompt[prompt.index('- "in_scope"') :]
+    assert '"Can I sue my landlord?"' in in_scope
+
+
+@pytest.mark.parametrize(
+    ("query", "language"),
+    [("Should I sue?", "English"), ("क्या मुझे मुकदमा करना चाहिए?", "Hindi")],
+)
+def test_the_scope_check_names_the_language_to_refuse_and_suggest_in(query, language):
+    # One suggestion came back in Hindi for an English Query, and it is asked as it stands.
+    prompt = sent_to_the_llm(lambda llm: llm.classify(query))
+    assert f"suggested reformulation in {language}" in prompt
+
+
+def test_the_generation_prompt_sets_out_remedies_without_choosing_one():
+    prompt = sent_to_the_llm(
+        lambda llm: llm.generate("What can I do?", [provision("in_force")], [])
+    )
+    assert "each remedy" in prompt
+    assert "which one to choose" in prompt

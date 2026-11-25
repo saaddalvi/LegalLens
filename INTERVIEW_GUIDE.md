@@ -66,7 +66,7 @@ Browser ──POST /ask/stream (SSE)──► Next.js frontend (Vercel)
 Both `/ask` and `/ask/stream` (and the evaluation) answer through one `Answerer`, which owns the answer cache, the Stage labels, cancellation and the request log line; `pipeline.py` holds the corrective-loop logic. The routes are thin adapters.
 
 1. **Language detection** (English / Hindi).
-2. **Scope check:** Gemini classifies the query as *in scope*, *not about Indian law*, or *personal advice* ("should I sue?"). The last two are politely refused with a suggested rephrasing.
+2. **Scope check:** Gemini classifies the query as *in scope*, *not about Indian law*, or *personal advice* ("should I sue?"). The last two are politely refused with a suggested rephrasing. "What can I do?" is in scope: it gets the law and the remedies, never a choice among them.
 3. **Retrieval** (`_retrieve`): Provisions the user names directly (e.g. "IPC 302") first, then top-10 semantic matches. Repealed provisions are ranked behind current ones, and each repealed provision pulls in its **superseding provision** (IPC 302 → BNS 103).
 4. **Grading:** Gemini scores 0–1 how well the retrieved provisions answer the question → **Verdict**.
    - **Correct** → answer from the Corpus. Trust label `corpus`.
@@ -90,7 +90,7 @@ The `/ask/stream` endpoint streams the **Stages** (server-sent events) so the us
 
 ## 7. Evaluation (strong interview material — you measured it)
 
-A **golden set of 36 queries**: 15 English, 5 Hindi, 6 repealed-code, 5 out-of-scope, 5 poor-retrieval. Each is answered by the same `Answerer` the endpoints use; a Gemini judge scores accuracy against reference points. Compared **plain RAG vs CRAG**.
+A **golden set of 41 queries**: 15 English, 5 Hindi, 6 repealed-code, 4 remedies ("What can I do?"), 6 out-of-scope, 5 poor-retrieval. (The table below is from the earlier 36-query run.) Each is answered by the same `Answerer` the endpoints use; a Gemini judge scores accuracy against reference points. Compared **plain RAG vs CRAG**.
 
 | Metric | Plain RAG | CRAG |
 |---|---|---|

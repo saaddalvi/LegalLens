@@ -69,7 +69,7 @@ A Citation that names a Provision not present in the Corpus.
 _Avoid_: Bad cite, fake source
 
 **Out-of-scope query**:
-A Query that is not about Indian law or that asks for personal advice, such as whether to sue or sign. In a Contract conversation, also a Query about neither the Contract nor the law that governs it.
+A Query that is not about Indian law or that asks for personal advice, such as whether to sue or sign. Asking what one can do is not personal advice: it is answered with the law and the remedies, without choosing among them. In a Contract conversation, also a Query about neither the Contract nor the law that governs it.
 _Avoid_: Invalid query, off-topic
 
 ### Contracts

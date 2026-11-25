@@ -27,7 +27,7 @@ Corrective RAG pipeline: scope check, retrieval (Chroma + Qwen3 embeddings), Gra
 - Corpus covers Acts such as the Bharatiya Nyaya Sanhita and the Constitution; each Provision has a Status (in force, repealed, model).
 - Only English Contracts are accepted; scanned Contracts are supported.
 - Use glossary terms in UI copy: Provision (not clause/rule), Clause (Contract only), Citation (to a Provision), Clause reference (to a Contract), Flagged clause (never "red flag" or "risky"), Query, Contract brief.
-- LegalLens is for information only and is not legal advice. It refuses personal-advice Queries (whether to sue or sign) as Out-of-scope queries.
+- LegalLens is for information only and is not legal advice. It refuses personal-advice Queries (whether to sue or sign) as Out-of-scope queries. A Query asking what one can do is answered with the law and the remedies, never which to choose.
 - Devanagari must render and read well in Queries and answers.
 
 ## Evidence on Hand

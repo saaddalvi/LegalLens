@@ -109,11 +109,13 @@ The result is used for: the generation prompt ("Write the answer in Hindi"), the
 |---|---|
 | `in_scope` | Anything about Indian law, including general "what does the law say" questions |
 | `not_indian_law` | Other countries' law, or no legal topic at all |
-| `personal_advice` | Asks what the user personally *should do* (sue, sign, plead, settle) |
+| `personal_advice` | Asks LegalLens to choose for the user: whether to take a step (sue, sign, plead, settle, quit) or which of several to take |
+
+"What can I do?" and "What should I do now?" are **in scope**, in either language, even when the user describes their own situation: they are answered with the law and the remedies, without choosing among them. So is asking whether the law allows a step ("Can I sue?"), as opposed to whether to take it. The prompt names the language to write the reason and suggestion in, from `language.py`, so an English Query is not offered a Hindi one.
 
 The output is forced into a typed `ScopeDecision` (Pydantic, via Gemini structured output): `category`, `reason`, `suggested_reformulation`.
 
-If the category is anything but `in_scope`, the pipeline **stops here**. It returns an `AskResponse` with `response_type="refusal"`, the reason (written in the Query's language), a suggested rewording the assistant *could* answer (for personal advice this is typically "what does the law say about this situation?"), and Trust label `none`. If Gemini left the reason or reformulation empty, built-in defaults are used. No retrieval, no grading, no web search happens, which is why this check is first: refused questions cost one call.
+If the category is anything but `in_scope`, the pipeline **stops here**. It returns an `AskResponse` with `response_type="refusal"`, the reason (written in the Query's language), a suggested Query the assistant *could* answer, written to be asked as it stands (for personal advice this is typically "what does the law say about this situation, and what can be done?"), and Trust label `none`. If Gemini left the reason empty, a built-in default is used; if it suggested nothing, none is offered. On `/ask`, pressing "Ask this instead" sends the suggestion. No retrieval, no grading, no web search happens, which is why this check is first: refused questions cost one call.
 
 ### Stage 2: `retrieval` (local, no API call)
 
@@ -200,7 +202,7 @@ Key instructions in the prompt:
 - Provision text is English: refer to Provisions by the exact Act name and number as listed, and do **not** translate Act names.
 - Cite only listed Provisions, with Act and number in separate fields, **one Citation per Provision** (never a list). Never cite a web source as a Provision.
 - If the material does not answer the question, say so and cite nothing.
-- Do not give personal advice.
+- Do not give personal advice. When the Query asks what the user can do, set out each remedy the material supports, with where to go and any time limit, and never say which to choose.
 - **Repealed** Provisions (marked in the context): say they are no longer law since 1 July 2024, point to the replacing Provision, and prefer citing the in-force one. When an in-force Provision lists the old one it replaced, mention the old equivalent.
 - **Model** Provisions (Model Tenancy Act): say they are a template, not binding law, and the user's State law may differ.
 - When there are **no Provisions** (the `incorrect` path), answer from web sources, say plainly the answer rests on less reliable web sources and not statute text, and cite nothing.
@@ -240,7 +242,7 @@ If any citation is hallucinated, the pipeline emits the `citation_recheck` Stage
 ```
 response_type          "answer" | "refusal"
 refusal_reason         set for a refusal
-suggested_reformulation  set for a refusal
+suggested_reformulation  set for a refusal, when there is a Query to suggest
 answer                 the text
 answer_language        "en" | "hi"
 trust_label            "corpus" | "corpus_and_fallback" | "fallback" | "none"

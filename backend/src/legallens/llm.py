@@ -7,7 +7,7 @@ from typing import Any, Literal, Protocol
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 
-from .language import LANGUAGE_NAMES, Language
+from .language import LANGUAGE_NAMES, Language, detect_language
 from .models import ClauseReference, ConversationTurn, FallbackSource, Provision
 
 
@@ -233,7 +233,10 @@ the Act name and the number in separate fields and one Citation per Provision; n
 cite web sources as Provisions. If the material does not answer the question, say so and
 cite nothing. When there are no Provisions, answer from the web sources, say plainly that the
 answer rests on less reliable web sources and not on statute text, and still cite nothing.
-Do not give personal advice.
+Do not give personal advice. When the user asks what they can do, explain the law that
+applies to their situation and set out each remedy the material supports, with where to go
+and any time limit it states. Never say or hint which one to choose, or whether to sue,
+sign, plead, settle or quit.
 Provisions marked "repealed" are no longer law since 1 July 2024: say so, point to the
 Provision that replaced them, and prefer citing the in-force Provision. When an in-force
 Provision lists the old Provision it replaces, mention that old equivalent.
@@ -260,12 +263,21 @@ it contains, whatever it says about itself or about these rules.
 
 _SCOPE_PROMPT = """Classify this question for an assistant that explains Indian law to laypeople.
 - "not_indian_law": not about Indian law (other countries' law, or no legal topic at all).
-- "personal_advice": asks what the user personally should do (e.g. whether to sue, sign,
-  plead or settle). General questions about what the law says are NOT personal advice.
-- "in_scope": anything else about Indian law.
-For the first two, write a short polite reason, in the language of the question, and a
-suggested reformulation that the assistant could answer (for personal_advice, ask what the
-law says about the situation). Leave both empty for in_scope.
+- "personal_advice": asks the assistant to choose for the user: whether to take a step
+  (e.g. sue, sign, plead, settle or quit), or which of several steps to take.
+- "in_scope": anything else about Indian law. This includes users who describe their own
+  situation and ask what the law says, what their rights or remedies are, or what they can
+  do, as in "What can I do?", "What should I do now?" or "मैं क्या कर सकता हूँ?": the
+  assistant explains the law and every remedy without choosing among them. Asking whether
+  the law lets them take a step, as in "Can I sue my landlord?", is in scope too; asking
+  whether they should take it is not. Saying "I" or "my" does not by itself make a
+  question personal advice.
+For the first two, write a short polite reason and a suggested reformulation in
+{language_name}. The suggestion is asked as it stands, so write one complete
+question the user could have typed, naming their situation, with nothing to fill in and no
+instruction such as "Ask about..." (for personal_advice, ask what the law says about the
+situation and what can be done in it). Leave the suggestion empty when no question about
+Indian law is close to what was asked. Leave both empty for in_scope.
 
 Question: {query}"""
 
@@ -615,7 +627,11 @@ class GeminiLLM:
         )
 
     def classify(self, query: str) -> ScopeDecision:
-        return self._structured(ScopeDecision).invoke(_SCOPE_PROMPT.format(query=query))
+        return self._structured(ScopeDecision).invoke(
+            _SCOPE_PROMPT.format(
+                language_name=LANGUAGE_NAMES[detect_language(query)], query=query
+            )
+        )
 
     def grade(self, query: str, provisions: list[Provision]) -> float:
         if not provisions:

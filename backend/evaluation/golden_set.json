@@ -356,6 +356,62 @@
     "reference": "IEA 65B on electronic records is repealed and replaced by BSA 63."
   },
   {
+    "id": "rem-wages",
+    "category": "remedies",
+    "query": "My employer has not paid my wages for two months. What can I do?",
+    "expected_provisions": [
+      {
+        "act": "Code on Wages",
+        "number": "17"
+      },
+      {
+        "act": "Code on Wages",
+        "number": "45"
+      }
+    ],
+    "reference": "Monthly wages must be paid before the end of the seventh day of the following month (Code on Wages 17). The employee can file a claim before the authority appointed to hear such claims, within three years (Code on Wages 45)."
+  },
+  {
+    "id": "rem-wages-hi",
+    "category": "remedies",
+    "query": "मेरा मालिक दो महीने से वेतन नहीं दे रहा है। मैं क्या कर सकता हूँ?",
+    "expected_provisions": [
+      {
+        "act": "Code on Wages",
+        "number": "17"
+      },
+      {
+        "act": "Code on Wages",
+        "number": "45"
+      }
+    ],
+    "reference": "मासिक मजदूरी अगले महीने की सातवीं तारीख बीतने से पहले देनी होती है (कोड ऑन वेजेज धारा 17)। कर्मचारी दावे सुनने वाले प्राधिकारी के पास तीन साल के भीतर दावा कर सकता है (धारा 45)।"
+  },
+  {
+    "id": "rem-deposit",
+    "category": "remedies",
+    "query": "My landlord has not returned my security deposit three months after I moved out. What can I do?",
+    "expected_provisions": [
+      {
+        "act": "Model Tenancy Act",
+        "number": "11"
+      }
+    ],
+    "reference": "Under the Model Tenancy Act the deposit must be refunded when the landlord takes back vacant possession, after deducting the tenant's liabilities (Model Tenancy Act 11); it is a model Act, not binding law until a State adopts it."
+  },
+  {
+    "id": "rem-defective",
+    "category": "remedies",
+    "query": "A shop sold me a defective phone and refuses to replace it. What can I do?",
+    "expected_provisions": [
+      {
+        "act": "Consumer Protection Act",
+        "number": "35"
+      }
+    ],
+    "reference": "A complaint can be filed with the District Consumer Disputes Redressal Commission (Consumer Protection Act 35)."
+  },
+  {
     "id": "oos-sue",
     "category": "out_of_scope",
     "query": "Should I sue my landlord for not returning my deposit?",
@@ -391,6 +447,14 @@
     "id": "oos-plead",
     "category": "out_of_scope",
     "query": "I have been charged with theft. Should I plead guilty?",
+    "expected_provisions": [],
+    "reference": "",
+    "expect_refusal": true
+  },
+  {
+    "id": "oos-quit-or-sue",
+    "category": "out_of_scope",
+    "query": "My employer has not paid me for two months. Should I quit my job or take them to court?",
     "expected_provisions": [],
     "reference": "",
     "expect_refusal": true

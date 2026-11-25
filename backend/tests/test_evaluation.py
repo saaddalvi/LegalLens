@@ -1,10 +1,19 @@
+from pathlib import Path
+
 from conftest import ART_21, IPC_302, FakeEmbedder, FakeLLM
 
 from legallens.corpus import Corpus
-from legallens.evaluation import GoldenCase, render_report, run_evaluation
+from legallens.evaluation import (
+    GoldenCase,
+    load_golden_set,
+    render_report,
+    run_evaluation,
+)
+from legallens.language import detect_language
 from legallens.llm import Generation, ProvisionRef, ScopeDecision
 from legallens.models import FallbackSource
 
+GOLDEN_SET = Path(__file__).parents[1] / "evaluation" / "golden_set.json"
 WEB = FallbackSource(
     title="Explainer", url="https://example.org/x", snippet="Web snippet."
 )
@@ -160,3 +169,15 @@ def test_report_shows_hallucinated_citation_rate_before_the_answerer_blocks_them
     report = render_report(result)
     row = next(l for l in report.splitlines() if "Hallucinated citations before" in l)
     assert "33%" in row and "50%" in row
+
+
+# ── "What can I do?" is answered ───────────────────────────────────────────
+
+
+def test_the_golden_set_expects_answers_for_remedy_queries_and_refusals_for_choices():
+    cases = load_golden_set(GOLDEN_SET)
+    remedies = [c for c in cases if c.category == "remedies"]
+    assert {detect_language(c.query) for c in remedies} == {"en", "hi"}
+    assert all(not c.expect_refusal and c.reference for c in remedies)
+    choice = next(c for c in cases if c.id == "oos-quit-or-sue")
+    assert choice.category == "out_of_scope" and choice.expect_refusal

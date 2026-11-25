@@ -23,7 +23,7 @@ from .llm import LLM, ProvisionRef
 from .models import AskResponse
 
 Category = Literal[
-    "english", "hindi", "repealed_code", "out_of_scope", "poor_retrieval"
+    "english", "hindi", "repealed_code", "remedies", "out_of_scope", "poor_retrieval"
 ]
 Mode = Literal["plain", "crag"]
 MODE_NAMES: dict[str, str] = {"plain": "Plain RAG", "crag": "CRAG"}

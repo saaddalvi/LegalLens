@@ -45,11 +45,6 @@ DEFAULT_REFUSAL_REASON: dict[Language, str] = {
     "hi": "LegalLens केवल भारतीय कानून समझाता है और निजी फैसलों पर सलाह नहीं दे सकता।",
 }
 
-DEFAULT_REFORMULATION: dict[Language, str] = {
-    "en": "What does Indian law say about the situation you are asking about?",
-    "hi": "आप जिस स्थिति के बारे में पूछ रहे हैं, उसके बारे में भारतीय कानून क्या कहता है?",
-}
-
 StageCallback = Callable[[str], None]
 
 
@@ -225,8 +220,8 @@ def answer_query(
             citations=[],
             fallback_sources=[],
             refusal_reason=reason,
-            suggested_reformulation=scope.suggested_reformulation
-            or DEFAULT_REFORMULATION[language],
+            # Asked as it stands, so there is no stock one to stand in for it.
+            suggested_reformulation=scope.suggested_reformulation.strip() or None,
         )
 
     stage("retrieval")

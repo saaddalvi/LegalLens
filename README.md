@@ -198,9 +198,9 @@ docker run --rm -p 7860:7860 --env-file backend/.env legallens-api   # then: cur
 ## Evaluation
 
 Compares plain RAG (retrieve and generate, no Grader, no Fallback) with CRAG on a golden set of
-36 Queries in `backend/evaluation/golden_set.json`: English (15, across every Act in the Corpus),
-Hindi (5), repealed-code (6), out-of-scope (5) and poor-retrieval (5, topics the Corpus does not
-cover). Every case goes through the real `/ask` endpoint against the built Corpus.
+41 Queries in `backend/evaluation/golden_set.json`: English (15, across every Act in the Corpus),
+Hindi (5), repealed-code (6), remedies (4, "What can I do?" in English and Hindi, which must be
+answered), out-of-scope (6) and poor-retrieval (5, topics the Corpus does not cover). Every case goes through the real `/ask` endpoint against the built Corpus.
 
 ```bash
 cd backend && python -m legallens.evaluate   # needs GOOGLE_API_KEY, WEB_SEARCH_API_KEY and a built Corpus
@@ -217,6 +217,16 @@ for the Gemini free tier, so a full run takes about 20 minutes and uses roughly 
 The report shows case counts per mode, because a mode that hit Gemini errors on different cases is scored on different cases.
 
 ### Results
+
+CRAG only, all 41 Queries, after the scope check began answering "What can I do?" (2026-11-26,
+`gemini-3.1-flash-lite`, run by a one-off script to fit the daily quota, so `report.md` is not from it):
+answer accuracy 93% (38 of 41), retrieval hit-rate 90%, citation validity 100%, hallucinated citations
+before blocking 0%. All 6 out-of-scope Queries were refused. All 4 remedies Queries were answered, 3
+accurately: the Hindi unpaid-wages one cited neither expected Provision. On the 36 earlier Queries it is
+34 of 36, the same count as below; the two wrong cases are `en-ir-strike` and `en-wages-overtime`.
+
+The tables below, and `report.md`, are the last two-mode run, on the 36 earlier Queries and the earlier
+scope check. The 41-Query set has not had a two-mode run yet.
 
 Latest run (2026-11-18, `gemini-3.1-flash-lite`, Tavily Fallback searching official domains first, full Corpus of 3,501 Chunks embedded with `Qwen/Qwen3-Embedding-0.6B`, retrieval top 10).
 This is the same model as the previous run (2026-11-17), so it is the like-for-like comparison with the Fallback change.
