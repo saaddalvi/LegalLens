@@ -14,6 +14,7 @@ import { noteDeleted } from "../deleted-notice";
 import ContractConversation from "./contract-conversation";
 import { NEW, useOpenConversation } from "./conversation-address";
 import ConversationList from "./conversation-list";
+import { starterQuestions } from "./starter-questions";
 
 type State = { contract: ContractDetail } | { error: string } | null;
 
@@ -192,7 +193,7 @@ export default function ContractView({ id }: { id: string }) {
               the page column, where it stays in view as the page scrolls. */}
           <div className="mt-2 xl:absolute xl:inset-y-0 xl:right-full xl:mt-0 xl:mr-8 xl:w-56 2xl:mr-12 2xl:w-72">
             {/* The padding keeps focus rings from being clipped by the scrolling box. */}
-            <div className="flex flex-col gap-4 xl:sticky xl:top-2 xl:-m-2 xl:max-h-[calc(100dvh-1rem)] xl:overflow-y-auto xl:p-2">
+            <div className="flex flex-col gap-4 xl:sticky xl:top-2 xl:-m-2 xl:max-h-[calc(100dvh-1rem-var(--dock-height,0px))] xl:overflow-y-auto xl:p-2">
               <PageIndex brief={contract.brief} />
               <ConversationList
                 contractId={contract.id}
@@ -214,6 +215,7 @@ export default function ContractView({ id }: { id: string }) {
               key={conversation.key}
               contractId={contract.id}
               conversationId={conversation.id === NEW ? undefined : conversation.id}
+              starters={starterQuestions(contract)}
               onSaved={saved}
               onMissing={unlist}
               onGone={gone}

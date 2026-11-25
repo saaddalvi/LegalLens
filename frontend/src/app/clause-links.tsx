@@ -201,19 +201,20 @@ export function LinkedText({ text, except }: { text: string; except?: string }) 
   return parts.map((p, i) => <Fragment key={i}>{p}</Fragment>);
 }
 
-// The way back, held at the foot of the screen. It sits just after the Clause's heading in
-// the page, so it is also the next stop for the Tab key.
+// The way back, held at the foot of the screen, above any box already held there
+// (--dock-height). It sits just after the Clause's heading in the page, so it is also the next
+// stop for the Tab key.
 function ReturnBar({ label, onBack, onStay }: { label: string; onBack: () => void; onStay: () => void }) {
   // Keeps whatever is focused or scrolled to clear of the bar.
   useEffect(() => {
     const root = document.documentElement;
-    root.style.scrollPaddingBottom = "5rem";
+    root.style.scrollPaddingBottom = "calc(5rem + var(--dock-height, 0px))";
     return () => {
       root.style.scrollPaddingBottom = "";
     };
   }, []);
   return (
-    <div className="fixed inset-x-0 bottom-0 z-10 border-t-2 border-ink bg-paper px-4 pb-[env(safe-area-inset-bottom)] sm:px-8">
+    <div className="fixed inset-x-0 bottom-[var(--dock-height,0px)] z-10 border-t-2 border-ink bg-paper px-4 pb-[env(safe-area-inset-bottom)] sm:px-8">
       <div className="mx-auto flex max-w-[44rem] items-center justify-between gap-3 py-2">
         <button type="button" onClick={onBack} className={`${BUTTON_CLASS} min-h-11 min-w-0`}>
           Back to {label}
@@ -241,7 +242,7 @@ const RUNS_ON = /\b(?:shall|will|must|may)\b|(?:[,;:-]|\b(?:a|an|the|of|to|by|fo
 // A Clause's heading is the rest of its first line, which its text then repeats. A title is
 // shown once, as the heading. A first line that may be the start of a sentence stays in the
 // text, with no heading, so that no sentence is cut in two.
-function headingAndBody(heading: string, text: string): { heading: string; body: string } {
+export function headingAndBody(heading: string, text: string): { heading: string; body: string } {
   const [first, ...rest] = text.split("\n");
   if (!heading || !first.trim().endsWith(heading)) return { heading: "", body: text };
   const body = rest.join("\n").replace(/^\s*\n/, "");

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import ContractView from "./contract-view";
@@ -77,6 +77,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   getToken.mockReset();
+  delete (Element.prototype as Partial<Element>).scrollIntoView; // jsdom has none of its own
 });
 
 async function typeAndAsk(user: ReturnType<typeof userEvent.setup>, q: string) {
@@ -321,6 +322,7 @@ it("carries an unrelated Query to the asking screen and offers the suggested que
   );
   await user.click(screen.getByRole("button", { name: "What does my Contract say about notice?" }));
   expect(screen.getByLabelText(/ask a question about this contract/i)).toHaveValue("What does my Contract say about notice?");
+  expect(screen.getByLabelText(/ask a question about this contract/i)).toHaveFocus(); // ready to send
 });
 
 it("marks a Hindi Query's Stages and answer as Hindi, with the Clause text kept English", async () => {
@@ -386,4 +388,211 @@ it("puts an answer's headings under the conversation's", async () => {
   expect(level("From your Contract")).toBe("H3");
   expect(level("Citations")).toBe("H3");
   expect(level(/Model Tenancy Act, Section 11/)).toBe("H4");
+});
+
+const questionBox = () => screen.getByLabelText(/ask a question about this contract/i);
+
+it("sends on Enter and adds a new line on Shift+Enter", async () => {
+  const user = userEvent.setup();
+  const fetchFn = vi.fn().mockResolvedValue(sseResponse([frame("answer", ANSWER)]));
+  vi.stubGlobal("fetch", fetchFn);
+  renderConversation();
+
+  await user.type(questionBox(), "What is the deposit?{Shift>}{Enter}{/Shift}And the rent?");
+  expect(questionBox()).toHaveValue("What is the deposit?\nAnd the rent?");
+  expect(fetchFn).not.toHaveBeenCalled();
+  await user.keyboard("{Enter}");
+  expect(await screen.findByText("The deposit is Rs. 1,00,000.")).toBeInTheDocument();
+  expect(JSON.parse(fetchFn.mock.calls[0][1].body).query).toBe("What is the deposit?\nAnd the rent?");
+  expect(questionBox()).toHaveValue("");
+});
+
+it("leaves Enter to an input method that is composing text", async () => {
+  const user = userEvent.setup();
+  const fetchFn = vi.fn().mockResolvedValue(sseResponse([frame("answer", ANSWER)]));
+  vi.stubGlobal("fetch", fetchFn);
+  renderConversation();
+  await user.type(questionBox(), "जमा राशि");
+
+  // fireEvent returns false when the key's own action was cancelled.
+  expect(fireEvent.keyDown(questionBox(), { key: "Enter", isComposing: true })).toBe(true);
+  // Safari reports the Enter that ends a composition only by this key code.
+  expect(fireEvent.keyDown(questionBox(), { key: "Enter", keyCode: 229 })).toBe(true);
+  expect(fetchFn).not.toHaveBeenCalled();
+  expect(questionBox()).toHaveValue("जमा राशि");
+});
+
+it("sends nothing, and adds no line, for Enter in an empty box", async () => {
+  const user = userEvent.setup();
+  const fetchFn = vi.fn();
+  vi.stubGlobal("fetch", fetchFn);
+  renderConversation();
+  await user.type(questionBox(), "   {Enter}");
+  expect(questionBox()).toHaveValue("   ");
+  expect(fetchFn).not.toHaveBeenCalled();
+});
+
+it("scrolls each new question to the top of view", async () => {
+  const user = userEvent.setup();
+  // What was scrolled to, and what it held at that moment.
+  const scrolled: { text: string; block?: ScrollLogicalPosition }[] = [];
+  Element.prototype.scrollIntoView = function (this: Element, options?: boolean | ScrollIntoViewOptions) {
+    scrolled.push({ text: this.textContent!, block: (options as ScrollIntoViewOptions).block });
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn()
+      .mockResolvedValueOnce(json(TURNS.slice(0, 1)))
+      .mockResolvedValueOnce(sseResponse([frame("error", { stage: "generation", message: "x" })]))
+      .mockResolvedValueOnce(sseResponse([frame("answer", answer({ answer: "Rs. 20,000." }))])),
+  );
+  renderConversation({ conversationId: "saved" });
+  await screen.findByText("The deposit is Rs. 1,00,000.");
+  expect(scrolled).toEqual([]); // a conversation that is only loaded stays where it is
+
+  await user.type(questionBox(), "And the rent?{Enter}");
+  expect(scrolled).toEqual([{ text: "You asked: And the rent?", block: "start" }]);
+  // Asked again, it is scrolled to again.
+  await user.click(await screen.findByRole("button", { name: "Try again" }));
+  expect(scrolled).toHaveLength(2);
+  expect(scrolled[1].text).toMatch(/^You asked: And the rent\?/);
+  expect(await screen.findByText("Rs. 20,000.")).toBeInTheDocument();
+  expect(scrolled).toHaveLength(2); // the answer arriving does not move the reader
+});
+
+const flagged = (number: string) => ({
+  clause_reference: { number, text: `${number}.` },
+  how_it_differs: "It differs.",
+  citations: [],
+});
+
+// A Contract's page on an empty conversation, whose brief flags these Clauses in this order.
+async function openEmpty(flaggedNumbers: string[] | null) {
+  const fetchFn = vi
+    .fn()
+    .mockResolvedValueOnce(
+      json({
+        ...DETAIL,
+        clauses: [
+          { number: "0", heading: "", text: "RENT AGREEMENT" },
+          { number: "3", heading: "", text: "3. The Tenant pays the deposit." },
+          { number: "5", heading: "Notice", text: "5. Notice\nEither side gives two months." },
+          { number: "7", heading: "The Tenant shall pay the rent to", text: "7. The Tenant shall pay the rent to\nthe Landlord." },
+          { number: "9", heading: "Security deposit", text: "9. Security deposit\nOne lakh is held." },
+        ],
+        brief: flaggedNumbers && {
+          parties: [],
+          purpose: "A lease.",
+          key_terms: [],
+          obligations: [],
+          flagged_clauses: flaggedNumbers.map(flagged),
+        },
+        conversations: [],
+      }),
+    )
+    .mockResolvedValue(sseResponse([frame("answer", ANSWER)]));
+  vi.stubGlobal("fetch", fetchFn);
+  render(<ContractView id="c1" />);
+  const list = await screen.findByRole("list", { name: "Questions to start with" });
+  return {
+    fetchFn,
+    starters: () => within(list).getAllByRole("button").map((b) => b.textContent),
+  };
+}
+
+const about = (subject: string) => `What does ${subject} say, and what does Indian law provide?`;
+const GENERIC = [
+  "What must I do under this Contract?",
+  "How can this Contract be ended?",
+  "What happens if either side breaks this Contract?",
+];
+
+it("starts an empty conversation with questions about the first three Flagged clauses", async () => {
+  const user = userEvent.setup();
+  // Clause 9 is flagged twice, and asked about once.
+  const { fetchFn, starters } = await openEmpty(["9", "9", "3", "5", "7"]);
+  expect(starters()).toEqual([
+    about("Clause 9 (Security deposit)"),
+    about("Clause 3"),
+    about("Clause 5 (Notice)"),
+  ]);
+  expect(fetchFn).toHaveBeenCalledTimes(1); // nothing was asked of a model to build them
+
+  await user.click(screen.getByRole("button", { name: about("Clause 9 (Security deposit)") }));
+  expect(await screen.findByText("The deposit is Rs. 1,00,000.")).toBeInTheDocument();
+  expect(JSON.parse(fetchFn.mock.calls[1][1].body)).toEqual({ query: about("Clause 9 (Security deposit)") });
+  expect(screen.getByText("You asked:").parentElement).toHaveTextContent(about("Clause 9 (Security deposit)"));
+  expect(screen.queryByRole("list", { name: "Questions to start with" })).not.toBeInTheDocument();
+});
+
+it("leaves out a heading that is the start of a sentence, and calls Clause 0 the Recitals", async () => {
+  const { starters } = await openEmpty(["7", "0"]);
+  expect(starters()).toEqual([about("Clause 7"), "What do the Recitals say, and what does Indian law provide?", GENERIC[0]]);
+});
+
+it("fills the places a single Flagged clause leaves with general questions", async () => {
+  const { starters } = await openEmpty(["3"]);
+  expect(starters()).toEqual([about("Clause 3"), GENERIC[0], GENERIC[1]]);
+});
+
+it.each([
+  ["no Flagged clauses", []],
+  ["no brief", null],
+])("starts a Contract with %s on general questions", async (_, numbers) => {
+  const { starters } = await openEmpty(numbers);
+  expect(starters()).toEqual(GENERIC);
+});
+
+it("moves focus to the question just asked, and on to the box when it is answered", async () => {
+  const user = userEvent.setup();
+  const stream = controlled();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn()
+      .mockResolvedValueOnce(sseResponse([frame("error", { stage: "generation", message: "x" })]))
+      .mockResolvedValueOnce(stream.res),
+  );
+  renderConversation();
+  await typeAndAsk(user, "What is the deposit?");
+  // The button pressed goes away with the error, so focus is put on the question asked again.
+  await user.click(await screen.findByRole("button", { name: "Try again" }));
+  const question = screen.getByText("You asked:").parentElement!;
+  expect(question).toHaveFocus();
+  expect(screen.getByRole("status", { name: "Answer notice" })).toBeEmptyDOMElement();
+
+  stream.push(frame("answer", ANSWER));
+  expect(await screen.findByText("The deposit is Rs. 1,00,000.")).toBeInTheDocument();
+  expect(questionBox()).toHaveFocus();
+  expect(screen.getByRole("status", { name: "Answer notice" })).toHaveTextContent("Your answer is ready.");
+});
+
+it("leaves focus where the reader has moved it while the answer was written", async () => {
+  const user = userEvent.setup();
+  const stream = controlled();
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(json(TURNS.slice(0, 1))).mockResolvedValueOnce(stream.res));
+  renderConversation({ conversationId: "saved" });
+  await screen.findByText("The deposit is Rs. 1,00,000.");
+  await user.type(questionBox(), "And the rent?{Enter}");
+  const elsewhere = screen.getByRole("link", { name: /Open full Provision/ });
+  elsewhere.focus();
+  stream.push(frame("answer", answer({ answer: "Rs. 20,000.", citations: [], clause_references: [] })));
+  expect(await screen.findByText("Rs. 20,000.")).toBeInTheDocument();
+  expect(elsewhere).toHaveFocus();
+});
+
+it("keeps focus on the question when its conversation turns out to be gone", async () => {
+  const user = userEvent.setup();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn()
+      .mockResolvedValueOnce(json(TURNS.slice(0, 1)))
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({ ok: false, status: 404 }),
+  );
+  renderConversation({ conversationId: "gone" });
+  await screen.findByText("The deposit is Rs. 1,00,000.");
+  await typeAndAsk(user, "And the rent?");
+  await user.click(await screen.findByRole("button", { name: "Try again" }));
+  expect(await screen.findByText(/could not find that conversation/i)).toBeInTheDocument();
+  expect(screen.getByText("You asked:").parentElement).toHaveFocus();
 });

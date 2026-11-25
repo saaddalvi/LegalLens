@@ -2,8 +2,9 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
-import { Answer, Refusal } from "../../answer-view";
-import { BUTTON_CLASS, FIELD_CLASS } from "../../ask-box";
+import { flushSync } from "react-dom";
+import { Answer, prefersReducedMotion, Refusal } from "../../answer-view";
+import { BUTTON_CLASS } from "../../ask-box";
 import type { Stage } from "../../stage-list";
 import StageList from "../../stage-list";
 import { API_URL } from "@/lib/api-url";
@@ -12,13 +13,17 @@ import { dailyCapMessage, isDailyCap, retryAfterSeconds } from "@/lib/daily-cap"
 import type { ContractAnswer, ConversationRef, ConversationTurn } from "@/lib/contract-types";
 import { readEvents } from "@/lib/sse";
 import { conversationHref } from "./conversation-address";
+import QuestionBox from "./question-box";
+import type { Starter } from "./starter-questions";
 
 const MISSING = "We could not find that conversation. It may have been deleted.";
 
 // `fresh` marks an answer that arrived while this page was open, which is revealed word by word;
-// one loaded with the page is shown at once.
-type Shown = ConversationTurn & { fresh: boolean };
+// one loaded with the page is shown at once. `key` stays with a Query from being asked to being
+// answered, whatever happens to the turns before it, so its question is never drawn afresh.
+type Shown = ConversationTurn & { key: string; fresh: boolean };
 type Pending = {
+  key: string;
   q: string;
   stages: Stage[];
   error: string | null;
@@ -26,12 +31,61 @@ type Pending = {
   failedStage: string | null;
 };
 
+// One Query and what came of it. A `live` turn, asked while this page was open, is given at
+// least a screen's height while it is the latest, so that its question can be scrolled to the
+// top with nothing of the page below crowding in under it.
+function Turn({
+  query,
+  questionRef,
+  latest,
+  live,
+  children,
+}: {
+  query: string;
+  questionRef: React.RefObject<HTMLParagraphElement | null>;
+  latest: boolean;
+  live: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <li
+      data-place="the answer"
+      className={`flex flex-col gap-5 ${latest && live ? "min-h-[calc(100dvh-var(--dock-height,0px))]" : ""}`}
+    >
+      <p
+        ref={latest ? questionRef : undefined}
+        tabIndex={-1}
+        lang={detectedLang(query)}
+        className="measure scroll-mt-4 break-words border-b border-rule pb-2 font-medium"
+      >
+        <span className="sr-only">You asked: </span>
+        {query}
+      </p>
+      {children}
+    </li>
+  );
+}
+
+// The question, with a Clause's heading in the serif the Contract's own words are set in.
+function StarterText({ starter: { query, heading } }: { starter: Starter }) {
+  if (!heading) return query;
+  const at = query.indexOf(`(${heading})`) + 1;
+  return (
+    <>
+      {query.slice(0, at)}
+      <span className="font-serif">{heading}</span>
+      {query.slice(at + heading.length)}
+    </>
+  );
+}
+
 // The saved Queries and answers of one Contract conversation, and the box for the next Query.
 // Without a conversationId the first Query to be answered starts one. Each Query streams its
 // Stages as /ask does; a new Query cancels one still being answered, and so does leaving.
 export default function ContractConversation({
   contractId,
   conversationId,
+  starters = [],
   onSaved,
   onMissing,
   onGone,
@@ -40,6 +94,8 @@ export default function ContractConversation({
   contractId: string;
   // Read once, on arrival: a conversation that gets its id here is not loaded again.
   conversationId?: string;
+  // Offered while the conversation is empty.
+  starters?: Starter[];
   // A Query was answered and saved to this conversation.
   onSaved: (conversation: ConversationRef) => void;
   // The conversation to be loaded is no longer there.
@@ -58,6 +114,12 @@ export default function ContractConversation({
   const [query, setQuery] = useState("");
   const running = useRef<AbortController | null>(null);
   const conversationIdRef = useRef(conversationId); // set by the backend once one is started
+  const latestQuestion = useRef<HTMLParagraphElement>(null);
+  const asked = useRef(0); // numbers the Queries asked on this page, for their keys
+  const form = useRef<HTMLFormElement>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
+  // Tells a screen reader that the reply has arrived, as the Stages that were being read go.
+  const [notice, setNotice] = useState("");
 
   // Leaving, for another conversation or another page, cancels an answer still being written.
   // Next may keep the page left and show it again, so its half-done Stages go too.
@@ -86,7 +148,7 @@ export default function ContractConversation({
         if (res.status === 404) missing(saved);
         if (!res.ok) return setLoadError({ status: res.status });
         const loaded = (await res.json()) as ConversationTurn[];
-        setTurns(loaded.map((t) => ({ ...t, fresh: false })));
+        setTurns(loaded.map((t, i) => ({ ...t, key: `saved-${i}`, fresh: false })));
         setLoadError(null);
       } catch {
         if (!controller.signal.aborted) setLoadError({ status: null });
@@ -100,7 +162,19 @@ export default function ContractConversation({
     const controller = new AbortController();
     running.current = controller;
     const current = () => !controller.signal.aborted;
-    setPending({ q, stages: [], error: null, failedStage: null });
+    // A Query tried again keeps the key it failed under.
+    const key = pending?.error && pending.q === q ? pending.key : `asked-${++asked.current}`;
+    // On the page before it is scrolled to.
+    flushSync(() => {
+      setPending({ key, q, stages: [], error: null, failedStage: null });
+      setNotice("");
+    });
+    // A starter or "Try again" leaves the page as it is pressed, taking the focus with it.
+    if (document.activeElement === document.body) latestQuestion.current?.focus({ preventScroll: true });
+    latestQuestion.current?.scrollIntoView?.({
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+      block: "start",
+    });
     let latest: string | null = null; // the latest Stage to start
     const fail = (message: string) => {
       if (current()) setPending((p) => p && { ...p, error: message, failedStage: latest });
@@ -146,8 +220,7 @@ export default function ContractConversation({
           onSaved(data as ConversationRef);
         } else if (name === "answer") {
           finished = true;
-          setTurns((t) => [...(t ?? []), { query: q, response: data as ContractAnswer, fresh: true }]);
-          setPending(null);
+          answered({ key, query: q, response: data as ContractAnswer, fresh: true });
         } else if (name === "error") {
           finished = true;
           fail(errorMessage(503));
@@ -159,8 +232,29 @@ export default function ContractConversation({
     }
   }
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
+  function answered(turn: Shown) {
+    flushSync(() => {
+      setTurns((t) => [...(t ?? []), turn]);
+      setPending(null);
+      setNotice(
+        turn.response.response_type === "refusal"
+          ? "LegalLens could not answer that question."
+          : "Your answer is ready.",
+      );
+    });
+    // Focus comes back to the box for the next Query, unless the reader has moved elsewhere.
+    const focused = document.activeElement;
+    if (focused === document.body || focused === latestQuestion.current || form.current?.contains(focused))
+      box.current?.focus({ preventScroll: true });
+  }
+
+  // A question offered by a refusal is put in the box, ready to be sent.
+  function reformulate(q: string) {
+    setQuery(q);
+    box.current?.focus({ preventScroll: true });
+  }
+
+  function send() {
     const q = query.trim();
     if (!q) return;
     setQuery("");
@@ -187,71 +281,78 @@ export default function ContractConversation({
   return (
     <>
       {turns.length === 0 && !pending && (
-        <p className="measure text-muted">
-          Your first question starts a new conversation, answered without your other conversations.
-        </p>
-      )}
-
-      {turns.length > 0 && (
-        <ol className="flex flex-col gap-10">
-          {turns.map((t, i) => (
-            <li key={i} data-place="the answer" className="flex flex-col gap-5">
-              <p lang={detectedLang(t.query)} className="measure break-words border-b border-rule pb-2 font-medium">
-                <span className="sr-only">You asked: </span>
-                {t.query}
-              </p>
-              {t.response.response_type === "refusal" ? (
-                <Refusal result={t.response} query={t.query} onReformulate={setQuery} instant={!t.fresh} level={3} />
-              ) : (
-                <Answer result={t.response} query={t.query} instant={!t.fresh} scope={`turn-${i}-`} level={3} />
-              )}
-            </li>
-          ))}
-        </ol>
-      )}
-
-      {pending && (
-        <div className="flex flex-col gap-5">
-          <p lang={detectedLang(pending.q)} className="measure break-words border-b border-rule pb-2 font-medium">
-            <span className="sr-only">You asked: </span>
-            {pending.q}
+        <div className="flex flex-col gap-3">
+          <p className="measure text-muted">
+            Your first question starts a new conversation, answered without your other conversations.
           </p>
-          {(loading || pending.stages.length > 0) && (
-            <StageList
-              stages={pending.stages}
-              loading={loading}
-              failedStage={pending.failedStage}
-              lang={detectedLang(pending.q)}
-            />
-          )}
-          {pending.error && (
-            <div role="alert" className="flex flex-col items-start gap-3 border-l-2 border-redtape pl-4">
-              <p className="text-redtape">{pending.error}</p>
-              <button type="button" onClick={() => void ask(pending.q)} className={BUTTON_CLASS}>
-                Try again
-              </button>
-            </div>
+          {starters.length > 0 && (
+            <ul aria-label="Questions to start with" className="measure border-t border-rule">
+              {starters.map((s) => (
+                <li key={s.query} className="border-b border-rule">
+                  <button
+                    type="button"
+                    lang="en"
+                    onClick={() => void ask(s.query)}
+                    className="min-h-11 w-full break-words py-2 text-left underline decoration-rule underline-offset-4 hover:decoration-ink"
+                  >
+                    <StarterText starter={s} />
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       )}
 
-      <form onSubmit={submit} className="flex flex-col gap-3">
-        {/* The heading above already says it on screen. */}
-        <label htmlFor="contract-query" className="sr-only">
-          Ask a question about this Contract
-        </label>
-        <textarea
-          id="contract-query"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          rows={3}
-          placeholder="In English or Hindi"
-          className={FIELD_CLASS}
-        />
-        <button type="submit" className={`${BUTTON_CLASS} self-start`}>
-          {loading ? "Ask this instead" : "Ask"}
-        </button>
-      </form>
+      {(turns.length > 0 || pending) && (
+        <ol className="flex flex-col gap-10">
+          {/* One list, so a question keeps its place in the page when its answer arrives. */}
+          {[
+            ...turns.map((t, i) => (
+              <Turn key={t.key} query={t.query} questionRef={latestQuestion} latest={!pending && i === turns.length - 1} live={t.fresh}>
+                {t.response.response_type === "refusal" ? (
+                  <Refusal result={t.response} query={t.query} onReformulate={reformulate} instant={!t.fresh} level={3} />
+                ) : (
+                  <Answer result={t.response} query={t.query} instant={!t.fresh} scope={`turn-${i}-`} level={3} />
+                )}
+              </Turn>
+            )),
+            pending && (
+              <Turn key={pending.key} query={pending.q} questionRef={latestQuestion} latest live>
+                {(loading || pending.stages.length > 0) && (
+                  <StageList
+                    stages={pending.stages}
+                    loading={loading}
+                    failedStage={pending.failedStage}
+                    lang={detectedLang(pending.q)}
+                  />
+                )}
+                {pending.error && (
+                  <div role="alert" className="flex flex-col items-start gap-3 border-l-2 border-redtape pl-4">
+                    <p className="text-redtape">{pending.error}</p>
+                    <button type="button" onClick={() => void ask(pending.q)} className={BUTTON_CLASS}>
+                      Try again
+                    </button>
+                  </div>
+                )}
+              </Turn>
+            ),
+          ]}
+        </ol>
+      )}
+
+      <p role="status" aria-label="Answer notice" className="sr-only">
+        {notice}
+      </p>
+
+      <QuestionBox
+        value={query}
+        onChange={setQuery}
+        onSend={send}
+        busy={loading}
+        formRef={form}
+        boxRef={box}
+      />
     </>
   );
 }

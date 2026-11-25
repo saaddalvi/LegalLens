@@ -82,7 +82,16 @@
   --font-serif: var(--font-tiro), Georgia, serif;
 }
 
+/*
+ * A box held at the foot of the screen (a Contract conversation's) says how tall it is. The page
+ * then ends above it, and nothing focused or scrolled to is left underneath.
+ */
+html {
+  scroll-padding-bottom: var(--dock-height, 0px);
+}
+
 body {
+  padding-bottom: var(--dock-height, 0px);
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font-sans);

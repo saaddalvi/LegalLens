@@ -36,7 +36,7 @@ const REVEAL_MS = 800;
 const FADE_MS = 200;
 const MAX_WORD_DELAY_MS = 50;
 
-function prefersReducedMotion(): boolean {
+export function prefersReducedMotion(): boolean {
   return typeof window.matchMedia !== "function"
     || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
