@@ -99,5 +99,9 @@ A Clause that differs from what Indian law provides, shown with its Clause refer
 _Avoid_: Red flag, risky clause, unfair clause
 
 **Contract conversation**:
-The saved Queries and answers about one Contract, beginning with its Contract brief. Each Contract has exactly one.
+One saved thread of Queries and answers about a Contract, begun by its first Query and titled with it. A Contract has zero or more, and each is answered with only its own earlier turns as context. The Contract brief belongs to the Contract, not to any Contract conversation.
 _Avoid_: Chat, thread, session
+
+**Follow-up**:
+A Query in a Contract conversation that relies on earlier turns of that conversation for its meaning, such as "what about the notice period for that?"
+_Avoid_: Reply, continuation
