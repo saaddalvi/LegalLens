@@ -6,13 +6,27 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Component test: the index lists conversations newest first with their titles, and marks the open one
-- [ ] Component test: "New conversation" shows an empty conversation, and its first answer replaces the URL with the new id and adds it to the top of the list
-- [ ] Component test: opening `/contracts/[id]` with conversations shows the most recent one, and with none shows the empty state
-- [ ] Component test: deleting a conversation asks for confirmation, removes it from the list and opens the next most recent
-- [ ] Component test: switching conversations while an answer streams aborts that request, and the answer doesn't appear in either conversation
-- [ ] Component test: refreshing a conversation URL shows the same turns
-- [ ] Checked at phone width (375px) and desktop, in light and dark
-- [ ] Lint, typecheck and tests pass
+- [x] Component test: the index lists conversations newest first with their titles, and marks the open one
+- [x] Component test: "New conversation" shows an empty conversation, and its first answer replaces the URL with the new id and adds it to the top of the list
+- [x] Component test: opening `/contracts/[id]` with conversations shows the most recent one, and with none shows the empty state
+- [x] Component test: deleting a conversation asks for confirmation, removes it from the list and opens the next most recent
+- [x] Component test: switching conversations while an answer streams aborts that request, and the answer doesn't appear in either conversation
+- [x] Component test: refreshing a conversation URL shows the same turns
+- [x] Checked at phone width (375px) and desktop, in light and dark
+- [x] Lint, typecheck and tests pass
+
+## Comments
+
+2026-11-25: Implemented in commit 1b6dead. 248 frontend tests pass, typecheck and eslint are clean, and the production build succeeds. No backend code changed.
+
+Checked in a browser at 320, 375, 900, 1280, 1440 and 1920px, light and dark, on a copy of the frontend with stubbed sign-in and a fake API. Not checked against real Clerk, the real backend or a real phone.
+
+Choices the ticket left open:
+
+- At 1280px and up the whole page index, "On this page" included, sits in the left margin, as the Contracts list does. Below that it stays under the title and the conversation list is folded behind "Show conversations (n)".
+- After the open conversation is deleted, the most recent of those left opens.
+- Once a new conversation is saved, an older history entry for `conversations/new` shows that conversation, until "New conversation" is chosen again. Without this, Back from a Clause link followed mid-answer would swap to an empty conversation.
+
+The upload screen still says LegalLens keeps questions and answers "until you delete the Contract". A conversation can now be deleted too; the wording was left as it was.
