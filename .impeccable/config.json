@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "border-accent-on-rounded",
+        "value": "*",
+        "files": [
+          "frontend/src/app/ask-box.tsx"
+        ],
+        "createdAt": "2026-11-24T19:49:34.978Z",
+        "reason": "agent triage: FIELD_CLASS is a ledger field with a square 2px ink bottom rule and rounded-t only; no corner clash; ruled surface per DESIGN.md; user has not reviewed"
+      }
+    ]
+  }
+}
