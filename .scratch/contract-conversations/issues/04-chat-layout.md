@@ -6,14 +6,32 @@
 
 **Blocked by:** 03
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] Component test: Enter submits, Shift+Enter inserts a new line, and Enter during IME composition does nothing
-- [ ] Component test: sending scrolls the new question into view
-- [ ] Component test: an empty conversation shows starter questions from the Flagged clauses, and clicking one sends it
-- [ ] Component test: a Contract with no Flagged clauses shows the generic starters, and one with a single Flagged clause shows it plus two generic ones
-- [ ] Existing conversation tests still pass (cancel in flight, Try again, word-by-word reveal only for new answers)
-- [ ] The fixed question box never covers the last answer, its Citations or its Clause references, at phone width or desktop
+- [x] Component test: Enter submits, Shift+Enter inserts a new line, and Enter during IME composition does nothing
+- [x] Component test: sending scrolls the new question into view
+- [x] Component test: an empty conversation shows starter questions from the Flagged clauses, and clicking one sends it
+- [x] Component test: a Contract with no Flagged clauses shows the generic starters, and one with a single Flagged clause shows it plus two generic ones
+- [x] Existing conversation tests still pass (cancel in flight, Try again, word-by-word reveal only for new answers)
+- [x] The fixed question box never covers the last answer, its Citations or its Clause references, at phone width or desktop
 - [ ] Keyboard and screen-reader pass: focus order, the "You asked" labels, and focus moving to the box after an answer
-- [ ] Checked at phone width (375px) and desktop, in light and dark
-- [ ] Lint, typecheck and tests pass
+- [x] Checked at phone width (375px) and desktop, in light and dark
+- [x] Lint, typecheck and tests pass
+
+## Comments
+
+2026-11-25: Implemented in commit 4b7ce67. 260 frontend tests pass, typecheck and eslint are clean, and the production build succeeds. No backend code changed.
+
+Checked in a browser at 375px and 1440px, light and dark, on a copy of the frontend without the sign-in redirect and with a fake API. Not checked against the real backend or a real phone, so the on-screen keyboard is untested.
+
+**Left for a human:** the screen-reader half of the keyboard and screen-reader pass. Tab order was walked in the browser with nothing hidden under the box, and tests cover the "You asked" labels, the focus moves and the "Your answer is ready." announcement, but no screen reader was run.
+
+Choices the ticket left open:
+
+- The box is on screen wherever the reader is on the page, once the conversation has loaded. A Clause link's way back stacks above it.
+- On sending from a button that then disappears (a starter or "Try again"), focus goes to the question. After the answer it returns to the box, unless the reader has moved elsewhere.
+- Three starters are always shown. The third general one is "What happens if either side breaks this Contract?". A flagged Clause 0 is asked about as "the Recitals".
+- A starter names a Clause's heading only when the Clause list shows it as a title. That test also rejects some real titles, such as "Lock-in", or one followed by a numbered sub-clause.
+
+**For a decision:** a starter's heading is Contract text, and a clicked starter is one of the user's own Queries, so under ADR 0006 it can reach the web Fallback's Query. The ticket asks for the heading, so it is included.
+
