@@ -264,13 +264,13 @@ def test_an_unrelated_query_is_pointed_to_ask(make_client):
     assert refusal["response_type"] == "refusal"
     assert refusal["redirect_to_ask"] is True
     assert "That isn't about your Contract." in refusal["refusal_reason"]
-    assert "/ask" in refusal["refusal_reason"]
+    assert "use Ask a question" in refusal["refusal_reason"]
 
 
 def test_a_refusal_with_no_reason_from_the_model_still_explains_itself(make_client):
     c = make_client(llm=ConversationLLM(scope=ContractScope(category="unrelated")))
     refusal = final(ask(c, upload(c), "Tell me a joke"))
-    assert "/ask" in refusal["refusal_reason"]
+    assert "use Ask a question" in refusal["refusal_reason"]
     assert refusal["suggested_reformulation"]
 
 

@@ -114,8 +114,8 @@ UNRELATED_REASON: dict[Language, str] = {
     "hi": "यह प्रश्न आपके Contract या उस पर लागू कानून के बारे में नहीं है।",
 }
 ASK_POINTER: dict[Language, str] = {
-    "en": "For general questions about Indian law, use the Ask page at /ask.",
-    "hi": "भारतीय कानून के सामान्य प्रश्नों के लिए /ask पेज का उपयोग करें।",
+    "en": "For general questions about Indian law, use Ask a question.",
+    "hi": "भारतीय कानून के सामान्य प्रश्नों के लिए “Ask a question” पेज का उपयोग करें।",
 }
 SUGGESTED: dict[Language, str] = {
     "en": "What does my Contract say about this, and what does Indian law provide?",
