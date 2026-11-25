@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AskScreen from "./ask-screen";
@@ -401,32 +401,46 @@ describe("answer reveal", () => {
     vi.useRealTimers();
   });
 
-  it("reveals a long answer within the cap, then shows the Trust label and Citations", async () => {
+  it("shows the Trust label at once, then the Citations when the reveal ends", async () => {
     await startAnswering({ ...base, answer: longAnswer });
     const section = screen.getByRole("region", { name: "Answer" });
     expect(section).toHaveTextContent(longAnswer);
-    expect(screen.queryByText("From statute text")).not.toBeInTheDocument();
+    expect(screen.getByText("From statute text")).toBeInTheDocument();
     expect(screen.queryByText(/Constitution of India/)).not.toBeInTheDocument();
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1000);
-    });
-    expect(screen.queryByText("From statute text")).not.toBeInTheDocument();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(500);
     });
-    expect(screen.getByText("From statute text")).toBeInTheDocument();
+    expect(screen.queryByText(/Constitution of India/)).not.toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
     expect(screen.getByText(/Constitution of India/)).toBeInTheDocument();
   });
 
-  it("shows everything at once when the answer is clicked", async () => {
+  it("shows the Citations at once when the answer is clicked", async () => {
     await startAnswering({ ...base, answer: longAnswer });
-    expect(screen.queryByText("From statute text")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Constitution of India/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByText(/word0/));
     expect(screen.getByText("From statute text")).toBeInTheDocument();
     expect(screen.getByText(/Constitution of India/)).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Answer" })).toHaveTextContent(longAnswer);
+  });
+
+  it("shows the Citations at once when Escape is pressed", async () => {
+    await startAnswering({ ...base, answer: longAnswer });
+    expect(screen.queryByText(/Constitution of India/)).not.toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.getByText(/Constitution of India/)).toBeInTheDocument();
+  });
+
+  it("says what a web-sourced Trust label means before the answer, and nothing extra for statute text", async () => {
+    await startAnswering({ ...base, answer: "Short.", trust_label: "fallback" });
+    expect(screen.getByText(/draws on web search/)).toBeInTheDocument();
+    cleanup();
+    await startAnswering({ ...base, answer: "Short." });
+    expect(screen.queryByText(/Every claim rests on/)).not.toBeInTheDocument();
   });
 
   it("reveals a refusal the same way", async () => {
@@ -442,7 +456,7 @@ describe("answer reveal", () => {
     expect(refusal).toHaveTextContent("This is outside Indian law.");
     expect(screen.queryByRole("button", { name: "What does Article 14 say?" })).not.toBeInTheDocument();
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
+      await vi.advanceTimersByTimeAsync(900);
     });
     expect(screen.getByRole("button", { name: "What does Article 14 say?" })).toBeInTheDocument();
   });

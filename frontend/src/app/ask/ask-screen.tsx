@@ -174,8 +174,8 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
       )}
 
       {error && (
-        <div role="alert" className="flex flex-col items-start gap-3 border-l-2 border-redtape pl-4">
-          <p className="text-redtape">{error}</p>
+        <div role="alert" className="flex flex-col items-start gap-3 border border-rule bg-ledger px-4 py-4">
+          <p>{error}</p>
           <button type="button" onClick={tryAgain} className={BUTTON_CLASS}>
             Try again
           </button>

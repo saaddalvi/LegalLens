@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { ProvisionNotes, ReplacesNote, STATUS_TEXT } from "./provision-notes";
 import { ClauseQuote } from "./clause-quote";
 import Stamp from "./stamp";
+import { TRUST_EXPLANATION, TRUST_NEEDS_EXPLANATION } from "@/lib/trust-labels";
 import { answerAsText } from "@/lib/answer-text";
 import type { AskResponse, Citation } from "@/lib/ask-types";
 import type { ClauseReference } from "@/lib/contract-types";
@@ -75,9 +76,9 @@ function CitationCard({
 
 // Reveal timing: the whole reveal finishes within REVEAL_MS however long the
 // text is. Short texts use a gentler per-word delay.
-const REVEAL_MS = 1500;
-const FADE_MS = 300;
-const MAX_WORD_DELAY_MS = 80;
+const REVEAL_MS = 800;
+const FADE_MS = 200;
+const MAX_WORD_DELAY_MS = 50;
 
 function prefersReducedMotion(): boolean {
   return typeof window.matchMedia !== "function"
@@ -110,6 +111,15 @@ function useReveal(text: string, startInstant = false) {
     return () => clearTimeout(t);
   }, [reduced, total]);
   const instant = reduced || skipped;
+  // Escape ends the reveal for keyboard readers, as a click does for pointers.
+  useEffect(() => {
+    if (instant || finished) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSkipped(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [instant, finished]);
   return { delay, instant, settled: instant || finished, skip: () => {
       // A click that ends a text selection is the reader copying, not skipping.
       if (!window.getSelection()?.toString()) setSkipped(true);
@@ -237,8 +247,17 @@ export function Answer({
     });
   return (
     <section className="flex flex-col gap-8" aria-label="Answer">
-      {/* Clicking is a shortcut for pointer users; reduced motion and the
-          finished state need no action, and the text is readable throughout. */}
+      {/* The Trust label leads: it is known when the answer arrives, and a
+          reader should learn how far to trust the text before reading it. */}
+      <div className="flex flex-col items-start gap-2">
+        <Stamp trust={result.trust_label} press={!shownAtOnce} />
+        {TRUST_NEEDS_EXPLANATION.has(result.trust_label) && (
+          <p className="max-w-[68ch] text-sm text-muted">{TRUST_EXPLANATION[result.trust_label]}</p>
+        )}
+      </div>
+
+      {/* Clicking (or Escape) is a shortcut to skip the reveal; reduced motion
+          and the finished state need no action, and the text is readable throughout. */}
       <div
         lang={result.answer_language}
         onClick={skip}
@@ -256,7 +275,6 @@ export function Answer({
       {settled && (
         <>
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 self-start">
-            <Stamp trust={result.trust_label} press={!instant} />
             <CopyAnswer result={result} />
           </div>
 
@@ -321,7 +339,7 @@ export function Refusal({
     <section
       role="status"
       aria-label="Refusal"
-      className="flex flex-col gap-3 border-l-2 border-redtape pl-4"
+      className="flex flex-col gap-3 border border-rule bg-ledger px-4 py-4"
     >
       <h2 className="condensed text-2xl">LegalLens can&apos;t help with that question</h2>
       <div

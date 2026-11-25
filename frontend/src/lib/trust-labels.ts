@@ -36,3 +36,13 @@ export const TRUST_EXPLANATION: Record<TrustLabel, string> = {
     "The answer rests on Clauses of your Contract, on Provisions in the Corpus and on web sources that fill the gaps. Treat the web part with care.",
   none: "LegalLens found nothing it can stand behind, so it says so instead of guessing.",
 };
+
+// Labels whose support is weaker than statute text alone: the answer page says
+// what they mean in a line, so a reader learns it before reading the answer.
+export const TRUST_NEEDS_EXPLANATION: ReadonlySet<TrustLabel> = new Set<TrustLabel>([
+  "fallback",
+  "corpus_and_fallback",
+  "contract_and_fallback",
+  "contract_corpus_and_fallback",
+  "none",
+]);
