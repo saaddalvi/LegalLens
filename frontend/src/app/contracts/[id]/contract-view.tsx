@@ -70,9 +70,12 @@ function PageIndex({ brief }: { brief: ContractDetail["brief"] }) {
 function useTabTitle(name: string | null) {
   useLayoutEffect(() => {
     if (!name) return;
+    // As `document.title` reads it back, with runs of spaces collapsed. Compared as given,
+    // such a name would never match, and each write would set off the watch again.
+    const shown = name.replace(/[\t\n\f\r ]+/g, " ").trim();
     const before = document.title;
     const apply = () => {
-      if (document.title !== name) document.title = name;
+      if (document.title !== shown) document.title = shown;
     };
     apply();
     const watch = new MutationObserver(apply);
@@ -80,7 +83,7 @@ function useTabTitle(name: string | null) {
     return () => {
       watch.disconnect();
       // The next page may have named the tab already; leave its name alone.
-      if (document.title === name) document.title = before;
+      if (document.title === shown) document.title = before;
     };
   }, [name]);
 }

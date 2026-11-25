@@ -64,6 +64,22 @@ it("names the tab after the Contract, and gives the old name back on leaving", a
   expect(document.title).toBe("Contract | LegalLens");
 });
 
+it("settles on a tab name when the Contract's title has repeated spaces", async () => {
+  document.title = "Contract | LegalLens";
+  stub({ ok: true, status: 200, json: async () => ({ ...CONTRACT, title: "Rent  agreement " }) });
+  const { unmount } = render(<ContractView id="c1" />);
+  await waitFor(() => expect(document.title).toBe("Rent agreement | LegalLens"));
+  const write = vi.spyOn(document, "title", "set");
+  // Any later change to <head> wakes the watch, which must find nothing to write.
+  const meta = document.head.appendChild(document.createElement("meta"));
+  await new Promise((resolve) => setTimeout(resolve));
+  expect(write).not.toHaveBeenCalled();
+  write.mockRestore();
+  meta.remove();
+  unmount();
+  expect(document.title).toBe("Contract | LegalLens");
+});
+
 it("offers Hindi under the title, as a way to the question box", async () => {
   Element.prototype.scrollIntoView = vi.fn();
   stub({ ok: true, status: 200, json: async () => CONTRACT });
