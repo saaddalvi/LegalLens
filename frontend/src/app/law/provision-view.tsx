@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ProvisionNotes, ReplacesNote, STATUS_TEXT } from "../provision-notes";
 import type { Provision } from "@/lib/ask-types";
-import { askAboutProvision, askHref, lawHref } from "@/lib/corpus";
+import { askAboutProvision, askHref, lawHref, provisionName } from "@/lib/corpus";
 
 // One Provision in full, with the warnings it carries and its place in its Act.
 export default function ProvisionView({ provision: p }: { provision: Provision }) {
@@ -21,7 +21,7 @@ export default function ProvisionView({ provision: p }: { provision: Provision }
       <header className="flex flex-col gap-1">
         <h1 className="condensed text-3xl">
           <span className={repealed ? "line-through decoration-redtape decoration-2" : ""}>
-            {p.act}, {p.number}
+            {provisionName(p)}
           </span>
         </h1>
         <p className="text-muted">
@@ -34,11 +34,10 @@ export default function ProvisionView({ provision: p }: { provision: Provision }
         {p.supersedes && <ReplacesNote supersedes={p.supersedes} />}
       </div>
 
-      <blockquote
-        lang="en"
-        className="max-w-[68ch] break-words bg-ledger px-4 py-3 font-serif text-lg leading-relaxed"
-      >
-        {p.text}
+      <blockquote className="break-words bg-ledger px-4 py-3 font-serif text-lg leading-relaxed">
+        <p lang="en" className="measure">
+          {p.text}
+        </p>
       </blockquote>
 
       <p>

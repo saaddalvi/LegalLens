@@ -107,6 +107,14 @@ body {
 }
 
 /*
+ * The longest a line of running text gets. `ch` is the width of "0", which in both faces is
+ * wider than the average letter: 54ch holds about 65 to 75 characters.
+ */
+@utility measure {
+  max-width: 54ch;
+}
+
+/*
  * The marginal note: a heading in a narrow left margin beside its text, as
  * Indian statutes print a section's heading. On phones it stacks above.
  */

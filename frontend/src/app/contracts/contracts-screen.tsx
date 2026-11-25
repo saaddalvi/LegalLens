@@ -7,6 +7,7 @@ import { flushSync } from "react-dom";
 import { BUSY_BUTTON_CLASS, BUTTON_CLASS, DIMMED_BUTTON_CLASS, FIELD_CLASS } from "../ask-box";
 import StageList, { type Stage } from "../stage-list";
 import { API_URL } from "@/lib/api-url";
+import { contractFacts } from "@/lib/contract-facts";
 import type { ContractSummary, UploadedContract } from "@/lib/contract-types";
 import { dailyCapMessage, isDailyCap, retryAfterSeconds } from "@/lib/daily-cap";
 import { readEvents } from "@/lib/sse";
@@ -27,7 +28,7 @@ const MAX_UPLOAD_MB = 20;
 const UPLOAD_TERMS = [
   [
     "You get",
-    "A Contract brief: parties, purpose, key terms, what each party must do, and any Flagged clauses found to differ from Indian law. Then ask questions in English or Hindi. LegalLens won't tell you whether to sign.",
+    "A Contract brief: parties, purpose, key terms, what each party must do, and any Flagged clauses found to differ from Indian law. Then ask questions about it. LegalLens won't tell you whether to sign.",
   ],
   [
     "LegalLens keeps",
@@ -95,10 +96,6 @@ type Outcome =
   | { kind: "refused"; message: string }
   | ({ kind: "error"; failedStage: string | null } & Failure)
   | { kind: "done"; contract: UploadedContract };
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-}
 
 export default function ContractsScreen() {
   const { getToken, isSignedIn } = useAuth();
@@ -362,16 +359,20 @@ export default function ContractsScreen() {
         <h1 id="upload-heading" className="condensed text-3xl">
           Upload a Contract
         </h1>
-        <p className="max-w-[68ch] text-muted">
-          A rent agreement, a job offer, an NDA. English only, up to about 30 pages.
-        </p>
+        <div className="flex measure flex-col gap-1 text-muted">
+          <p>
+            A rent agreement, a job offer, an NDA, up to about 30 pages. The Contract must be in
+            English; your questions can be in English or Hindi.
+          </p>
+          <p lang="hi">सवाल आप हिंदी में भी पूछ सकते हैं।</p>
+        </div>
         {/* What the user should know before sending a Contract. The Google row describes the
             free tier of Gemini: revisit it if the deployed key gets billing. */}
         <dl className="border-t border-rule">
           {UPLOAD_TERMS.map(([term, detail]) => (
             <div key={term} className="grid gap-x-4 gap-y-1 border-b border-rule py-3 sm:grid-cols-[10rem_1fr]">
               <dt className="font-semibold">{term}</dt>
-              <dd className="max-w-[68ch]">{detail}</dd>
+              <dd className="measure">{detail}</dd>
             </div>
           ))}
         </dl>
@@ -495,7 +496,7 @@ export default function ContractsScreen() {
             )}
           </div>
           {/* Always in the page so a screen reader announces the text when it appears. */}
-          <p role="status" className={`max-w-[68ch] empty:-mt-4 ${running ? "text-sm text-muted" : "font-medium"}`}>
+          <p role="status" className={`measure empty:-mt-4 ${running ? "text-sm text-muted" : "font-medium"}`}>
             {running ? RUNNING_NOTE : hint}
           </p>
         </form>
@@ -519,7 +520,7 @@ export default function ContractsScreen() {
             tabIndex={-1}
             aria-labelledby="ready-heading"
             aria-describedby="ready-title"
-            className="flex max-w-[68ch] flex-col items-start gap-3 rounded border border-ink bg-ledger px-4 py-4"
+            className="flex measure flex-col items-start gap-3 rounded border border-ink bg-ledger px-4 py-4"
           >
             <h2 id="ready-heading" className="condensed text-2xl">
               Your Contract brief is ready
@@ -536,7 +537,7 @@ export default function ContractsScreen() {
         {outcome?.kind === "refused" && (
           <section
             aria-label="Upload refused"
-            className="flex max-w-[68ch] flex-col gap-2 border-l-2 border-redtape pl-4"
+            className="flex measure flex-col gap-2 border-l-2 border-redtape pl-4"
           >
             <h2 className="condensed text-2xl">LegalLens can&apos;t explain that</h2>
             <p className="font-serif text-lg leading-[1.7]">{outcome.message}</p>
@@ -610,9 +611,7 @@ export default function ContractsScreen() {
                   <Link href={`/contracts/${c.id}`} className="break-words text-lg font-medium underline underline-offset-4">
                     {c.title}
                   </Link>
-                  <span className="text-sm text-muted">
-                    {formatDate(c.created_at)} · {c.clause_count} {c.clause_count === 1 ? "Clause" : "Clauses"}
-                  </span>
+                  <span className="text-sm text-muted">{contractFacts(c)}</span>
                   <DeleteContract
                     contractId={c.id}
                     title={c.title}

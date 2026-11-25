@@ -14,7 +14,7 @@ export default function LawLayout({ children }: { children: React.ReactNode }) {
       <SiteHeader current="law" omit="contracts" />
       {children}
       <footer className="border-t border-rule pt-6">
-        <p role="note" className="max-w-[68ch] text-sm text-muted">
+        <p role="note" className="measure text-sm text-muted">
           {DISCLAIMER}
         </p>
       </footer>

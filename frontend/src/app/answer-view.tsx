@@ -2,77 +2,25 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ProvisionNotes, ReplacesNote, STATUS_TEXT } from "./provision-notes";
+import { flushSync } from "react-dom";
+import CitationCard, { cardId } from "./citation-card";
+import { LinkedText } from "./clause-links";
 import { ClauseQuote } from "./clause-quote";
 import Stamp from "./stamp";
 import { TRUST_EXPLANATION, TRUST_NEEDS_EXPLANATION } from "@/lib/trust-labels";
-import { answerAsText } from "@/lib/answer-text";
+import { answerAsText, CHECK_YOUR_COPY, DISCLAIMER } from "@/lib/answer-text";
+import { askHref } from "@/lib/corpus";
 import type { AskResponse, Citation } from "@/lib/ask-types";
 import type { ClauseReference } from "@/lib/contract-types";
-import { lawHref } from "@/lib/corpus";
 import { provisionKey, splitMentions } from "@/lib/mentions";
 
-// `scope` keeps the ids of two answers on one page apart (a Contract conversation has several).
-export const cardId = (c: { act: string; number: string }, scope = "") =>
-  `${scope}citation-${c.act}-${c.number}`.replace(/\W+/g, "-");
-
-function CitationCard({
-  c,
-  open,
-  onToggle,
-  scope,
-}: {
-  c: Citation;
-  open: boolean;
-  onToggle: () => void;
-  scope: string;
-}) {
-  const panelId = `${cardId(c, scope)}-text`;
-  // The violet rule says this Provision was checked against the Corpus; a
-  // repealed one is ruled in red instead, as struck out.
-  const rule = c.status === "repealed" ? "border-redtape" : "border-stamp";
-  return (
-    <article id={cardId(c, scope)} className={`flex flex-col gap-1 border-l-2 ${rule} pl-4`}>
-      <h3>
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={panelId}
-          onClick={onToggle}
-          className="group flex min-h-11 w-full items-baseline justify-between gap-4 pt-1.5 text-left"
-        >
-          <span className="min-w-0 break-words">
-            <span className={`font-semibold ${c.status === "repealed" ? "line-through decoration-redtape decoration-2" : ""}`}>
-              {c.act}, {c.number}
-            </span>{" "}
-            <span className="text-muted">
-              ({c.chapter}, {STATUS_TEXT[c.status]})
-            </span>
-          </span>
-          <span aria-hidden="true" className="shrink-0 text-sm text-muted underline underline-offset-4 group-hover:text-ink">
-            {open ? "Hide text" : "Show text"}
-          </span>
-        </button>
-      </h3>
-      <ProvisionNotes provision={c} />
-      <Link
-        href={lawHref(c.act, c.number)}
-        aria-label={`Open full Provision: ${c.act}, ${c.number}`}
-        className="inline-flex min-h-11 items-center self-start text-sm text-muted underline underline-offset-4 hover:text-ink"
-      >
-        Open full Provision
-      </Link>
-      {open && (
-        <div id={panelId} className="flex flex-col gap-2 pb-1">
-          {c.supersedes && <ReplacesNote supersedes={c.supersedes} />}
-          <blockquote lang="en" className="max-w-[68ch] break-words bg-ledger px-4 py-3 font-serif text-lg leading-relaxed">
-            {c.text}
-          </blockquote>
-        </div>
-      )}
-    </article>
-  );
-}
+// The level of an answer's own headings: 2 under a page's h1, 3 under a section's h2. The
+// lower level is also set smaller than the heading above it.
+type Level = 2 | 3;
+const HEADING = {
+  2: { tag: "h2", card: "h3", size: "text-2xl" },
+  3: { tag: "h3", card: "h4", size: "text-xl" },
+} as const;
 
 function siteOf(url: string): string {
   try {
@@ -187,19 +135,19 @@ function RevealedParagraphs({
                     {seg.text}
                   </span>
                 ) : (
-                  seg.text
+                  <LinkedText key={j} text={seg.text} />
                 ),
               )
-            : para}
+            : <LinkedText text={para} />}
       </p>
     );
   });
 }
 
-// Copies the answer, its Citations and the disclaimer as plain text. The outcome
+// Copies the question, the answer, what it rests on and the disclaimer as plain text. The outcome
 // is announced in a polite live region, which is always on the page so that
 // screen readers pick up the message when it appears.
-function CopyAnswer({ result }: { result: AskResponse }) {
+function CopyAnswer({ result, query }: { result: AskResponse; query: string }) {
   const [outcome, setOutcome] = useState<"copied" | "failed" | null>(null);
   useEffect(() => {
     if (!outcome) return;
@@ -208,7 +156,9 @@ function CopyAnswer({ result }: { result: AskResponse }) {
   }, [outcome]);
   async function copy() {
     try {
-      await navigator.clipboard.writeText(answerAsText(result));
+      await navigator.clipboard.writeText(
+        answerAsText(result, { query, origin: window.location.origin }),
+      );
       setOutcome("copied");
     } catch {
       // No clipboard (an insecure page) or permission denied.
@@ -235,23 +185,30 @@ function CopyAnswer({ result }: { result: AskResponse }) {
 // reveal. `scope` is a prefix for the element ids of this answer's Citation cards.
 export function Answer({
   result,
+  query,
   instant: shownAtOnce = false,
   scope = "",
+  level = 2,
 }: {
   result: AskResponse & { clause_references?: ClauseReference[] };
+  // The Query this answers, which is copied with it.
+  query: string;
   instant?: boolean;
   scope?: string;
+  level?: Level;
 }) {
+  const { tag: Heading, card: cardHeading, size } = HEADING[level];
   const { delay, instant, settled, skip } = useReveal(result.answer, shownAtOnce);
   const clauseReferences = result.clause_references ?? [];
   const fade = instant ? "" : "reveal-in";
   const [opened, setOpened] = useState<Set<string>>(new Set());
-  // The cards are already on the page once the text has settled, so a chip
-  // click opens its card, then scrolls to it and moves focus there.
+  // The cards are already on the page once the text has settled, so a chip click opens its
+  // card, then scrolls to it and moves focus there. The card is opened first, so the scroll
+  // is measured against its full height, and its heading lands at the top of the screen.
   const goToCitation = (m: { act: string; number: string }) => {
-    setOpened((o) => new Set(o).add(provisionKey(m)));
+    flushSync(() => setOpened((o) => new Set(o).add(provisionKey(m))));
     const card = document.getElementById(cardId(m, scope));
-    card?.scrollIntoView?.({ behavior: instant ? "auto" : "smooth", block: "center" });
+    card?.scrollIntoView?.({ behavior: instant ? "auto" : "smooth", block: "start" });
     card?.querySelector("button")?.focus({ preventScroll: true });
   };
   const toggle = (key: string) =>
@@ -262,13 +219,13 @@ export function Answer({
     });
   return (
     <section className="flex flex-col gap-8" aria-label="Answer">
-      <h2 className="sr-only">Answer</h2>
+      <Heading className="sr-only">Answer</Heading>
       {/* The Trust label leads: it is known when the answer arrives, and a
           reader should learn how far to trust the text before reading it. */}
       <div className="flex flex-col items-start gap-2">
         <Stamp trust={result.trust_label} press={!shownAtOnce} />
         {TRUST_NEEDS_EXPLANATION.has(result.trust_label) && (
-          <p className="max-w-[68ch] text-sm text-muted">{TRUST_EXPLANATION[result.trust_label]}</p>
+          <p className="measure text-sm text-muted">{TRUST_EXPLANATION[result.trust_label]}</p>
         )}
       </div>
 
@@ -277,7 +234,7 @@ export function Answer({
       <div
         lang={result.answer_language}
         onClick={skip}
-        className="flex max-w-[68ch] flex-col gap-5 break-words font-serif text-lg leading-[1.7]"
+        className="flex measure flex-col gap-5 break-words font-serif text-lg leading-[1.7]"
       >
         <RevealedParagraphs
           text={result.answer}
@@ -288,15 +245,25 @@ export function Answer({
         />
       </div>
 
+      {/* Held close to the answer it qualifies. */}
+      <div className="-mt-4 flex flex-col items-start gap-1">
+        <p role="note" className="measure text-sm text-muted">
+          {DISCLAIMER}
+        </p>
+        {settled && (
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <CopyAnswer result={result} query={query} />
+          </div>
+        )}
+      </div>
+
       {settled && (
         <>
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 self-start">
-            <CopyAnswer result={result} />
-          </div>
 
           {clauseReferences.length > 0 && (
             <div className={`${fade} flex flex-col gap-5 border-t border-rule pt-6`}>
-              <h2 className="condensed text-2xl">From your Contract</h2>
+              <Heading className={`condensed ${size}`}>From your Contract</Heading>
+              <p className="-mt-3 measure text-sm text-muted">{CHECK_YOUR_COPY}</p>
               {clauseReferences.map((r) => (
                 <ClauseQuote key={r.number} reference={r} />
               ))}
@@ -305,7 +272,7 @@ export function Answer({
 
           {result.citations.length > 0 && (
             <div className={`${fade} flex flex-col gap-5 border-t border-rule pt-6`}>
-              <h2 className="condensed text-2xl">Citations</h2>
+              <Heading className={`condensed ${size}`}>Citations</Heading>
               {result.citations.map((c) => (
                 <CitationCard
                   key={`${c.act}-${c.number}`}
@@ -313,6 +280,7 @@ export function Answer({
                   open={opened.has(provisionKey(c))}
                   onToggle={() => toggle(provisionKey(c))}
                   scope={scope}
+                  heading={cardHeading}
                 />
               ))}
             </div>
@@ -320,11 +288,11 @@ export function Answer({
 
           {result.fallback_sources.length > 0 && (
             <div className={`${fade} flex flex-col gap-3 border-t border-rule pt-6`}>
-              <h2 className="condensed text-2xl">Web sources</h2>
+              <Heading className={`condensed ${size}`}>Web sources</Heading>
               <ul className="flex flex-col break-words">
                 {result.fallback_sources.map((s) => (
                   <li key={s.url} className="flex flex-col items-start border-b border-rule pb-2 last:border-b-0">
-                    <a href={s.url} className="inline-flex min-h-11 items-center underline decoration-rule underline-offset-4 hover:decoration-ink">
+                    <a href={s.url} className="measure inline-flex min-h-11 items-center underline decoration-rule underline-offset-4 hover:decoration-ink">
                       {s.title}
                     </a>
                     {/* The site, so a reader can judge it before opening it. */}
@@ -341,16 +309,23 @@ export function Answer({
 }
 
 // `instant` shows a refusal already read, with no reveal. `redirect_to_ask` (a Contract
-// conversation's refusal of a Query about neither the Contract nor its law) adds a link to /ask.
+// conversation's refusal of a Query about neither the Contract nor its law) adds a link that
+// asks that Query on the asking screen.
 export function Refusal({
   result,
+  query,
   onReformulate,
   instant: shownAtOnce = false,
+  level = 2,
 }: {
   result: AskResponse & { redirect_to_ask?: boolean };
+  // The Query that was refused.
+  query: string;
   onReformulate: (q: string) => void;
   instant?: boolean;
+  level?: Level;
 }) {
+  const { tag: Heading, size } = HEADING[level];
   const reason = result.refusal_reason ?? result.answer;
   const { delay, instant, settled, skip } = useReveal(reason, shownAtOnce);
   return (
@@ -359,16 +334,16 @@ export function Refusal({
       aria-label="Refusal"
       className="flex flex-col gap-3 border border-rule bg-ledger px-4 py-4"
     >
-      <h2 className="condensed text-2xl">LegalLens can&apos;t help with that question</h2>
+      <Heading className={`condensed ${size}`}>LegalLens can&apos;t help with that question</Heading>
       <div
         lang={result.answer_language}
         onClick={skip}
-        className="flex max-w-[68ch] flex-col gap-3 font-serif text-lg leading-[1.7]"
+        className="flex measure flex-col gap-3 font-serif text-lg leading-[1.7]"
       >
         <RevealedParagraphs text={reason} animate={!settled} delay={delay} />
       </div>
       {settled && result.suggested_reformulation && (
-        <p className={instant ? "" : "reveal-in"}>
+        <p className={`measure ${instant ? "" : "reveal-in"}`}>
           <span className="font-medium">Try asking instead: </span>
           <button
             type="button"
@@ -381,8 +356,8 @@ export function Refusal({
       )}
       {settled && result.redirect_to_ask && (
         <p className={instant ? "" : "reveal-in"}>
-          <Link href="/ask" className="inline-flex min-h-11 items-center underline underline-offset-4">
-            Go to the asking screen
+          <Link href={askHref(query)} className="inline-flex min-h-11 items-center underline underline-offset-4">
+            Ask this on the Ask a question page
           </Link>
         </p>
       )}

@@ -99,7 +99,7 @@ function TrustList({ labels }: { labels: TrustLabel[] }) {
           <dt>
             <Stamp trust={t} />
           </dt>
-          <dd className="text-muted">{TRUST_EXPLANATION[t]}</dd>
+          <dd className="measure text-muted">{TRUST_EXPLANATION[t]}</dd>
         </div>
       ))}
     </dl>
@@ -163,7 +163,7 @@ export default function LandingPage() {
               href="/ask"
               className="inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4"
             >
-              Go to the asking screen
+              Ask a question
             </Link>
             <AccountNav />
             <ThemeToggle />
@@ -264,7 +264,7 @@ export default function LandingPage() {
                 <h3 className="font-semibold leading-snug">
                   {CONTRACT_LANE.title}
                 </h3>
-                <p className="mt-2 max-w-[68ch] text-muted">
+                <p className="mt-2 measure text-muted">
                   {CONTRACT_LANE.body}
                 </p>
               </div>
@@ -288,7 +288,7 @@ export default function LandingPage() {
                 </summary>
                 <ActList acts={MORE_ACTS} />
               </details>
-              <p className="max-w-[68ch] text-muted">{REPEAL_NOTE}</p>
+              <p className="measure text-muted">{REPEAL_NOTE}</p>
             </div>
           </section>
 
@@ -320,8 +320,10 @@ export default function LandingPage() {
           role="note"
           className="border-t-4 border-ink py-6 text-lg font-medium"
         >
-          LegalLens is for information only and is not legal advice. Consult a
-          qualified lawyer about your situation.
+          <span className="measure block">
+            LegalLens is for information only and is not legal advice. Consult a
+            qualified lawyer about your situation.
+          </span>
         </p>
       </main>
       <footer className="border-t border-rule px-4 py-6 text-center text-sm text-muted">

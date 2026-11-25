@@ -169,6 +169,9 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
         <h1 className="condensed text-balance text-3xl">
           <label htmlFor="query">Ask a question about Indian law</label>
         </h1>
+        <p lang="hi" className="-mt-1 text-muted">
+          आप हिंदी में भी पूछ सकते हैं।
+        </p>
         <textarea
           id="query"
           ref={fieldRef}
@@ -244,11 +247,14 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
         <Refusal
           key={`${asked?.q}-${result.refusal_reason}`}
           result={result}
+          query={asked?.q ?? ""}
           onReformulate={fillAskBox}
         />
       )}
 
-      {result?.response_type === "answer" && <Answer key={`${asked?.q}-${result.answer}`} result={result} />}
+      {result?.response_type === "answer" && (
+        <Answer key={`${asked?.q}-${result.answer}`} result={result} query={asked?.q ?? ""} />
+      )}
 
       <footer className="flex flex-col items-start gap-6 border-t border-rule pt-6">
         {result && (
@@ -256,9 +262,12 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
             Ask another question
           </button>
         )}
-        <p role="note" className="max-w-[68ch] text-sm text-muted">
-          {DISCLAIMER}
-        </p>
+        {/* An answer carries its own, beside its text. */}
+        {result?.response_type !== "answer" && (
+          <p role="note" className="measure text-sm text-muted">
+            {DISCLAIMER}
+          </p>
+        )}
       </footer>
     </main>
   );

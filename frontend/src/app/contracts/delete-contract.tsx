@@ -76,7 +76,7 @@ export default function DeleteContract({
         type="button"
         aria-label={`Delete ${title}`}
         onClick={ask}
-        className="self-start text-sm text-muted underline underline-offset-4"
+        className="inline-flex min-h-11 min-w-11 items-center self-start text-sm text-muted underline underline-offset-4 hover:text-ink"
       >
         Delete
       </button>
@@ -106,7 +106,7 @@ export default function DeleteContract({
           aria-disabled={busy || undefined}
           aria-describedby={questionId}
           onClick={dismiss}
-          className="underline underline-offset-4 aria-disabled:text-muted"
+          className="min-h-11 underline underline-offset-4 aria-disabled:text-muted"
         >
           Cancel
         </button>

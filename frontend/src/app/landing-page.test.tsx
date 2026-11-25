@@ -81,7 +81,9 @@ describe("LandingPage", () => {
 
   it("has a direct link to /ask", () => {
     render(<LandingPage />);
-    expect(screen.getByRole("link", { name: /go to the asking screen/i })).toHaveAttribute("href", "/ask");
+    const links = screen.getAllByRole("link", { name: "Ask a question" });
+    expect(links).toHaveLength(2); // the header and the footer
+    for (const link of links) expect(link).toHaveAttribute("href", "/ask");
   });
 
   it("offers a Contract upload path beside the ask box, saying only English Contracts are accepted", () => {

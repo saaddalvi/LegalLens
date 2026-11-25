@@ -61,6 +61,11 @@ export const askHref = (q: string) => `/ask?${new URLSearchParams({ q })}`;
 export const lawHref = (act: string, number?: string) =>
   `/law/${encodeURIComponent(act)}${number === undefined ? "" : `/${encodeURIComponent(number)}`}`;
 
+// A Provision's name as a Citation gives it: "Indian Contract Act, Section 74". The
+// Constitution is numbered in Articles.
+export const provisionName = (p: { act: string; number: string }) =>
+  `${p.act}, ${p.act === "Constitution of India" ? "Article" : "Section"} ${p.number}`;
+
 // Route params arrive from the address, so they may still be encoded; decoding a decoded
 // Act name or number changes nothing, as neither contains a "%".
 export function decodeParam(value: string): string {

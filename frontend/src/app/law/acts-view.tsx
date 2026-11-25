@@ -8,7 +8,7 @@ export default function ActsView({ acts }: { acts: ActSummary[] }) {
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
         <h1 className="condensed text-3xl">Browse the law</h1>
-        <p className="max-w-[68ch] text-muted">
+        <p className="measure text-muted">
           Read the Acts LegalLens answers from. A repealed Act&apos;s Provisions point to the
           law that replaced them.
         </p>

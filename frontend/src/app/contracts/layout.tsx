@@ -10,14 +10,14 @@ export const metadata: Metadata = {
 // The frame for every page under /contracts.
 export default function ContractsLayout({ children }: { children: React.ReactNode }) {
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-4 pb-16 sm:px-8">
+    <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-4 pb-16 sm:px-8">
       <SiteHeader current="contracts" />
-      {children}
+      <main className="flex flex-col gap-8">{children}</main>
       <footer className="border-t border-rule pt-6">
-        <p role="note" className="max-w-[68ch] text-sm text-muted">
+        <p role="note" className="measure text-sm text-muted">
           {DISCLAIMER}
         </p>
       </footer>
-    </main>
+    </div>
   );
 }

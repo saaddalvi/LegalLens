@@ -116,23 +116,23 @@ export default function ContractConversation({
 
   const loading = pending !== null && pending.error === null;
   return (
-    <section aria-labelledby="conversation" className="flex flex-col gap-8">
-      <h2 id="conversation" className="condensed text-xl">
+    <section id="ask" aria-labelledby="conversation" className="flex scroll-mt-4 flex-col gap-8">
+      <h2 id="conversation" tabIndex={-1} data-jump-focus className="condensed self-start text-2xl">
         Ask about this Contract
       </h2>
 
       {turns.length > 0 && (
         <ol className="flex flex-col gap-10">
           {turns.map((t, i) => (
-            <li key={i} className="flex flex-col gap-5">
-              <p lang={detectedLang(t.query)} className="max-w-[68ch] break-words border-b border-rule pb-2 font-medium">
+            <li key={i} data-place="the answer" className="flex flex-col gap-5">
+              <p lang={detectedLang(t.query)} className="measure break-words border-b border-rule pb-2 font-medium">
                 <span className="sr-only">You asked: </span>
                 {t.query}
               </p>
               {t.response.response_type === "refusal" ? (
-                <Refusal result={t.response} onReformulate={setQuery} instant={!t.fresh} />
+                <Refusal result={t.response} query={t.query} onReformulate={setQuery} instant={!t.fresh} level={3} />
               ) : (
-                <Answer result={t.response} instant={!t.fresh} scope={`turn-${i}-`} />
+                <Answer result={t.response} query={t.query} instant={!t.fresh} scope={`turn-${i}-`} level={3} />
               )}
             </li>
           ))}
@@ -141,7 +141,7 @@ export default function ContractConversation({
 
       {pending && (
         <div className="flex flex-col gap-5">
-          <p lang={detectedLang(pending.q)} className="max-w-[68ch] break-words border-b border-rule pb-2 font-medium">
+          <p lang={detectedLang(pending.q)} className="measure break-words border-b border-rule pb-2 font-medium">
             <span className="sr-only">You asked: </span>
             {pending.q}
           </p>
@@ -165,7 +165,8 @@ export default function ContractConversation({
       )}
 
       <form onSubmit={submit} className="flex flex-col gap-3">
-        <label htmlFor="contract-query" className="font-medium">
+        {/* The heading above already says it on screen. */}
+        <label htmlFor="contract-query" className="sr-only">
           Ask a question about this Contract
         </label>
         <textarea

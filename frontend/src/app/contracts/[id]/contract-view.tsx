@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { API_URL } from "@/lib/api-url";
+import { contractFacts } from "@/lib/contract-facts";
 import type { ContractDetail, ConversationTurn } from "@/lib/contract-types";
-import BriefView from "./contract-brief";
+import ClauseJumps, { ClauseItem, jumpTo } from "../../clause-links";
+import BriefView, { Section } from "./contract-brief";
 import DeleteContract from "../delete-contract";
 import { noteDeleted } from "../deleted-notice";
 import ContractConversation from "./contract-conversation";
@@ -24,8 +26,67 @@ function failure(status: number | null): string {
   return "The service is unavailable right now. Please try again shortly.";
 }
 
-// The Contract brief, the most recent Contract conversation (saved Queries and answers, and the
-// box for the next one), then the Contract's Clauses verbatim.
+// Follows an in-page link by scrolling and moving focus. A modified click is left to the browser.
+function jumpOnClick(e: React.MouseEvent, id: string) {
+  const target = document.getElementById(id);
+  if (!target || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  jumpTo(target);
+}
+
+// The parts of this Contract's page, in order, as links under its title.
+function PageIndex({ brief }: { brief: ContractDetail["brief"] }) {
+  const flags = brief?.flagged_clauses.length ?? 0;
+  const entries = [
+    brief && ["flagged", flags > 0 ? `Flagged clauses (${flags})` : "Flagged clauses"],
+    brief && brief.key_terms.length > 0 && ["terms", "Key terms"],
+    brief && brief.obligations.length > 0 && ["obligations", "What each party must do"],
+    ["ask", "Ask about this Contract"],
+    ["contract-text", "The Contract"],
+  ].filter((e): e is string[] => Array.isArray(e));
+  return (
+    <nav aria-label="On this page" className="mt-2 border-y border-rule py-1">
+      <ul className="flex flex-wrap gap-x-5">
+        {entries.map(([id, label]) => (
+          <li key={id}>
+            <a
+              href={`#${id}`}
+              onClick={(e) => jumpOnClick(e, id)}
+              className="inline-flex min-h-11 items-center underline decoration-rule underline-offset-4 hover:decoration-ink"
+            >
+              {label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+
+// Names the tab for as long as this page is on screen. The Contract's title is only known
+// once it has loaded, so the route's metadata cannot say it; and Next writes that metadata
+// again on a return to the page, so the name is put back when it does. A layout effect, so
+// that leaving stops the watch before the next page's name can be overwritten.
+function useTabTitle(name: string | null) {
+  useLayoutEffect(() => {
+    if (!name) return;
+    const before = document.title;
+    const apply = () => {
+      if (document.title !== name) document.title = name;
+    };
+    apply();
+    const watch = new MutationObserver(apply);
+    watch.observe(document.head, { childList: true, characterData: true, subtree: true });
+    return () => {
+      watch.disconnect();
+      // The next page may have named the tab already; leave its name alone.
+      if (document.title === name) document.title = before;
+    };
+  }, [name]);
+}
+
+// An index, the Contract brief, the most recent Contract conversation (saved Queries and
+// answers, and the box for the next one), the Contract's Clauses verbatim, and then Delete.
 export default function ContractView({ id }: { id: string }) {
   const { getToken } = useAuth();
   const router = useRouter();
@@ -63,59 +124,60 @@ export default function ContractView({ id }: { id: string }) {
     return () => controller.abort();
   }, [id, getToken]);
 
+  const title = state && "contract" in state ? state.contract.title : null;
+  useTabTitle(title && `${title} | LegalLens`);
+
   if (state === null) return <p className="text-muted">Loading…</p>;
   if ("error" in state)
     return (
       <div role="alert" className="flex flex-col items-start gap-3 border-l-2 border-redtape pl-4">
         <p className="text-redtape">{state.error}</p>
-        <Link href="/contracts" className="underline underline-offset-4">
+        <Link href="/contracts" className="inline-flex min-h-11 items-center underline underline-offset-4">
           Back to your Contracts
         </Link>
       </div>
     );
   const { contract } = state;
   return (
-    <article className="flex flex-col gap-8">
-      <header className="flex flex-col gap-2">
-        <Link href="/contracts" className="self-start text-sm text-muted underline underline-offset-4">
-          Your Contracts
-        </Link>
-        <h1 className="condensed break-words text-3xl">{contract.title}</h1>
-        <p className="text-sm text-muted">
-          {contract.clause_count} {contract.clause_count === 1 ? "Clause" : "Clauses"}
-        </p>
-      </header>
-      <DeleteContract
-        contractId={contract.id}
-        title={contract.title}
-        returnTo={`/contracts/${contract.id}`}
-        onDeleted={() => {
-          noteDeleted({ id: contract.id, title: contract.title });
-          router.push("/contracts");
-        }}
-      />
-      {contract.brief && <BriefView brief={contract.brief} />}
-      <ContractConversation contractId={contract.id} conversationId={state.conversationId} initial={state.turns} />
-      <h2 className="condensed text-xl">The Contract, Clause by Clause</h2>
-      <ol className="flex flex-col gap-6">
-        {contract.clauses.map((c) => (
-          <li key={c.number} className="flex flex-col gap-2 border-l-2 border-stamp pl-4">
-            <h2 className="text-sm font-semibold">
-              {c.number === "0" ? (
-                "Recitals and parties"
-              ) : (
-                <>
-                  Clause {c.number}
-                  {c.heading && <span className="font-normal text-muted"> · {c.heading}</span>}
-                </>
-              )}
-            </h2>
-            <p lang="en" className="max-w-[68ch] whitespace-pre-line break-words font-serif text-lg leading-relaxed">
-              {c.text}
-            </p>
-          </li>
-        ))}
-      </ol>
-    </article>
+    <ClauseJumps key={contract.id} numbers={contract.clauses.map((c) => c.number)}>
+      <article className="flex flex-col gap-12">
+        <header className="flex flex-col gap-2">
+          <Link href="/contracts" className="inline-flex min-h-11 items-center self-start text-sm text-muted underline underline-offset-4 hover:text-ink">
+            Your Contracts
+          </Link>
+          <h1 className="condensed break-words text-3xl">{contract.title}</h1>
+          <p className="text-sm text-muted">{contractFacts(contract)}</p>
+          <a
+            href="#ask"
+            lang="hi"
+            onClick={(e) => jumpOnClick(e, "ask")}
+            className="inline-flex min-h-11 items-center self-start underline decoration-rule underline-offset-4 hover:decoration-ink"
+          >
+            इस Contract के बारे में हिंदी में भी पूछ सकते हैं
+          </a>
+          <PageIndex brief={contract.brief} />
+        </header>
+        {contract.brief && <BriefView brief={contract.brief} />}
+        <ContractConversation contractId={contract.id} conversationId={state.conversationId} initial={state.turns} />
+        <Section id="contract-text" title="The Contract, Clause by Clause">
+          <ol data-clause-list className="flex flex-col gap-4">
+            {contract.clauses.map((c) => (
+              <ClauseItem key={c.number} number={c.number} heading={c.heading} text={c.text} />
+            ))}
+          </ol>
+        </Section>
+        <div className="border-t border-rule pt-4">
+          <DeleteContract
+            contractId={contract.id}
+            title={contract.title}
+            returnTo={`/contracts/${contract.id}`}
+            onDeleted={() => {
+              noteDeleted({ id: contract.id, title: contract.title });
+              router.push("/contracts");
+            }}
+          />
+        </div>
+      </article>
+    </ClauseJumps>
   );
 }

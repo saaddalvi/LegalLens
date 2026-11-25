@@ -97,13 +97,26 @@ describe("AskScreen", () => {
     await ask();
     expect(screen.getByText(/not legal advice/i)).toBeInTheDocument();
     expect(await screen.findByText("From statute text")).toBeInTheDocument();
-    expect(screen.getByText(/Constitution of India, 14/)).toBeInTheDocument();
+    expect(screen.getByText(/Constitution of India, Article 14/)).toBeInTheDocument();
+  });
+
+  it("keeps one disclaimer, beside the answer once there is one", async () => {
+    mockFetch({ ok: true, status: 200, body: base });
+    await ask();
+    await screen.findByRole("button", { name: "Copy answer" });
+    expect(screen.getByRole("region", { name: "Answer" })).toHaveTextContent(/not legal advice/i);
+    expect(screen.getAllByText(/not legal advice/i)).toHaveLength(1);
+  });
+
+  it("says under the question box that Hindi is accepted", () => {
+    render(<AskScreen />);
+    expect(screen.getByText("आप हिंदी में भी पूछ सकते हैं।")).toHaveAttribute("lang", "hi");
   });
 
   it("expands and collapses a Citation", async () => {
     mockFetch({ ok: true, status: 200, body: base });
     const user = await ask();
-    const toggle = await screen.findByRole("button", { name: /Constitution of India, 14/ });
+    const toggle = await screen.findByRole("button", { name: /Constitution of India, Article 14/ });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
@@ -132,7 +145,7 @@ describe("AskScreen", () => {
       },
     });
     const user = await ask();
-    const toggle = await screen.findByRole("button", { name: /Model Tenancy Act, 11/ });
+    const toggle = await screen.findByRole("button", { name: /Model Tenancy Act, Section 11/ });
     expect(toggle).toHaveTextContent(/model Act, not in force by itself/);
     expect(toggle).not.toHaveTextContent(/\bin force\)/);
     await user.click(toggle);
@@ -251,7 +264,7 @@ describe("AskScreen", () => {
     const user = await ask();
     (await screen.findByRole("button", { name: "Article 14" })).focus();
     await user.keyboard("{Enter}");
-    expect(screen.getByRole("button", { name: /Constitution of India, 14/ })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: /Constitution of India, Article 14/ })).toHaveAttribute(
       "aria-expanded",
       "true",
     );
@@ -579,7 +592,7 @@ describe("Provision mentions in answers", () => {
     withAnswer("Murder is punished under BNS 103. Equality is in Article 14.");
     const user = await ask();
     const chip = await screen.findByRole("button", { name: "BNS 103" });
-    const toggle = screen.getByRole("button", { name: /Bharatiya Nyaya Sanhita, 103/ });
+    const toggle = screen.getByRole("button", { name: /Bharatiya Nyaya Sanhita, Section 103/ });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     await user.click(chip);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
@@ -638,7 +651,7 @@ describe("chip case handling", () => {
     });
     const user = await ask();
     await user.click(await screen.findByRole("button", { name: "BNS 103a" }));
-    const toggle = screen.getByRole("button", { name: /Bharatiya Nyaya Sanhita, 103A/ });
+    const toggle = screen.getByRole("button", { name: /Bharatiya Nyaya Sanhita, Section 103A/ });
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(toggle).toHaveFocus();
   });
@@ -658,8 +671,9 @@ describe("Copy answer", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
     const copied = writeText.mock.calls[0][0] as string;
     expect(copied).toContain("Equality before the law is guaranteed.");
-    expect(copied).toContain("- Constitution of India, 14");
-    expect(copied.startsWith("From statute text")).toBe(true);
+    expect(copied).toContain("- Constitution of India, Article 14");
+    expect(copied.startsWith("Question: What is Article 14?\n\nFrom statute text")).toBe(true);
+    expect(copied).toContain(`${window.location.origin}/law/Constitution%20of%20India/14`);
     expect(copied).toMatch(/not legal advice/i);
     expect(await screen.findByText("Copied")).toBeInTheDocument();
   });
@@ -702,7 +716,7 @@ describe("Citation links to the law", () => {
   it("links each Citation card to the full Provision", async () => {
     mockFetch({ ok: true, status: 200, body: base });
     await ask();
-    const link = await screen.findByRole("link", { name: /Open full Provision: Constitution of India, 14/ });
+    const link = await screen.findByRole("link", { name: /Open full Provision: Constitution of India, Article 14/ });
     expect(link).toHaveAttribute("href", "/law/Constitution%20of%20India/14");
   });
 
@@ -731,14 +745,14 @@ describe("Citation links to the law", () => {
     });
     const user = await ask();
     const note = (await screen.findAllByRole("note")).find((n) => /has been repealed/.test(n.textContent ?? ""))!;
-    expect(note).toHaveTextContent("The current law is Bharatiya Nyaya Sanhita 103.");
-    expect(within(note).getByRole("link", { name: "Bharatiya Nyaya Sanhita 103" })).toHaveAttribute(
+    expect(note).toHaveTextContent("The current law is Bharatiya Nyaya Sanhita, Section 103.");
+    expect(within(note).getByRole("link", { name: "Bharatiya Nyaya Sanhita, Section 103" })).toHaveAttribute(
       "href",
       "/law/Bharatiya%20Nyaya%20Sanhita/103",
     );
-    await user.click(screen.getByRole("button", { name: /Bharatiya Nyaya Sanhita, 103/ }));
-    expect(screen.getByText(/^Replaces/)).toHaveTextContent("Replaces Indian Penal Code 302.");
-    expect(screen.getByRole("link", { name: "Indian Penal Code 302" })).toHaveAttribute(
+    await user.click(screen.getByRole("button", { name: /Bharatiya Nyaya Sanhita, Section 103/ }));
+    expect(screen.getByText(/^Replaces/)).toHaveTextContent("Replaces Indian Penal Code, Section 302.");
+    expect(screen.getByRole("link", { name: "Indian Penal Code, Section 302" })).toHaveAttribute(
       "href",
       "/law/Indian%20Penal%20Code/302",
     );

@@ -29,8 +29,8 @@ describe("ProvisionView", () => {
   it("shows a repealed Provision's warning with a link to the law that replaced it", () => {
     render(<ProvisionView provision={ipc302} />);
     const note = screen.getAllByRole("note").find((n) => /has been repealed/.test(n.textContent ?? ""))!;
-    expect(note).toHaveTextContent("This Provision has been repealed. The current law is Bharatiya Nyaya Sanhita 103.");
-    expect(within(note).getByRole("link", { name: "Bharatiya Nyaya Sanhita 103" })).toHaveAttribute(
+    expect(note).toHaveTextContent("This Provision has been repealed. The current law is Bharatiya Nyaya Sanhita, Section 103.");
+    expect(within(note).getByRole("link", { name: "Bharatiya Nyaya Sanhita, Section 103" })).toHaveAttribute(
       "href",
       "/law/Bharatiya%20Nyaya%20Sanhita/103",
     );
@@ -38,7 +38,7 @@ describe("ProvisionView", () => {
 
   it("links an in-force Provision back to the one it replaced", () => {
     render(<ProvisionView provision={bns103} />);
-    expect(screen.getByRole("link", { name: "Indian Penal Code 302" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Indian Penal Code, Section 302" })).toHaveAttribute(
       "href",
       "/law/Indian%20Penal%20Code/302",
     );

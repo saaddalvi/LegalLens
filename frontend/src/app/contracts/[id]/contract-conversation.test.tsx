@@ -62,6 +62,10 @@ function controlled() {
   };
 }
 
+// A "Your Contract, Clause 2" label, whose numbers are links inside it.
+const where = (text: string) =>
+  screen.getByText((_, el) => el?.tagName === "SPAN" && el.classList.contains("text-sm") && el.textContent === text);
+
 beforeEach(() => getToken.mockResolvedValue("tok"));
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -115,9 +119,9 @@ it("shows the most recent conversation in order after a reload, with each answer
     ["contract_and_corpus", "From your Contract and statute text"],
     ["contract", "From your Contract"],
   ]);
-  expect(screen.getByText("Your Contract, Clause 3")).toBeInTheDocument();
-  expect(screen.getByText("Your Contract, Clause 7.2")).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: /Open full Provision: Model Tenancy Act, 11/ })).toHaveAttribute(
+  expect(where("Your Contract, Clause 3")).toBeInTheDocument();
+  expect(where("Your Contract, Clause 7.2")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /Open full Provision: Model Tenancy Act, Section 11/ })).toHaveAttribute(
     "href",
     "/law/Model%20Tenancy%20Act/11",
   );
@@ -272,12 +276,12 @@ it("tells the user a rate limit or an unknown Contract plainly", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent(/could not find that contract/i);
 });
 
-it("points an unrelated Query to /ask and offers the suggested question", async () => {
+it("carries an unrelated Query to the asking screen and offers the suggested question", async () => {
   const user = userEvent.setup();
   const refusal = answer({
     response_type: "refusal",
-    answer: "That is not about your Contract. For general questions about Indian law, use the Ask page at /ask.",
-    refusal_reason: "That is not about your Contract. For general questions about Indian law, use the Ask page at /ask.",
+    answer: "That is not about your Contract. For general questions about Indian law, use Ask a question.",
+    refusal_reason: "That is not about your Contract. For general questions about Indian law, use Ask a question.",
     suggested_reformulation: "What does my Contract say about notice?",
     trust_label: "none",
     citations: [],
@@ -287,8 +291,11 @@ it("points an unrelated Query to /ask and offers the suggested question", async 
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(sseResponse([frame("answer", refusal)])));
   render(<ContractConversation contractId="c1" initial={[]} />);
   await typeAndAsk(user, "What is the punishment for murder?");
-  expect(await screen.findByText(/use the Ask page at \/ask/)).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: /go to the asking screen/i })).toHaveAttribute("href", "/ask");
+  expect(await screen.findByText(/use Ask a question/)).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Ask this on the Ask a question page" })).toHaveAttribute(
+    "href",
+    "/ask?q=What+is+the+punishment+for+murder%3F",
+  );
   await user.click(screen.getByRole("button", { name: "What does my Contract say about notice?" }));
   expect(screen.getByLabelText(/ask a question about this contract/i)).toHaveValue("What does my Contract say about notice?");
 });
@@ -344,4 +351,14 @@ it("says when the daily limit resets even when little time is left before midnig
   render(<ContractConversation contractId="c1" initial={[]} />);
   await typeAndAsk(user, "What is the deposit?");
   expect(await screen.findByRole("alert")).toHaveTextContent(/2 minutes/i);
+});
+
+it("puts an answer's headings under the conversation's", () => {
+  render(<ContractConversation contractId="c1" initial={TURNS.slice(0, 1)} />);
+  const level = (name: string | RegExp) => screen.getByRole("heading", { name }).tagName;
+  expect(level("Ask about this Contract")).toBe("H2");
+  expect(level("Answer")).toBe("H3");
+  expect(level("From your Contract")).toBe("H3");
+  expect(level("Citations")).toBe("H3");
+  expect(level(/Model Tenancy Act, Section 11/)).toBe("H4");
 });
