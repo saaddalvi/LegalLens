@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 export default function LawLayout({ children }: { children: React.ReactNode }) {
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-4 pb-16 sm:px-8">
-      <header className="flex flex-col gap-3 border-b border-rule pt-5 pb-4">
+      <header className="border-b border-rule pt-5 pb-4">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
           <p className="condensed text-2xl">
             <Link href="/">LegalLens</Link>
@@ -31,11 +31,13 @@ export default function LawLayout({ children }: { children: React.ReactNode }) {
             <ThemeToggle />
           </div>
         </div>
-        <p role="note" className="text-sm text-muted">
-          {DISCLAIMER}
-        </p>
       </header>
       {children}
+      <footer className="border-t border-rule pt-6">
+        <p role="note" className="max-w-[68ch] text-sm text-muted">
+          {DISCLAIMER}
+        </p>
+      </footer>
     </main>
   );
 }

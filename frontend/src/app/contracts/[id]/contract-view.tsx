@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import { API_URL } from "@/lib/api-url";
-import { DISCLAIMER } from "@/lib/answer-text";
 import type { ContractDetail } from "@/lib/contract-types";
 import BriefView from "./contract-brief";
 import DeleteContract from "../delete-contract";
@@ -68,9 +67,6 @@ export default function ContractView({ id }: { id: string }) {
         </p>
       </header>
       <DeleteContract contractId={contract.id} title={contract.title} onDeleted={() => router.push("/contracts")} />
-      <p role="note" className="max-w-[68ch] text-sm text-muted">
-        {DISCLAIMER}
-      </p>
       {contract.brief && <BriefView brief={contract.brief} />}
       <ContractConversation contractId={contract.id} initial={contract.conversation ?? []} />
       <h2 className="condensed text-xl">The Contract, Clause by Clause</h2>

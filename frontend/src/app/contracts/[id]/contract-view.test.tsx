@@ -126,16 +126,10 @@ it("says so when no clause was flagged, and never offers a verdict on signing", 
   expect(screen.queryByText(/should sign|do not sign|safe to sign/i)).not.toBeInTheDocument();
 });
 
-it("always shows the disclaimer, with or without a brief", async () => {
-  await renderWithBrief(BRIEF);
-  expect(screen.getByText(/not legal advice/i)).toBeInTheDocument();
-});
-
 it("still shows the Clauses of a Contract that has no brief", async () => {
   await renderWithBrief(null);
   expect(screen.queryByRole("heading", { name: "Parties" })).not.toBeInTheDocument();
   expect(screen.getByText("Clause 7.2")).toBeInTheDocument();
-  expect(screen.getByText(/not legal advice/i)).toBeInTheDocument();
 });
 
 it("offers Delete, asks for confirmation, then deletes and returns to the list", async () => {
