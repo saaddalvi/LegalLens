@@ -210,6 +210,16 @@ The Contract chat has its own softer shapes: the Query bubble (24px, its lower r
 ### Trust stamp (signature)
 - Oval with a 2px border plus a 1px outline offset 2px, in violet. Variants: dashed border for corpus plus web, muted dashed for web only, muted single hairline for none. A larger version (3px border) appears in the hero specimen. It is pressed onto the answer with a 220ms scale-in.
 
+### Asked question (`/ask`)
+- Once a Query is asked, the form folds to the Query as the page's h1: serif 1.25rem, at most three lines, an "Edit" link at the right, closed by a hairline rule. Edit brings the form back with "Cancel" beside "Ask".
+
+### What was checked
+- Beside the Trust stamp, one muted line counts the answer's Citations: "2 Citations checked against the statute text". It is left out when there are none.
+- A repealed Provision named in an answer is struck through with a 2px red line. Where it is first named, a sans note in the answer's language follows: "repealed" in Red Tape, then the replacement as a violet Citation link.
+
+### Way back
+- Following a link down the page (a Clause link, or on `/ask` a Provision mention) holds a bar at the foot of the screen: a 2px ink top rule, a primary "Back to …" button and a close button.
+
 ### Clause quote and Citation card
 - Left 2px rule, a small label above, quoted text in serif; Citation quotes sit on a ledger inset. Repealed Provisions are struck through with a 2px red line.
 

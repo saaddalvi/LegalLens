@@ -33,12 +33,15 @@ export default function CitationCard({
   onToggle,
   scope,
   heading: Heading,
+  wayBack,
 }: {
   c: Citation;
   open: boolean;
   onToggle: () => void;
   scope: string;
   heading: "h3" | "h4";
+  // Offered after the heading when the reader was brought to this card from the answer.
+  wayBack?: React.ReactNode;
 }) {
   const panelId = `${cardId(c, scope)}-text`;
   return (
@@ -59,6 +62,7 @@ export default function CitationCard({
           </span>
         </button>
       </Heading>
+      {wayBack}
       <ProvisionNotes provision={c} />
       <Link
         href={lawHref(c.act, c.number)}

@@ -66,6 +66,16 @@ export const lawHref = (act: string, number?: string) =>
 export const provisionName = (p: { act: string; number: string }) =>
   `${p.act}, ${p.act === "Constitution of India" ? "Article" : "Section"} ${p.number}`;
 
+const SHORT_NAMES: Record<string, string> = {
+  "Bharatiya Nyaya Sanhita": "BNS",
+  "Bharatiya Nagarik Suraksha Sanhita": "BNSS",
+  "Bharatiya Sakshya Adhiniyam": "BSA",
+};
+
+// A Provision's name short enough to sit inside a sentence: "BNS 318".
+export const shortProvisionName = (p: { act: string; number: string }) =>
+  SHORT_NAMES[p.act] ? `${SHORT_NAMES[p.act]} ${p.number}` : provisionName(p);
+
 // Route params arrive from the address, so they may still be encoded; decoding a decoded
 // Act name or number changes nothing, as neither contains a "%".
 export function decodeParam(value: string): string {

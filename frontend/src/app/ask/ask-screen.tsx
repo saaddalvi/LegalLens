@@ -3,6 +3,7 @@
 import { SignInButton, useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { flushSync } from "react-dom";
 import { BUTTON_CLASS, FIELD_CLASS } from "../ask-box";
 import { Answer, Refusal } from "../answer-view";
 import type { Stage } from "../stage-list";
@@ -44,6 +45,9 @@ const fromAddress = (q?: string): Asked | null => (q ? { q, again: false } : nul
 // The reply that says no source supports an answer, which a temporary outage can cause.
 const foundNothing = (r: AskResponse) => r.response_type === "answer" && r.trust_label === "none";
 
+const QUIET_BUTTON_CLASS =
+  "inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center text-sm text-muted underline underline-offset-4 hover:text-ink";
+
 // Kept answers change only here, followed by a state change that draws them.
 const subscribe = () => () => {};
 
@@ -59,6 +63,10 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
   const [progress, setProgress] = useState<Progress | null>(null);
   const [addressQuery, setAddressQuery] = useState(initialQuery);
   const [missing, setMissing] = useState(false);
+  // Once a Query is asked the form folds to the question, until the reader wants it back.
+  const [editing, setEditing] = useState(false);
+  const questionRef = useRef<HTMLHeadingElement>(null);
+  const editRef = useRef<HTMLButtonElement>(null);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
   const submitRef = useRef<HTMLButtonElement>(null);
   // The last attempt that came to an end, with an answer or an error.
@@ -71,7 +79,10 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
     setAddressQuery(initialQuery);
     setQuery(initialQuery ?? "");
     setMissing(false);
-    if (initialQuery !== asked?.q) setAsked(fromAddress(initialQuery));
+    if (initialQuery !== asked?.q) {
+      setEditing(false);
+      setAsked(fromAddress(initialQuery));
+    }
   }
 
   if (userId && userId !== owner) {
@@ -80,6 +91,7 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
     if (owner) {
       setQuery(initialQuery ?? "");
       setMissing(false);
+      setEditing(false);
       setAsked(fromAddress(initialQuery));
     }
   }
@@ -173,26 +185,67 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
   const failedStage = current?.failedStage ?? null;
   const showStages = loading || (error !== null && stages.length > 0);
 
-  // The button pressed goes away with the error, so focus moves to Ask.
+  const folded = asked !== null && !editing;
+  const suggests = result?.response_type === "refusal" && Boolean(result.suggested_reformulation);
+
+  // The button pressed goes away with the error, so focus moves to the question or to Ask.
   function tryAgain() {
     if (!asked) return;
     setAsked({ q: asked.q, again: true });
-    submitRef.current?.focus();
+    (folded ? questionRef : submitRef).current?.focus();
   }
 
-  // Puts text in the ask box and takes the reader to it.
-  function fillAskBox(q: string) {
-    setQuery(q);
-    setMissing(false);
+  // Brings the form back and takes the reader to the ask box.
+  function openAskBox() {
+    flushSync(() => setEditing(true));
     fieldRef.current?.scrollIntoView?.({ block: "center" });
     fieldRef.current?.focus({ preventScroll: true });
+  }
+
+  function edit() {
+    if (!asked) return;
+    setQuery(asked.q);
+    openAskBox();
+  }
+
+  // Folds the form back to the Query already asked, dropping what was typed over it.
+  function cancelEdit() {
+    flushSync(() => {
+      setQuery(asked?.q ?? "");
+      setMissing(false);
+      setEditing(false);
+    });
+    editRef.current?.focus();
   }
 
   // Starts over: the address drops the Query, which clears the ask box and the answer.
   function askAnother() {
     router.push("/ask", { scroll: false });
-    setAsked(null);
-    fillAskBox("");
+    flushSync(() => {
+      setAsked(null);
+      setQuery("");
+      setMissing(false);
+    });
+    openAskBox();
+  }
+
+  // Asks a Query the reader chose here. What they pressed goes away as the form folds, so
+  // focus moves to the question it folds to.
+  function send(q: string) {
+    flushSync(() => {
+      setQuery(q);
+      setMissing(false);
+      setAsked({ q, again: true });
+      setEditing(false);
+    });
+    questionRef.current?.focus();
+    if (q !== initialQuery) {
+      router.push(`/ask?${new URLSearchParams({ q })}`, { scroll: false });
+    }
+  }
+
+  function sendSuggestion(q: string) {
+    if (!busy) send(q);
   }
 
   function submit(e: React.FormEvent) {
@@ -205,60 +258,85 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
       fieldRef.current?.focus();
       return;
     }
-    setAsked({ q, again: true });
-    if (q !== initialQuery) {
-      router.push(`/ask?${new URLSearchParams({ q })}`, { scroll: false });
-    }
+    send(q);
   }
 
   const left = MAX_QUERY - query.length;
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-10 px-4 pb-16 sm:px-8">
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-4 pb-16 has-data-return-bar:pb-24 sm:px-8">
       <SiteHeader current="ask" />
 
-      <form onSubmit={submit} className="flex flex-col gap-3">
-        <h1 className="condensed text-balance text-3xl">
-          <label htmlFor="query">Ask a question about Indian law</label>
-        </h1>
-        <p lang="hi" className="-mt-1 text-muted">
-          आप हिंदी में भी पूछ सकते हैं।
-        </p>
-        <textarea
-          id="query"
-          ref={fieldRef}
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setMissing(false);
-          }}
-          lang={query ? detectedLang(query) : undefined}
-          rows={3}
-          maxLength={MAX_QUERY}
-          aria-required="true"
-          aria-invalid={missing || undefined}
-          aria-describedby="query-hint query-count"
-          placeholder="In English or Hindi"
-          className={FIELD_CLASS}
-        />
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <button
-            ref={submitRef}
-            type="submit"
-            aria-disabled={busy || undefined}
-            className={`${BUTTON_CLASS} aria-disabled:cursor-progress aria-disabled:bg-ledger aria-disabled:text-muted aria-disabled:hover:bg-ledger`}
+      {folded ? (
+        // The question steps back to a line or three, so the answer leads.
+        <div className="flex items-start justify-between gap-4 border-b border-rule pb-2">
+          <h1
+            ref={questionRef}
+            tabIndex={-1}
+            lang={detectedLang(asked.q)}
+            className="measure my-2 line-clamp-3 min-w-0 flex-1 whitespace-pre-line break-words font-serif text-xl leading-normal"
           >
-            {loading ? "Thinking…" : "Ask"}
+            {asked.q}
+          </h1>
+          <button
+            ref={editRef}
+            type="button"
+            aria-label="Edit question"
+            onClick={edit}
+            className={QUIET_BUTTON_CLASS}
+          >
+            Edit
           </button>
-          {/* Always in the page so a screen reader announces the text when it appears. */}
-          <p id="query-hint" role="status" className="font-medium">
-            {missing ? "Type your question first, in English or Hindi." : ""}
-          </p>
-          <p id="query-count" className="ml-auto text-sm text-muted tabular-nums">
-            {left <= COUNT_FROM ? `${left} ${left === 1 ? "character" : "characters"} left` : ""}
-          </p>
         </div>
-      </form>
+      ) : (
+        <form onSubmit={submit} className="flex flex-col gap-3">
+          <h1 className="condensed text-balance text-3xl">
+            <label htmlFor="query">Ask a question about Indian law</label>
+          </h1>
+          <p lang="hi" className="-mt-1 text-muted">
+            आप हिंदी में भी पूछ सकते हैं।
+          </p>
+          <textarea
+            id="query"
+            ref={fieldRef}
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setMissing(false);
+            }}
+            lang={query ? detectedLang(query) : undefined}
+            rows={3}
+            maxLength={MAX_QUERY}
+            aria-required="true"
+            aria-invalid={missing || undefined}
+            aria-describedby="query-hint query-count"
+            placeholder="In English or Hindi"
+            className={FIELD_CLASS}
+          />
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <button
+              ref={submitRef}
+              type="submit"
+              aria-disabled={busy || undefined}
+              className={`${BUTTON_CLASS} aria-disabled:cursor-progress aria-disabled:bg-ledger aria-disabled:text-muted aria-disabled:hover:bg-ledger`}
+            >
+              {loading ? "Thinking…" : "Ask"}
+            </button>
+            {asked && (
+              <button type="button" onClick={cancelEdit} className={QUIET_BUTTON_CLASS}>
+                Cancel
+              </button>
+            )}
+            {/* Always in the page so a screen reader announces the text when it appears. */}
+            <p id="query-hint" role="status" className="font-medium">
+              {missing ? "Type your question first, in English or Hindi." : ""}
+            </p>
+            <p id="query-count" className="ml-auto text-sm text-muted tabular-nums">
+              {left <= COUNT_FROM ? `${left} ${left === 1 ? "character" : "characters"} left` : ""}
+            </p>
+          </div>
+        </form>
+      )}
 
       {/* Tells a screen reader the reply has arrived, as the Stages that were being read go. */}
       <p role="status" className="sr-only">
@@ -305,7 +383,8 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
           key={`${asked?.q}-${result.refusal_reason}`}
           result={result}
           query={asked?.q ?? ""}
-          onReformulate={fillAskBox}
+          onSuggestion={sendSuggestion}
+          asksSuggestion
           instant={!current?.fresh}
         />
       )}
@@ -316,12 +395,18 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
           result={result}
           query={asked?.q ?? ""}
           instant={!current?.fresh}
+          offerReturn
         />
       )}
 
       <footer className="flex flex-col items-start gap-6 border-t border-rule pt-6">
+        {/* A suggested question is the next step where there is one, so this stands back. */}
         {result && (
-          <button type="button" onClick={askAnother} className={BUTTON_CLASS}>
+          <button
+            type="button"
+            onClick={askAnother}
+            className={suggests ? QUIET_BUTTON_CLASS : BUTTON_CLASS}
+          >
             Ask another question
           </button>
         )}

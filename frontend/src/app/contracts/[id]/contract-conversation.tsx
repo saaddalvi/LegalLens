@@ -363,7 +363,7 @@ export default function ContractConversation({
             ...turns.map((t, i) => (
               <Turn key={t.key} query={t.query} questionRef={latestQuestion} latest={!pending && i === turns.length - 1} live={t.fresh}>
                 {t.response.response_type === "refusal" ? (
-                  <Refusal result={t.response} query={t.query} onReformulate={reformulate} instant={!t.fresh} level={3} />
+                  <Refusal result={t.response} query={t.query} onSuggestion={reformulate} instant={!t.fresh} level={3} />
                 ) : (
                   <Answer result={t.response} query={t.query} instant={!t.fresh} scope={`turn-${i}-`} level={3} foldSources />
                 )}

@@ -6,6 +6,9 @@
 //
 // The aliases mirror ACT_ALIASES in backend/src/legallens/refs.py.
 
+import type { Citation } from "./ask-types";
+import { parseRefs } from "./refs";
+
 const ACT_ALIASES: Record<string, string[]> = {
   "Constitution of India": ["constitution of india"],
   "Indian Penal Code": ["indian penal code", "i.p.c.", "ipc"],
@@ -55,6 +58,29 @@ export type Segment = { text: string } | { text: string; act: string; number: st
 
 export function provisionKey(c: ProvisionKey): string {
   return `${c.act}|${c.number.toUpperCase()}`;
+}
+
+export type Repealed = ProvisionKey & { replacements: ProvisionKey[] };
+
+/**
+ * The repealed Provisions an answer's Citations know of, each with what replaced it: those
+ * cited as repealed, and those a cited Provision says it replaced.
+ */
+export function repealedProvisions(citations: Citation[]): Map<string, Repealed> {
+  const found = new Map<string, Repealed>();
+  const add = (old: ProvisionKey, replacements: ProvisionKey[]) => {
+    const key = provisionKey(old);
+    const entry = found.get(key) ?? { act: old.act, number: old.number, replacements: [] };
+    for (const r of replacements) {
+      if (!entry.replacements.some((e) => provisionKey(e) === provisionKey(r))) entry.replacements.push(r);
+    }
+    found.set(key, entry);
+  };
+  for (const c of citations) {
+    if (c.status === "repealed") add(c, parseRefs(c.superseded_by));
+    for (const old of parseRefs(c.supersedes)) add(old, [c]);
+  }
+  return found;
 }
 
 /** Splits text into plain and Provision-mention segments, in order. */

@@ -2,7 +2,7 @@
 
 import { createContext, Fragment, useContext, useEffect, useEffectEvent, useState } from "react";
 import { flushSync } from "react-dom";
-import { BUTTON_CLASS } from "./ask-box";
+import ReturnBar from "./return-bar";
 
 // Every Clause number on a Contract's page is a link to that Clause. Following one marks the
 // Clause and offers the way back, by a button or the browser's own Back. Outside <ClauseJumps>
@@ -211,32 +211,6 @@ export function LinkedText({ text, except }: { text: string; except?: string }) 
   return parts.map((p, i) => <Fragment key={i}>{p}</Fragment>);
 }
 
-// The way back, held at the foot of the screen, clear of the sidebar. It sits just after the Clause's heading in the
-// page, so it is also the next stop for the Tab key. A scrolling part of the page that holds it
-// keeps clear of it (globals.css).
-function ReturnBar({ label, onBack, onStay }: { label: string; onBack: () => void; onStay: () => void }) {
-  return (
-    <div data-return-bar className="fixed inset-x-0 bottom-0 z-10 lg:left-72 border-t-2 border-ink bg-paper px-4 pb-[env(safe-area-inset-bottom)] sm:px-8">
-      <div className="mx-auto flex max-w-[44rem] items-center justify-between gap-3 py-2">
-        <button type="button" onClick={onBack} className={`${BUTTON_CLASS} min-h-11 min-w-0`}>
-          Back to {label}
-        </button>
-        <button
-          type="button"
-          aria-label="Stay here"
-          title="Stay here"
-          onClick={onStay}
-          className="inline-flex size-11 shrink-0 items-center justify-center rounded border border-rule hover:border-ink"
-        >
-          <svg aria-hidden="true" viewBox="0 0 16 16" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M3.5 3.5l9 9M12.5 3.5l-9 9" strokeLinecap="round" />
-          </svg>
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // A line that reads as a sentence still running: it has a verb of duty, or ends on a comma
 // or a word that cannot end a title.
 const RUNS_ON = /\b(?:shall|will|must|may)\b|(?:[,;:-]|\b(?:a|an|the|of|to|by|for|in|on|at|with|from|as|is|be|and|or|any))$/i;
@@ -292,7 +266,10 @@ export function ClauseItem({
           </>
         )}
       </h3>
-      {jumps && jump?.from && <ReturnBar label={jump.label} onBack={jumps.goBack} onStay={jumps.stay} />}
+      {/* Clear of the Contract page's sidebar. */}
+      {jumps && jump?.from && (
+        <ReturnBar label={jump.label} onBack={jumps.goBack} onStay={jumps.stay} className="lg:left-72" />
+      )}
       {body && (
         <p lang="en" className="measure whitespace-pre-line break-words font-serif text-lg leading-relaxed">
           <LinkedText text={body} except={number} />

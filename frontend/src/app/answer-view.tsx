@@ -1,18 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useState } from "react";
+import { Fragment, useEffect, useId, useState } from "react";
 import { flushSync } from "react-dom";
+import { BUTTON_CLASS } from "./ask-box";
 import CitationCard, { cardId } from "./citation-card";
 import { LinkedText } from "./clause-links";
 import { ClauseQuote } from "./clause-quote";
+import ReturnBar from "./return-bar";
 import Stamp from "./stamp";
 import { TRUST_EXPLANATION, TRUST_NEEDS_EXPLANATION } from "@/lib/trust-labels";
 import { answerAsText, CHECK_YOUR_COPY, DISCLAIMER } from "@/lib/answer-text";
-import { askHref } from "@/lib/corpus";
+import { askHref, shortProvisionName } from "@/lib/corpus";
+import { detectedLang } from "@/lib/ask-stream";
 import type { AskResponse, Citation } from "@/lib/ask-types";
 import type { ClauseReference } from "@/lib/contract-types";
-import { provisionKey, splitMentions } from "@/lib/mentions";
+import { provisionKey, repealedProvisions, splitMentions } from "@/lib/mentions";
+import type { ProvisionKey, Repealed } from "@/lib/mentions";
 
 // The level of an answer's own headings: 2 under a page's h1, 3 under a section's h2. The
 // lower level is also set smaller than the heading above it.
@@ -83,6 +87,104 @@ function useReveal(text: string, shownAtOnce = false) {
   };
 }
 
+// Follows a mention to its Citation card. `from` is the mention pressed.
+type OnMention = (c: ProvisionKey, from: HTMLElement) => void;
+
+// A mention that can be pressed. Not a <button>, which cannot break across lines inside a
+// sentence.
+function Mention({
+  to,
+  onMention,
+  className,
+  children,
+}: {
+  to: ProvisionKey;
+  onMention: OnMention;
+  className: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      onClick={(e) => onMention(to, e.currentTarget)}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        onMention(to, e.currentTarget);
+      }}
+      className={`cursor-pointer ${className}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+const IN_FORCE =
+  "text-stamp underline decoration-stamp/50 decoration-2 underline-offset-4 hover:decoration-stamp";
+const STRUCK = "line-through decoration-redtape decoration-2";
+
+// What LegalLens adds beside a repealed mention, in the answer's language.
+const REPEALED_WORDS = {
+  en: { repealed: "repealed", now: "now", and: " and " },
+  hi: { repealed: "निरस्त", now: "अब", and: " और " },
+};
+
+// A repealed Provision named in the answer, struck out. The first time it is named, the law
+// that replaced it follows, in the interface's voice so it is not read as the answer's own.
+function RepealedMention({
+  text,
+  provision,
+  note,
+  language,
+  cited,
+  onMention,
+}: {
+  text: string;
+  provision: Repealed;
+  note: boolean;
+  language: string;
+  // Keys of the Provisions that have a Citation card to go to.
+  cited: Set<string>;
+  onMention: OnMention;
+}) {
+  const words = REPEALED_WORDS[language === "hi" ? "hi" : "en"];
+  const struck = <s className={STRUCK}>{text}</s>;
+  return (
+    <>
+      {cited.has(provisionKey(provision)) ? (
+        <Mention to={provision} onMention={onMention} className="hover:bg-ledger">
+          {struck}
+        </Mention>
+      ) : (
+        struck
+      )}
+      {note ? (
+        <span className="font-sans text-base">
+          {" ("}
+          <span className="font-medium text-redtape">{words.repealed}</span>
+          {provision.replacements.length > 0 && `, ${words.now} `}
+          {provision.replacements.map((r, i) => (
+            <Fragment key={provisionKey(r)}>
+              {i > 0 && words.and}
+              {cited.has(provisionKey(r)) ? (
+                <Mention to={r} onMention={onMention} className={`whitespace-nowrap ${IN_FORCE}`}>
+                  {shortProvisionName(r)}
+                </Mention>
+              ) : (
+                shortProvisionName(r)
+              )}
+            </Fragment>
+          ))}
+          {")"}
+        </span>
+      ) : (
+        <span className="sr-only"> ({words.repealed})</span>
+      )}
+    </>
+  );
+}
+
 // Plain-text paragraphs; while revealing, each word fades in after the last.
 // All the text is in the page from the start, so screen readers get it whole.
 function RevealedParagraphs({
@@ -90,17 +192,32 @@ function RevealedParagraphs({
   animate,
   delay,
   citations = [],
+  language = "en",
   onMention,
 }: {
   text: string;
   animate: boolean;
   delay: number;
-  // When the text has settled, mentions of these Provisions become chips.
+  // When the text has settled, mentions of these Provisions become chips, and mentions of
+  // repealed ones are struck out.
   citations?: Citation[];
-  onMention?: (c: { act: string; number: string }) => void;
+  language?: string;
+  onMention?: OnMention;
 }) {
+  const cited = new Set(citations.map(provisionKey));
+  const repealed = repealedProvisions(citations);
+  const named = [...citations, ...repealed.values()];
+  // Split ahead of drawing, to know where each repealed Provision is named first.
+  const paragraphs = paragraphsOf(text).map((para) => ({
+    para,
+    segments: onMention && !animate ? splitMentions(para, named) : [],
+  }));
+  const firstNamed = new Map<string, object>();
+  for (const seg of paragraphs.flatMap((p) => p.segments)) {
+    if ("act" in seg && !firstNamed.has(provisionKey(seg))) firstNamed.set(provisionKey(seg), seg);
+  }
   let offset = 0; // words in the paragraphs before this one
-  return paragraphsOf(text).map((para, i) => {
+  return paragraphs.map(({ para, segments }, i) => {
     const words = wordsOf(para);
     const start = offset;
     offset += words.length;
@@ -117,27 +234,25 @@ function RevealedParagraphs({
               </span>
             ))
           : onMention
-            ? splitMentions(para, citations).map((seg, j) =>
-                "act" in seg ? (
-                  // Not a <button>, which cannot break across lines inside a sentence.
-                  <span
+            ? segments.map((seg, j) => {
+                if (!("act" in seg)) return <LinkedText key={j} text={seg.text} />;
+                const struck = repealed.get(provisionKey(seg));
+                return struck ? (
+                  <RepealedMention
                     key={j}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onMention(seg)}
-                    onKeyDown={(e) => {
-                      if (e.key !== "Enter" && e.key !== " ") return;
-                      e.preventDefault();
-                      onMention(seg);
-                    }}
-                    className="cursor-pointer text-stamp underline decoration-stamp/50 decoration-2 underline-offset-4 hover:decoration-stamp"
-                  >
-                    {seg.text}
-                  </span>
+                    text={seg.text}
+                    provision={struck}
+                    note={firstNamed.get(provisionKey(seg)) === seg}
+                    language={language}
+                    cited={cited}
+                    onMention={onMention}
+                  />
                 ) : (
-                  <LinkedText key={j} text={seg.text} />
-                ),
-              )
+                  <Mention key={j} to={seg} onMention={onMention} className={IN_FORCE}>
+                    {seg.text}
+                  </Mention>
+                );
+              })
             : <LinkedText text={para} />}
       </p>
     );
@@ -197,6 +312,7 @@ function sourceCounts(clauses: number, citations: number, web: number): string {
 // `instant` shows an answer already read (a saved one, or one returned to) with no reveal.
 // `scope` is a prefix for the element ids of this answer's Citation cards.
 // `foldSources` keeps what the answer rests on behind one button until it is asked for.
+// `offerReturn` offers the way back after a mention is followed down the page to its card.
 export function Answer({
   result,
   query,
@@ -204,6 +320,7 @@ export function Answer({
   scope = "",
   level = 2,
   foldSources = false,
+  offerReturn = false,
 }: {
   result: AskResponse & { clause_references?: ClauseReference[] };
   // The Query this answers, which is copied with it.
@@ -212,6 +329,7 @@ export function Answer({
   scope?: string;
   level?: Level;
   foldSources?: boolean;
+  offerReturn?: boolean;
 }) {
   const { tag: Heading, card: cardHeading, size } = HEADING[level];
   const { delay, instant, settled, skip } = useReveal(result.answer, shownAtOnce);
@@ -223,17 +341,32 @@ export function Answer({
   const counts = sourceCounts(clauseReferences.length, result.citations.length, result.fallback_sources.length);
   // A repealed Provision is said so even while its card is folded away.
   const repealed = result.citations.filter((c) => c.status === "repealed").length;
+  // The mention that was followed to a card, while there is a way back to it.
+  const [jump, setJump] = useState<{ key: string; from: HTMLElement } | null>(null);
+  const scrolling: ScrollBehavior = instant ? "auto" : "smooth";
   // The cards are already on the page once the text has settled, so a chip click opens its
   // card, then scrolls to it and moves focus there. The card is opened first, so the scroll
   // is measured against its full height, and its heading lands at the top of the screen.
-  const goToCitation = (m: { act: string; number: string }) => {
+  const goToCitation: OnMention = (m, from) => {
     flushSync(() => {
       setUnfolded(true);
       setOpened((o) => new Set(o).add(provisionKey(m)));
+      if (offerReturn) setJump({ key: provisionKey(m), from });
     });
     const card = document.getElementById(cardId(m, scope));
-    card?.scrollIntoView?.({ behavior: instant ? "auto" : "smooth", block: "start" });
+    card?.scrollIntoView?.({ behavior: scrolling, block: "start" });
     card?.querySelector("button")?.focus({ preventScroll: true });
+  };
+  const goBack = () => {
+    if (!jump) return;
+    flushSync(() => setJump(null));
+    jump.from.scrollIntoView?.({ behavior: scrolling, block: "center" });
+    jump.from.focus({ preventScroll: true });
+  };
+  // The bar goes away with the button pressed, so focus returns to the card it sat in.
+  const stay = (c: Citation) => {
+    flushSync(() => setJump(null));
+    document.getElementById(cardId(c, scope))?.querySelector("button")?.focus({ preventScroll: true });
   };
   const toggle = (key: string) =>
     setOpened((o) => {
@@ -247,7 +380,15 @@ export function Answer({
       {/* The Trust label leads: it is known when the answer arrives, and a
           reader should learn how far to trust the text before reading it. */}
       <div className="flex flex-col items-start gap-2">
-        <Stamp trust={result.trust_label} press={!shownAtOnce} />
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Stamp trust={result.trust_label} press={!shownAtOnce} />
+          {/* The check is that each cited Provision is in the Corpus, and no more. */}
+          {result.citations.length > 0 && (
+            <p className="text-sm text-muted">
+              {plural(result.citations.length, "Citation")} checked against the statute text
+            </p>
+          )}
+        </div>
         {TRUST_NEEDS_EXPLANATION.has(result.trust_label) && (
           <p className="measure text-sm text-muted">{TRUST_EXPLANATION[result.trust_label]}</p>
         )}
@@ -265,6 +406,7 @@ export function Answer({
           animate={!settled}
           delay={delay}
           citations={result.citations}
+          language={result.answer_language}
           onMention={goToCitation}
         />
       </div>
@@ -328,6 +470,11 @@ export function Answer({
                   onToggle={() => toggle(provisionKey(c))}
                   scope={scope}
                   heading={cardHeading}
+                  wayBack={
+                    jump?.key === provisionKey(c) && (
+                      <ReturnBar label="answer" onBack={goBack} onStay={() => stay(c)} />
+                    )
+                  }
                 />
               ))}
             </div>
@@ -355,26 +502,33 @@ export function Answer({
   );
 }
 
-// `instant` shows a refusal already read, with no reveal. `redirect_to_ask` (a Contract
+// `instant` shows a refusal already read, with no reveal. `asksSuggestion` says `onSuggestion`
+// asks the suggested question straight away; without it, pressing the question puts it in an
+// ask box to be sent. `redirect_to_ask` (a Contract
 // conversation's refusal of a Query about neither the Contract nor its law) adds a link that
 // asks that Query on the asking screen.
 export function Refusal({
   result,
   query,
-  onReformulate,
+  onSuggestion,
+  asksSuggestion = false,
   instant: shownAtOnce = false,
   level = 2,
 }: {
   result: AskResponse & { redirect_to_ask?: boolean };
   // The Query that was refused.
   query: string;
-  onReformulate: (q: string) => void;
+  onSuggestion: (q: string) => void;
+  asksSuggestion?: boolean;
   instant?: boolean;
   level?: Level;
 }) {
   const { tag: Heading, size } = HEADING[level];
   const reason = result.refusal_reason ?? result.answer;
   const { delay, instant, settled, skip } = useReveal(reason, shownAtOnce);
+  const suggestion = result.suggested_reformulation;
+  const suggestionId = useId();
+  const fadeIn = instant ? "" : "reveal-in";
   return (
     <section
       role="status"
@@ -389,20 +543,42 @@ export function Refusal({
       >
         <RevealedParagraphs text={reason} animate={!settled} delay={delay} />
       </div>
-      {settled && result.suggested_reformulation && (
-        <p className={`measure ${instant ? "" : "reveal-in"}`}>
-          <span className="font-medium">Try asking instead: </span>
-          <button
-            type="button"
-            onClick={() => onReformulate(result.suggested_reformulation ?? "")}
-            className="min-h-11 text-left underline underline-offset-4"
-          >
-            {result.suggested_reformulation}
-          </button>
-        </p>
-      )}
+      {settled &&
+        suggestion &&
+        (asksSuggestion ? (
+          <div className={`flex flex-col items-start gap-2 border-t border-rule pt-3 ${fadeIn}`}>
+            <p className="font-medium">Suggested question</p>
+            <p
+              id={suggestionId}
+              lang={detectedLang(suggestion)}
+              className="measure break-words font-serif text-lg leading-[1.7]"
+            >
+              {suggestion}
+            </p>
+            <button
+              type="button"
+              aria-describedby={suggestionId}
+              onClick={() => onSuggestion(suggestion)}
+              className={BUTTON_CLASS}
+            >
+              Ask this instead
+            </button>
+          </div>
+        ) : (
+          <p className={`measure ${fadeIn}`}>
+            <span className="font-medium">Try asking instead: </span>
+            <button
+              type="button"
+              lang={detectedLang(suggestion)}
+              onClick={() => onSuggestion(suggestion)}
+              className="min-h-11 text-left underline underline-offset-4"
+            >
+              {suggestion}
+            </button>
+          </p>
+        ))}
       {settled && result.redirect_to_ask && (
-        <p className={instant ? "" : "reveal-in"}>
+        <p className={fadeIn}>
           <Link href={askHref(query)} className="inline-flex min-h-11 items-center underline underline-offset-4">
             Ask this on the Ask a question page
           </Link>

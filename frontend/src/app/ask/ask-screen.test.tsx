@@ -75,6 +75,14 @@ function mockFetch(res: { ok: boolean; status: number; body?: unknown }) {
   return fn;
 }
 
+const question = () => screen.getByRole("heading", { level: 1 });
+
+// Unfolds the form to the question asked and sends it again.
+async function askAgain() {
+  await userEvent.click(screen.getByRole("button", { name: "Edit question" }));
+  await userEvent.click(screen.getByRole("button", { name: "Ask" }));
+}
+
 async function ask() {
   const user = userEvent.setup();
   render(<AskScreen />);
@@ -181,10 +189,14 @@ describe("AskScreen", () => {
   it("shows a loading state while waiting", async () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
     await ask();
+    // The form folds to the question, which takes the focus.
+    expect(question()).toHaveTextContent("What is Article 14?");
+    expect(question()).toHaveFocus();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    // Unfolded, it cannot send a second request while the first is running.
+    await userEvent.click(screen.getByRole("button", { name: "Edit question" }));
     const button = screen.getByRole("button", { name: /thinking/i });
     expect(button).toHaveAttribute("aria-disabled", "true");
-    // It keeps focus, and pressing it again sends nothing.
-    expect(button).toHaveFocus();
     await userEvent.click(button);
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("status", { name: /progress/i })).toBeInTheDocument();
@@ -243,24 +255,47 @@ describe("AskScreen", () => {
     expect(await screen.findByText("Your answer is ready.")).toHaveAttribute("role", "status");
   });
 
-  it("moves to the ask box when a suggested question is chosen", async () => {
+  const refused = {
+    ...base,
+    response_type: "refusal",
+    refusal_reason: "LegalLens cannot choose for you.",
+    suggested_reformulation: "What does Article 14 say?",
+    answer: "",
+    citations: [],
+  };
+
+  it("asks a suggested question in one press", async () => {
+    const fn = mockFetch({ ok: true, status: 200, body: refused });
+    const user = await ask();
+    const suggested = await screen.findByRole("button", { name: "Ask this instead" });
+    expect(suggested).toHaveAccessibleDescription("What does Article 14 say?");
+    mockFetch({ ok: true, status: 200, body: base });
+    const next = vi.mocked(globalThis.fetch);
+    await user.click(suggested);
+    expect(await screen.findByText("From statute text")).toBeInTheDocument();
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(next.mock.calls[0][1]!.body as string)).toEqual({ query: "What does Article 14 say?" });
+    expect(question()).toHaveTextContent("What does Article 14 say?");
+    expect(question()).toHaveFocus();
+    expect(push).toHaveBeenLastCalledWith("/ask?q=What+does+Article+14+say%3F", expect.anything());
+  });
+
+  it("marks the language of a suggested question", async () => {
     mockFetch({
       ok: true,
       status: 200,
-      body: {
-        ...base,
-        response_type: "refusal",
-        refusal_reason: "Outside Indian law.",
-        suggested_reformulation: "What does Article 14 say?",
-        answer: "",
-        citations: [],
-      },
+      body: { ...refused, answer_language: "hi", suggested_reformulation: "अनुच्छेद 14 क्या कहता है?" },
     });
-    const user = await ask();
-    await user.click(await screen.findByRole("button", { name: "What does Article 14 say?" }));
-    const box = screen.getByLabelText(/ask a question/i);
-    expect(box).toHaveValue("What does Article 14 say?");
-    expect(box).toHaveFocus();
+    await ask();
+    expect(await screen.findByText("अनुच्छेद 14 क्या कहता है?")).toHaveAttribute("lang", "hi");
+  });
+
+  it("offers nothing to ask when a refusal suggests nothing", async () => {
+    mockFetch({ ok: true, status: 200, body: { ...refused, suggested_reformulation: null } });
+    await ask();
+    await screen.findByRole("status", { name: "Refusal" });
+    expect(screen.queryByRole("button", { name: "Ask this instead" })).not.toBeInTheDocument();
   });
 
   it("opens a mentioned Provision from the keyboard", async () => {
@@ -309,7 +344,7 @@ describe("AskScreen", () => {
     expect(await screen.findByText("From statute text")).toBeInTheDocument();
     expect(fn).toHaveBeenCalledTimes(1);
     expect(JSON.parse(fn.mock.calls[0][1].body)).toEqual({ query: "What is Article 14?" });
-    expect(screen.getByLabelText(/ask a question/i)).toHaveValue("What is Article 14?");
+    expect(question()).toHaveTextContent("What is Article 14?");
     expect(push).not.toHaveBeenCalled();
   });
 
@@ -336,12 +371,12 @@ describe("AskScreen", () => {
     expect(await screen.findByText("First answer.")).toBeInTheDocument();
     rerender(<AskScreen initialQuery="second" />);
     expect(await screen.findByText("Second answer.")).toBeInTheDocument();
-    expect(screen.getByLabelText(/ask a question/i)).toHaveValue("second");
+    expect(question()).toHaveTextContent("second");
     rerender(<AskScreen initialQuery="first" />);
     expect(screen.getByText("First answer.")).toBeInTheDocument();
     expect(screen.queryByText("Second answer.")).not.toBeInTheDocument();
-    expect(screen.getByLabelText(/ask a question/i)).toHaveValue("first");
-    expect(screen.queryByRole("button", { name: /thinking/i })).not.toBeInTheDocument();
+    expect(question()).toHaveTextContent("first");
+    expect(screen.queryByRole("status", { name: /progress/i })).not.toBeInTheDocument();
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
@@ -420,6 +455,7 @@ describe("AskScreen", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/unavailable/i);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(sseResponse([stageFrame("scope_check", "Checking")])));
     const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Edit question" }));
     await user.click(screen.getByRole("button", { name: "Ask" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/could not reach/i);
   });
@@ -589,11 +625,11 @@ describe("answer reveal", () => {
     });
     const refusal = screen.getByRole("status", { name: "Refusal" });
     expect(refusal).toHaveTextContent("This is outside Indian law.");
-    expect(screen.queryByRole("button", { name: "What does Article 14 say?" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ask this instead" })).not.toBeInTheDocument();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(900);
     });
-    expect(screen.getByRole("button", { name: "What does Article 14 say?" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ask this instead" })).toBeInTheDocument();
   });
 
   it("keeps Hindi words whole and the complete text readable during the reveal", async () => {
@@ -817,8 +853,6 @@ describe("returning to a Query", () => {
     return { fn, ...view };
   }
 
-  const askAgain = () => userEvent.click(screen.getByRole("button", { name: "Ask" }));
-
   async function leaveAndReturn(rerender: (ui: React.ReactElement) => void) {
     await act(async () => rerender(kept(false)));
     await act(async () => rerender(kept(true)));
@@ -840,7 +874,7 @@ describe("returning to a Query", () => {
     render(<AskScreen initialQuery={Q} />);
     expect(screen.getByText("First answer.")).toBeInTheDocument();
     expect(screen.getByText("Your answer is ready.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /thinking/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: /progress/i })).not.toBeInTheDocument();
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
@@ -851,7 +885,7 @@ describe("returning to a Query", () => {
     session.userId = null;
     const { rerender } = render(<AskScreen initialQuery={Q} />);
     expect(screen.getByText("Loading…")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Ask" })).toHaveAttribute("aria-disabled", "true");
+    expect(question()).toHaveTextContent(Q);
     session.isLoaded = true;
     session.userId = "user_1";
     rerender(<AskScreen initialQuery={Q} />);
@@ -918,7 +952,7 @@ describe("returning to a Query", () => {
     const again = controlledResponse();
     const { fn } = await answeredThen(again.res);
     await askAgain();
-    expect(screen.getByRole("button", { name: /thinking/i })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: /progress/i })).toBeInTheDocument();
     expect(screen.getByText("First answer.")).toBeInTheDocument();
     expect(screen.queryByText("Your answer is ready.")).not.toBeInTheDocument();
     again.push(frame("answer", { ...base, answer: "Newer answer." }));
@@ -1016,5 +1050,152 @@ describe("returning to a Query", () => {
     rerender(<AskScreen initialQuery="q0" />);
     await screen.findByText("An answer.");
     expect(fn).toHaveBeenCalledTimes(22);
+  });
+});
+
+describe("the folded question", () => {
+  const answered = async () => {
+    const fn = mockFetch({ ok: true, status: 200, body: base });
+    render(<AskScreen initialQuery="What is Article 14?" />);
+    await screen.findByText("From statute text");
+    return { fn, user: userEvent.setup() };
+  };
+
+  it("stands in for the form once a Query is asked", async () => {
+    await answered();
+    expect(question()).toHaveTextContent("What is Article 14?");
+    expect(question()).toHaveAttribute("lang", "en");
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ask" })).not.toBeInTheDocument();
+  });
+
+  it("opens the form on the question with Edit, keeping the answer", async () => {
+    const { user } = await answered();
+    await user.click(screen.getByRole("button", { name: "Edit question" }));
+    expect(screen.getByRole("textbox")).toHaveValue("What is Article 14?");
+    expect(screen.getByRole("textbox")).toHaveFocus();
+    expect(screen.getByText(/Equality before the law/)).toBeInTheDocument();
+  });
+
+  it("drops the edit on Cancel", async () => {
+    const { fn, user } = await answered();
+    await user.click(screen.getByRole("button", { name: "Edit question" }));
+    await user.type(screen.getByRole("textbox"), " and 15?");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(question()).toHaveTextContent("What is Article 14?");
+    expect(screen.getByRole("button", { name: "Edit question" })).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Edit question" }));
+    expect(screen.getByRole("textbox")).toHaveValue("What is Article 14?");
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens an empty form for another question", async () => {
+    const { user } = await answered();
+    await user.click(screen.getByRole("button", { name: "Ask another question" }));
+    expect(screen.getByRole("textbox")).toHaveValue("");
+    expect(screen.getByRole("textbox")).toHaveFocus();
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+  });
+});
+
+describe("what was checked", () => {
+  it("says how many Citations were checked", async () => {
+    mockFetch({ ok: true, status: 200, body: base });
+    await ask();
+    expect(await screen.findByText("1 Citation checked against the statute text")).toBeInTheDocument();
+  });
+
+  it("claims no check for an answer with no Citations", async () => {
+    mockFetch({ ok: true, status: 200, body: { ...base, trust_label: "fallback", citations: [] } });
+    await ask();
+    await screen.findByText(/less reliable/i);
+    expect(screen.queryByText(/checked against the statute text/)).not.toBeInTheDocument();
+  });
+});
+
+describe("repealed mentions", () => {
+  const current = {
+    ...base.citations[0],
+    act: "Bharatiya Nyaya Sanhita",
+    number: "318",
+    supersedes: "Indian Penal Code 420",
+  };
+  const old = {
+    ...base.citations[0],
+    act: "Indian Penal Code",
+    number: "420",
+    status: "repealed",
+    superseded_by: "Bharatiya Nyaya Sanhita 318",
+  };
+  const answered = async (answer: string, citations: object[], extra: object = {}) => {
+    mockFetch({ ok: true, status: 200, body: { ...base, answer, citations, ...extra } });
+    const user = await ask();
+    await screen.findByRole("button", { name: "Copy answer" });
+    return { user, text: screen.getByRole("region", { name: "Answer" }) };
+  };
+
+  it("strikes them out and names the replacement where each is first named", async () => {
+    const { text } = await answered("IPC 420 covered cheating.\n\nIPC 420 is gone.", [old, current]);
+    expect([...text.querySelectorAll("p s")].map((s) => s.textContent)).toEqual(["IPC 420", "IPC 420"]);
+    expect(text).toHaveTextContent("IPC 420 (repealed, now BNS 318) covered cheating.");
+    expect(text).toHaveTextContent("IPC 420 (repealed) is gone.");
+    expect(text.textContent!.match(/now BNS 318/g)).toHaveLength(1);
+  });
+
+  it("goes to the replacement's card from its name", async () => {
+    const { user, text } = await answered("IPC 420 covered cheating.", [old, current]);
+    await user.click(within(text).getByRole("button", { name: "BNS 318" }));
+    expect(screen.getByRole("button", { name: /Bharatiya Nyaya Sanhita, Section 318/ })).toHaveFocus();
+  });
+
+  it("knows a repealed Provision from the one that replaced it, though it is not cited", async () => {
+    const { text } = await answered("IPC 420 covered cheating.", [current]);
+    expect(text.querySelector("p s")).toHaveTextContent("IPC 420");
+    expect(text).toHaveTextContent("IPC 420 (repealed, now BNS 318)");
+    expect(within(text).queryByRole("button", { name: "IPC 420" })).not.toBeInTheDocument();
+  });
+
+  it("says it in Hindi in a Hindi answer", async () => {
+    const { text } = await answered("IPC 420 धोखाधड़ी पर था।", [old, current], { answer_language: "hi" });
+    expect(text).toHaveTextContent("IPC 420 (निरस्त, अब BNS 318)");
+  });
+
+  it("leaves an in-force mention as it was", async () => {
+    const { text } = await answered("BNS 318 covers cheating.", [current]);
+    expect(text.querySelector("p s")).toBeNull();
+  });
+});
+
+describe("Back to answer", () => {
+  const jumped = async () => {
+    mockFetch({ ok: true, status: 200, body: { ...base, answer: "See Article 14." } });
+    const user = await ask();
+    const mention = await screen.findByRole("button", { name: "Article 14" });
+    expect(screen.queryByRole("button", { name: "Back to answer" })).not.toBeInTheDocument();
+    await user.click(mention);
+    return { user, mention };
+  };
+
+  it("returns to the mention that was followed", async () => {
+    const { user, mention } = await jumped();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Back to answer" })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(mention).toHaveFocus();
+    expect(screen.queryByRole("button", { name: "Back to answer" })).not.toBeInTheDocument();
+  });
+
+  it("goes away on Stay here, leaving focus on the card", async () => {
+    const { user } = await jumped();
+    await user.click(screen.getByRole("button", { name: "Stay here" }));
+    expect(screen.queryByRole("button", { name: "Back to answer" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Constitution of India, Article 14/ })).toHaveFocus();
+  });
+
+  it("is not offered when a card is opened where it is", async () => {
+    mockFetch({ ok: true, status: 200, body: base });
+    const user = await ask();
+    await user.click(await screen.findByRole("button", { name: /Constitution of India, Article 14/ }));
+    expect(screen.queryByRole("button", { name: "Back to answer" })).not.toBeInTheDocument();
   });
 });

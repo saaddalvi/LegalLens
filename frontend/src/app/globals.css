@@ -88,6 +88,11 @@
   scroll-padding-bottom: 5rem;
 }
 
+/* On a page that scrolls as a whole, the same for the bar that leads back to the answer. */
+html:has([data-return-bar]) {
+  scroll-padding-bottom: 5rem;
+}
+
 body {
   background: var(--paper);
   color: var(--ink);
