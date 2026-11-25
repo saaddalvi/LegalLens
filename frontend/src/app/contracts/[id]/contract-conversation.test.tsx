@@ -3,15 +3,19 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import ContractView from "./contract-view";
 import ContractConversation from "./contract-conversation";
+import { visit } from "./fake-address";
+import { frame } from "./fake-backend";
 import type { ContractAnswer, ConversationTurn } from "@/lib/contract-types";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock("next/navigation", async () => ({
+  usePathname: (await import("./fake-address")).usePathname,
+  useRouter: () => ({ push: vi.fn() }),
+}));
 
 const getToken = vi.fn();
 vi.mock("@clerk/nextjs", () => ({ useAuth: () => ({ getToken }) }));
 
 const enc = new TextEncoder();
-const frame = (name: string, data: unknown) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`;
 const stage = (id: string, label: string) => frame("stage", { id, label });
 
 const ANSWER: ContractAnswer = {
@@ -66,7 +70,10 @@ function controlled() {
 const where = (text: string) =>
   screen.getByText((_, el) => el?.tagName === "SPAN" && el.classList.contains("text-sm") && el.textContent === text);
 
-beforeEach(() => getToken.mockResolvedValue("tok"));
+beforeEach(() => {
+  getToken.mockResolvedValue("tok");
+  visit("/contracts/c1");
+});
 afterEach(() => {
   vi.unstubAllGlobals();
   getToken.mockReset();
@@ -100,6 +107,20 @@ const DETAIL = {
 };
 const json = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
 
+// A conversation on its own: a new one, or a saved one to be loaded.
+function renderConversation({ contractId = "c1", conversationId }: { contractId?: string; conversationId?: string } = {}) {
+  render(
+    <ContractConversation
+      contractId={contractId}
+      conversationId={conversationId}
+      onSaved={() => {}}
+      onMissing={() => {}}
+      onGone={() => {}}
+      onStartNew={() => {}}
+    />,
+  );
+}
+
 it("shows the most recent conversation in order after a reload, with each answer's sources", async () => {
   const user = userEvent.setup();
   const fetchFn = vi
@@ -110,7 +131,7 @@ it("shows the most recent conversation in order after a reload, with each answer
   vi.stubGlobal("fetch", fetchFn);
   render(<ContractView id="c1" />);
   await screen.findByText("The deposit is Rs. 1,00,000.");
-  const queries = screen.getAllByText(/^(What is the deposit\?|And the notice period\?)$/).map((e) => e.textContent);
+  const queries = screen.getAllByText("You asked:").map((e) => e.parentElement!.textContent);
   expect(queries).toEqual(["You asked: What is the deposit?", "You asked: And the notice period?"]);
   // Answers are shown at once (no reveal), each with its Trust label and Clause reference.
   expect(screen.getByText("The deposit is Rs. 1,00,000.")).toBeInTheDocument();
@@ -161,7 +182,7 @@ it("starts a conversation with the first Query and keeps the later ones in it", 
     .mockResolvedValueOnce(sseResponse([named, frame("answer", ANSWER)]))
     .mockResolvedValueOnce(sseResponse([named, frame("answer", answer({ answer: "Rs. 20,000." }))]));
   vi.stubGlobal("fetch", fetchFn);
-  render(<ContractConversation contractId="c1" initial={[]} />);
+  renderConversation();
   const sent = (n: number) => JSON.parse(fetchFn.mock.calls[n][1].body);
 
   await typeAndAsk(user, "What is the deposit?");
@@ -179,7 +200,7 @@ it("streams the Stages of each Query, then shows its answer", async () => {
   const second = controlled();
   const fetchFn = vi.fn().mockResolvedValueOnce(first.res).mockResolvedValueOnce(second.res);
   vi.stubGlobal("fetch", fetchFn);
-  render(<ContractConversation contractId="c1" initial={[]} />);
+  renderConversation();
 
   await typeAndAsk(user, "What is the deposit?");
   const [url, init] = fetchFn.mock.calls[0];
@@ -216,7 +237,7 @@ it("cancels the Query in flight when a new one is asked", async () => {
     .mockResolvedValueOnce(slow.res)
     .mockResolvedValueOnce(sseResponse([stage("scope_check", "Checking your question"), frame("answer", answer({ answer: "Rs. 20,000." }))]));
   vi.stubGlobal("fetch", fetchFn);
-  render(<ContractConversation contractId="c1" initial={[]} />);
+  renderConversation();
 
   await typeAndAsk(user, "What is the deposit?");
   slow.push(stage("scope_check", "Checking your question"));
@@ -239,7 +260,7 @@ it("explains a failed Query, names the Stage that failed and tries again", async
     .mockResolvedValueOnce(sseResponse([stage("generation", "Writing the answer"), frame("error", { stage: "generation", message: "x" })]))
     .mockResolvedValueOnce(sseResponse([frame("answer", ANSWER)]));
   vi.stubGlobal("fetch", fetchFn);
-  render(<ContractConversation contractId="c1" initial={[]} />);
+  renderConversation();
 
   await typeAndAsk(user, "What is the deposit?");
   expect(await screen.findByRole("alert")).toHaveTextContent(/unavailable/i);
@@ -254,24 +275,26 @@ it("says a deleted conversation is gone, and Try again starts a new one", async 
   const user = userEvent.setup();
   const fetchFn = vi
     .fn()
+    .mockResolvedValueOnce(json(TURNS.slice(0, 1)))
     .mockResolvedValueOnce({ ok: false, status: 404 })
     .mockResolvedValueOnce(
       sseResponse([frame("conversation", { id: "new-1", title: "And the rent?" }), frame("answer", answer({ answer: "Rs. 20,000." }))]),
     );
   vi.stubGlobal("fetch", fetchFn);
-  render(<ContractConversation contractId="c1" conversationId="gone" initial={TURNS.slice(0, 1)} />);
+  renderConversation({ conversationId: "gone" });
+  await screen.findByText("The deposit is Rs. 1,00,000.");
   await typeAndAsk(user, "And the rent?");
   expect(await screen.findByRole("alert")).toHaveTextContent(/could not find that conversation/i);
   expect(screen.queryByText("What is the deposit?")).not.toBeInTheDocument(); // its turns went with it
   await user.click(screen.getByRole("button", { name: "Try again" }));
   expect(await screen.findByText("Rs. 20,000.")).toBeInTheDocument();
-  expect(JSON.parse(fetchFn.mock.calls[1][1].body)).toEqual({ query: "And the rent?" });
+  expect(JSON.parse(fetchFn.mock.calls[2][1].body)).toEqual({ query: "And the rent?" });
 });
 
 it("tells the user a rate limit or an unknown Contract plainly", async () => {
   const user = userEvent.setup();
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
-  render(<ContractConversation contractId="gone" initial={[]} />);
+  renderConversation({ contractId: "gone" });
   await typeAndAsk(user, "What is the deposit?");
   expect(await screen.findByRole("alert")).toHaveTextContent(/could not find that contract/i);
 });
@@ -289,7 +312,7 @@ it("carries an unrelated Query to the asking screen and offers the suggested que
     redirect_to_ask: true,
   });
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(sseResponse([frame("answer", refusal)])));
-  render(<ContractConversation contractId="c1" initial={[]} />);
+  renderConversation();
   await typeAndAsk(user, "What is the punishment for murder?");
   expect(await screen.findByText(/use Ask a question/)).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Ask this on the Ask a question page" })).toHaveAttribute(
@@ -307,7 +330,7 @@ it("marks a Hindi Query's Stages and answer as Hindi, with the Clause text kept 
     "fetch",
     vi.fn().mockResolvedValue(sseResponse([stage("scope_check", "आपके प्रश्न की जाँच हो रही है"), frame("answer", hindi)])),
   );
-  render(<ContractConversation contractId="c1" initial={[]} />);
+  renderConversation();
   await typeAndAsk(user, "जमा राशि कितनी है?");
   const text = await screen.findByText("जमा राशि ₹1,00,000 है।");
   expect(text.closest("[lang]")).toHaveAttribute("lang", "hi");
@@ -320,7 +343,7 @@ it("says when the daily limit on questions resets", async () => {
     "fetch",
     vi.fn().mockResolvedValue({ ok: false, status: 429, headers: new Headers({ "Retry-After": "7200", "X-Limit-Scope": "daily" }) }),
   );
-  render(<ContractConversation contractId="c1" initial={[]} />);
+  renderConversation();
   await typeAndAsk(user, "What is the deposit?");
   const alert = await screen.findByRole("alert");
   expect(alert).toHaveTextContent(/limit of questions about contracts for today/i);
@@ -333,7 +356,7 @@ it("keeps the short wait message for the per-minute limit", async () => {
     "fetch",
     vi.fn().mockResolvedValue({ ok: false, status: 429, headers: new Headers({ "Retry-After": "30" }) }),
   );
-  render(<ContractConversation contractId="c1" initial={[]} />);
+  renderConversation();
   await typeAndAsk(user, "What is the deposit?");
   expect(await screen.findByRole("alert")).toHaveTextContent(/too many questions/i);
 });
@@ -348,13 +371,15 @@ it("says when the daily limit resets even when little time is left before midnig
       headers: new Headers({ "Retry-After": "90", "X-Limit-Scope": "daily" }),
     }),
   );
-  render(<ContractConversation contractId="c1" initial={[]} />);
+  renderConversation();
   await typeAndAsk(user, "What is the deposit?");
   expect(await screen.findByRole("alert")).toHaveTextContent(/2 minutes/i);
 });
 
-it("puts an answer's headings under the conversation's", () => {
-  render(<ContractConversation contractId="c1" initial={TURNS.slice(0, 1)} />);
+it("puts an answer's headings under the conversation's", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(json(DETAIL)).mockResolvedValueOnce(json(TURNS.slice(0, 1))));
+  render(<ContractView id="c1" />);
+  await screen.findByText("The deposit is Rs. 1,00,000.");
   const level = (name: string | RegExp) => screen.getByRole("heading", { name }).tagName;
   expect(level("Ask about this Contract")).toBe("H2");
   expect(level("Answer")).toBe("H3");

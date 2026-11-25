@@ -10,6 +10,12 @@ import { BUTTON_CLASS } from "./ask-box";
 
 export const clauseId = (number: string) => `clause-${number}`;
 
+// A click that asks the browser to open a link elsewhere, and is left to it.
+export const isModifiedClick = (e: React.MouseEvent) => e.metaKey || e.ctrlKey || e.shiftKey || e.altKey;
+
+// What a rewrite of the current history entry must keep: whether a Clause link added it.
+export const jumpState = () => ({ clauseJump: window.history.state?.clauseJump });
+
 // Scrolls a part of the page to the top and moves focus to its heading.
 export function jumpTo(target: HTMLElement) {
   target.scrollIntoView?.({ block: "start" });
@@ -32,12 +38,20 @@ const Context = createContext<Jumps | null>(null);
 
 export default function ClauseJumps({
   numbers,
+  view,
   children,
 }: {
   numbers: string[];
+  // Changes when the page shows something else, which ends any way back into what it showed.
+  view?: number;
   children: React.ReactNode;
 }) {
   const [jump, setJump] = useState<Jump | null>(null);
+  const [seen, setSeen] = useState(view);
+  if (view !== seen) {
+    setSeen(view);
+    setJump(null);
+  }
 
   function restore(from: HTMLElement) {
     setJump(null);
@@ -125,8 +139,7 @@ export function ClauseLink({
       aria-label={label}
       className={className}
       onClick={(e) => {
-        // A modified click opens the link elsewhere, as for any link.
-        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        if (isModifiedClick(e)) return;
         e.preventDefault();
         jumps.go(number, e.currentTarget);
       }}

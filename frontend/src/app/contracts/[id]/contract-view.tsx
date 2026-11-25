@@ -6,18 +6,16 @@ import { useAuth } from "@clerk/nextjs";
 import { useEffect, useLayoutEffect, useState } from "react";
 import { API_URL } from "@/lib/api-url";
 import { contractFacts } from "@/lib/contract-facts";
-import type { ContractDetail, ConversationTurn } from "@/lib/contract-types";
-import ClauseJumps, { ClauseItem, jumpTo } from "../../clause-links";
+import type { ContractDetail, ConversationRef } from "@/lib/contract-types";
+import ClauseJumps, { ClauseItem, isModifiedClick, jumpTo } from "../../clause-links";
 import BriefView, { Section } from "./contract-brief";
 import DeleteContract from "../delete-contract";
 import { noteDeleted } from "../deleted-notice";
 import ContractConversation from "./contract-conversation";
+import { NEW, useOpenConversation } from "./conversation-address";
+import ConversationList from "./conversation-list";
 
-// turns are those of the conversation on screen: the Contract's most recent one, if it has any.
-type State =
-  | { contract: ContractDetail; conversationId?: string; turns: ConversationTurn[] }
-  | { error: string }
-  | null;
+type State = { contract: ContractDetail } | { error: string } | null;
 
 function failure(status: number | null): string {
   if (status === 404) return "We could not find that Contract. It may have been deleted.";
@@ -29,12 +27,12 @@ function failure(status: number | null): string {
 // Follows an in-page link by scrolling and moving focus. A modified click is left to the browser.
 function jumpOnClick(e: React.MouseEvent, id: string) {
   const target = document.getElementById(id);
-  if (!target || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  if (!target || isModifiedClick(e)) return;
   e.preventDefault();
   jumpTo(target);
 }
 
-// The parts of this Contract's page, in order, as links under its title.
+// The parts of this Contract's page, in order, as links.
 function PageIndex({ brief }: { brief: ContractDetail["brief"] }) {
   const flags = brief?.flagged_clauses.length ?? 0;
   const entries = [
@@ -45,8 +43,8 @@ function PageIndex({ brief }: { brief: ContractDetail["brief"] }) {
     ["contract-text", "The Contract"],
   ].filter((e): e is string[] => Array.isArray(e));
   return (
-    <nav aria-label="On this page" className="mt-2 border-y border-rule py-1">
-      <ul className="flex flex-wrap gap-x-5">
+    <nav aria-label="On this page" className="border-y border-rule py-1">
+      <ul className="flex flex-wrap gap-x-5 xl:flex-col">
         {entries.map(([id, label]) => (
           <li key={id}>
             <a
@@ -88,8 +86,9 @@ function useTabTitle(name: string | null) {
   }, [name]);
 }
 
-// An index, the Contract brief, the most recent Contract conversation (saved Queries and
-// answers, and the box for the next one), the Contract's Clauses verbatim, and then Delete.
+// An index, the Contract brief, the open Contract conversation (saved Queries and answers, and
+// the box for the next one), the Contract's Clauses verbatim, and then Delete. The index also
+// lists the conversations; the address says which one is open.
 export default function ContractView({ id }: { id: string }) {
   const { getToken } = useAuth();
   const router = useRouter();
@@ -100,26 +99,13 @@ export default function ContractView({ id }: { id: string }) {
     (async () => {
       try {
         const token = await getToken();
-        const get = (path: string) =>
-          fetch(`${API_URL}${path}`, {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-            signal: controller.signal,
-          });
-        const path = `/contracts/${encodeURIComponent(id)}`;
-        const res = await get(path);
+        const res = await fetch(`${API_URL}/contracts/${encodeURIComponent(id)}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          signal: controller.signal,
+        });
         if (controller.signal.aborted) return;
         if (!res.ok) return setState({ error: failure(res.status) });
-        const contract = (await res.json()) as ContractDetail;
-        const latest = contract.conversations?.[0];
-        let turns: ConversationTurn[] = [];
-        if (latest) {
-          const saved = await get(`${path}/conversations/${encodeURIComponent(latest.id)}`);
-          if (controller.signal.aborted) return;
-          // A 404 here is not the Contract's, which has just loaded.
-          if (!saved.ok) return setState({ error: failure(saved.status === 404 ? null : saved.status) });
-          turns = (await saved.json()) as ConversationTurn[];
-        }
-        setState({ contract, conversationId: latest?.id, turns });
+        setState({ contract: (await res.json()) as ContractDetail });
       } catch {
         if (!controller.signal.aborted) setState({ error: failure(null) });
       }
@@ -127,8 +113,52 @@ export default function ContractView({ id }: { id: string }) {
     return () => controller.abort();
   }, [id, getToken]);
 
-  const title = state && "contract" in state ? state.contract.title : null;
-  useTabTitle(title && `${title} | LegalLens`);
+  const loaded = state && "contract" in state ? state.contract : null;
+  useTabTitle(loaded && `${loaded.title} | LegalLens`);
+  const conversation = useOpenConversation(id, loaded ? (loaded.conversations[0]?.id ?? null) : undefined);
+
+  // The list is the Contract's, so what happens to a conversation is written to both.
+  function relist(change: (list: ContractDetail["conversations"]) => ContractDetail["conversations"]) {
+    setState((s) =>
+      s && "contract" in s
+        ? { contract: { ...s.contract, conversations: change(s.contract.conversations) } }
+        : s,
+    );
+  }
+
+  // A Query was answered and saved: its conversation is now the latest, and a new one has an id.
+  function saved(ref: ConversationRef) {
+    const now = new Date().toISOString();
+    relist((list) => {
+      const before = list.find((c) => c.id === ref.id);
+      return [
+        { created_at: now, ...before, ...ref, updated_at: now },
+        ...list.filter((c) => c.id !== ref.id),
+      ];
+    });
+    conversation.changeId(NEW, ref.id);
+  }
+
+  const unlist = (conversationId: string) => relist((list) => list.filter((c) => c.id !== conversationId));
+
+  // Deleted: if it was the open one, the latest of those left takes its place.
+  function deleted(conversationId: string) {
+    unlist(conversationId);
+    conversation.drop(conversationId);
+  }
+
+  // Found to be gone when asked in: the page stays, now on a new conversation, so the
+  // question can be asked again.
+  function gone(conversationId: string) {
+    unlist(conversationId);
+    conversation.changeId(conversationId, NEW);
+  }
+
+  function show(conversationId: string) {
+    conversation.show(conversationId);
+    const section = document.getElementById("ask");
+    if (section) jumpTo(section);
+  }
 
   if (state === null) return <p className="text-muted">Loading…</p>;
   if ("error" in state)
@@ -142,8 +172,8 @@ export default function ContractView({ id }: { id: string }) {
     );
   const { contract } = state;
   return (
-    <ClauseJumps key={contract.id} numbers={contract.clauses.map((c) => c.number)}>
-      <article className="flex flex-col gap-12">
+    <ClauseJumps key={contract.id} numbers={contract.clauses.map((c) => c.number)} view={conversation.key}>
+      <article className="relative flex flex-col gap-12">
         <header className="flex flex-col gap-2">
           <Link href="/contracts" className="inline-flex min-h-11 items-center self-start text-sm text-muted underline underline-offset-4 hover:text-ink">
             Your Contracts
@@ -158,10 +188,39 @@ export default function ContractView({ id }: { id: string }) {
           >
             इस Contract के बारे में हिंदी में भी पूछ सकते हैं
           </a>
-          <PageIndex brief={contract.brief} />
+          {/* The page's index: under the title, or on wide screens in the empty margin left of
+              the page column, where it stays in view as the page scrolls. */}
+          <div className="mt-2 xl:absolute xl:inset-y-0 xl:right-full xl:mt-0 xl:mr-8 xl:w-56 2xl:mr-12 2xl:w-72">
+            {/* The padding keeps focus rings from being clipped by the scrolling box. */}
+            <div className="flex flex-col gap-4 xl:sticky xl:top-2 xl:-m-2 xl:max-h-[calc(100dvh-1rem)] xl:overflow-y-auto xl:p-2">
+              <PageIndex brief={contract.brief} />
+              <ConversationList
+                contractId={contract.id}
+                conversations={contract.conversations}
+                openId={conversation.id}
+                onOpen={show}
+                onDeleted={deleted}
+              />
+            </div>
+          </div>
         </header>
         {contract.brief && <BriefView brief={contract.brief} />}
-        <ContractConversation contractId={contract.id} conversationId={state.conversationId} initial={state.turns} />
+        <section id="ask" aria-labelledby="conversation" className="flex scroll-mt-4 flex-col gap-8">
+          <h2 id="conversation" tabIndex={-1} data-jump-focus className="condensed self-start text-2xl">
+            Ask about this Contract
+          </h2>
+          {conversation.id && (
+            <ContractConversation
+              key={conversation.key}
+              contractId={contract.id}
+              conversationId={conversation.id === NEW ? undefined : conversation.id}
+              onSaved={saved}
+              onMissing={unlist}
+              onGone={gone}
+              onStartNew={() => show(NEW)}
+            />
+          )}
+        </section>
         <Section id="contract-text" title="The Contract, Clause by Clause">
           <ol data-clause-list className="flex flex-col gap-4">
             {contract.clauses.map((c) => (

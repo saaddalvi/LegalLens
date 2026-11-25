@@ -2,9 +2,13 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ContractView from "./contract-view";
+import { visit } from "./fake-address";
 
 const push = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+vi.mock("next/navigation", async () => ({
+  usePathname: (await import("./fake-address")).usePathname,
+  useRouter: () => ({ push }),
+}));
 
 const getToken = vi.fn();
 vi.mock("@clerk/nextjs", () => ({ useAuth: () => ({ getToken }) }));
@@ -26,7 +30,10 @@ const CONTRACT = {
 const where = (text: string) =>
   screen.getByText((_, el) => el?.tagName === "SPAN" && el.classList.contains("text-sm") && el.textContent === text);
 
-beforeEach(() => getToken.mockResolvedValue("tok"));
+beforeEach(() => {
+  getToken.mockResolvedValue("tok");
+  visit("/contracts/c1");
+});
 afterEach(() => vi.unstubAllGlobals());
 
 function stub(res: { ok: boolean; status: number; json?: () => unknown }) {
@@ -272,7 +279,6 @@ const LINKED = {
 
 describe("Clause links", () => {
   beforeEach(() => {
-    window.history.replaceState(null, "", "/");
     Element.prototype.scrollIntoView = vi.fn();
   });
 
@@ -300,9 +306,11 @@ describe("Clause links", () => {
   });
 
   it("opens a hash link on the Clause it names, once the Contract has loaded", async () => {
-    window.history.replaceState(null, "", "/#clause-7(a)");
+    visit("/contracts/c1#clause-7(a)");
     await renderLinked();
     await waitFor(() => expect(target("7(a)")).toHaveAttribute("data-current"));
+    // The move to the conversation's address keeps the hash.
+    expect(window.location.pathname + window.location.hash).toBe("/contracts/c1/conversations/new#clause-7(a)");
     expect(screen.queryByRole("button", { name: /^Back to/ })).not.toBeInTheDocument();
   });
 

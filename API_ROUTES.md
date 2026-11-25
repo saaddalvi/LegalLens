@@ -19,7 +19,7 @@ Reference for the backend HTTP API (FastAPI, `backend/src/legallens/main.py`). T
 | DELETE | `/contracts/{id}` | Delete a Contract and everything of it | No | Contract list and page |
 | POST | `/contracts/{id}/ask/stream` | Answer a Query about a Contract in a Contract conversation, streamed | Yes, and daily cap | `/contracts/[id]` page |
 | GET | `/contracts/{id}/conversations/{cid}` | The turns of one Contract conversation | No | `/contracts/[id]` page |
-| DELETE | `/contracts/{id}/conversations/{cid}` | Delete one Contract conversation | No | Not used by the frontend yet |
+| DELETE | `/contracts/{id}/conversations/{cid}` | Delete one Contract conversation | No | Conversation list on the Contract page |
 | POST | `/webhooks/clerk` | Clerk's `user.deleted`: delete the user's data | No (Svix signature) | Clerk |
 
 - **Base URL:** `http://localhost:8000` locally; the frontend reads it from `NEXT_PUBLIC_API_URL`.
@@ -301,6 +301,7 @@ curl -N -X POST localhost:8000/ask/stream \
 | Frontend file | Calls |
 |---|---|
 | `frontend/src/app/ask/ask-screen.tsx` | `POST /ask/stream` |
-| `frontend/src/app/contracts/[id]/contract-view.tsx` | `GET /contracts/{id}`, then `GET .../conversations/{cid}` for the most recent conversation |
-| `frontend/src/app/contracts/[id]/contract-conversation.tsx` | `POST /contracts/{id}/ask/stream` |
+| `frontend/src/app/contracts/[id]/contract-view.tsx` | `GET /contracts/{id}` |
+| `frontend/src/app/contracts/[id]/contract-conversation.tsx` | `GET .../conversations/{cid}` for the open conversation, `POST /contracts/{id}/ask/stream` |
+| `frontend/src/app/contracts/confirm-delete.tsx` | `DELETE /contracts/{id}`, `DELETE .../conversations/{cid}` |
 | `frontend/src/lib/law-api.ts` | `GET /acts`, `GET /acts/{act}`, `GET /provision/{act}/{number}` (server-side, cached for hours; a 404 is treated as "not found" and any other failure throws, uncached) |

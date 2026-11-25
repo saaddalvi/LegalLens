@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { Answer, Refusal } from "../../answer-view";
 import { BUTTON_CLASS, FIELD_CLASS } from "../../ask-box";
 import type { Stage } from "../../stage-list";
@@ -11,6 +11,9 @@ import { detectedLang, errorMessage } from "@/lib/ask-stream";
 import { dailyCapMessage, isDailyCap, retryAfterSeconds } from "@/lib/daily-cap";
 import type { ContractAnswer, ConversationRef, ConversationTurn } from "@/lib/contract-types";
 import { readEvents } from "@/lib/sse";
+import { conversationHref } from "./conversation-address";
+
+const MISSING = "We could not find that conversation. It may have been deleted.";
 
 // `fresh` marks an answer that arrived while this page was open, which is revealed word by word;
 // one loaded with the page is shown at once.
@@ -25,24 +28,72 @@ type Pending = {
 
 // The saved Queries and answers of one Contract conversation, and the box for the next Query.
 // Without a conversationId the first Query to be answered starts one. Each Query streams its
-// Stages as /ask does; a new Query cancels one still being answered.
+// Stages as /ask does; a new Query cancels one still being answered, and so does leaving.
 export default function ContractConversation({
   contractId,
   conversationId,
-  initial,
+  onSaved,
+  onMissing,
+  onGone,
+  onStartNew,
 }: {
   contractId: string;
+  // Read once, on arrival: a conversation that gets its id here is not loaded again.
   conversationId?: string;
-  initial: ConversationTurn[];
+  // A Query was answered and saved to this conversation.
+  onSaved: (conversation: ConversationRef) => void;
+  // The conversation to be loaded is no longer there.
+  onMissing: (conversationId: string) => void;
+  // A Query found this conversation gone; it carries on as a new one.
+  onGone: (conversationId: string) => void;
+  onStartNew: () => void;
 }) {
   const { getToken } = useAuth();
-  const [turns, setTurns] = useState<Shown[]>(() => initial.map((t) => ({ ...t, fresh: false })));
+  // null while a saved conversation's turns are on their way.
+  const [turns, setTurns] = useState<Shown[] | null>(() => (conversationId ? null : []));
+  // Why the turns could not be loaded. status is null when the service was not reached.
+  const [loadError, setLoadError] = useState<{ status: number | null } | null>(null);
+  const [loads, setLoads] = useState(0); // counts up on each "Try again"
   const [pending, setPending] = useState<Pending | null>(null);
   const [query, setQuery] = useState("");
   const running = useRef<AbortController | null>(null);
   const conversationIdRef = useRef(conversationId); // set by the backend once one is started
 
-  useEffect(() => () => running.current?.abort(), []);
+  // Leaving, for another conversation or another page, cancels an answer still being written.
+  // Next may keep the page left and show it again, so its half-done Stages go too.
+  useLayoutEffect(
+    () => () => {
+      running.current?.abort();
+      setPending((p) => (p && p.error === null ? null : p));
+    },
+    [],
+  );
+
+  const unloaded = turns === null;
+  const missing = useEffectEvent(onMissing);
+  useEffect(() => {
+    const saved = conversationIdRef.current;
+    if (!unloaded || !saved) return;
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch(
+          `${API_URL}${conversationHref(contractId, saved)}`,
+          { headers: token ? { Authorization: `Bearer ${token}` } : {}, signal: controller.signal },
+        );
+        if (controller.signal.aborted) return;
+        if (res.status === 404) missing(saved);
+        if (!res.ok) return setLoadError({ status: res.status });
+        const loaded = (await res.json()) as ConversationTurn[];
+        setTurns(loaded.map((t) => ({ ...t, fresh: false })));
+        setLoadError(null);
+      } catch {
+        if (!controller.signal.aborted) setLoadError({ status: null });
+      }
+    })();
+    return () => controller.abort();
+  }, [unloaded, loads, contractId, getToken]);
 
   async function ask(q: string) {
     running.current?.abort(); // a new Query cancels the one in flight
@@ -69,9 +120,10 @@ export default function ContractConversation({
       if (res.status === 404 && conversationIdRef.current) {
         // Deleted elsewhere, perhaps with its Contract: the next try starts a new one, and says
         // so if it was the Contract.
+        onGone(conversationIdRef.current);
         conversationIdRef.current = undefined;
         setTurns([]);
-        return fail("We could not find that conversation. It may have been deleted. Try again to start a new one.");
+        return fail(`${MISSING} Try again to start a new one.`);
       }
       if (!res.ok) {
         return fail(
@@ -91,9 +143,10 @@ export default function ContractConversation({
           setPending((p) => p && { ...p, stages: [...p.stages, data as Stage] });
         } else if (name === "conversation") {
           conversationIdRef.current = (data as ConversationRef).id;
+          onSaved(data as ConversationRef);
         } else if (name === "answer") {
           finished = true;
-          setTurns((t) => [...t, { query: q, response: data as ContractAnswer, fresh: true }]);
+          setTurns((t) => [...(t ?? []), { query: q, response: data as ContractAnswer, fresh: true }]);
           setPending(null);
         } else if (name === "error") {
           finished = true;
@@ -115,11 +168,29 @@ export default function ContractConversation({
   }
 
   const loading = pending !== null && pending.error === null;
+  if (loadError) {
+    const gone = loadError.status === 404;
+    function retry() {
+      setLoadError(null);
+      setLoads((n) => n + 1);
+    }
+    return (
+      <div role="alert" className="flex flex-col items-start gap-3 border-l-2 border-redtape pl-4">
+        <p className="text-redtape">{gone ? MISSING : errorMessage(loadError.status)}</p>
+        <button type="button" onClick={gone ? onStartNew : retry} className={BUTTON_CLASS}>
+          {gone ? "Start a new conversation" : "Try again"}
+        </button>
+      </div>
+    );
+  }
+  if (turns === null) return <p className="text-muted">Loading…</p>;
   return (
-    <section id="ask" aria-labelledby="conversation" className="flex scroll-mt-4 flex-col gap-8">
-      <h2 id="conversation" tabIndex={-1} data-jump-focus className="condensed self-start text-2xl">
-        Ask about this Contract
-      </h2>
+    <>
+      {turns.length === 0 && !pending && (
+        <p className="measure text-muted">
+          Your first question starts a new conversation, answered without your other conversations.
+        </p>
+      )}
 
       {turns.length > 0 && (
         <ol className="flex flex-col gap-10">
@@ -181,6 +252,6 @@ export default function ContractConversation({
           {loading ? "Ask this instead" : "Ask"}
         </button>
       </form>
-    </section>
+    </>
   );
 }
