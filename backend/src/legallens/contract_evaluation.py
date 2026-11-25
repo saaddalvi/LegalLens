@@ -279,6 +279,8 @@ def _upload(client: _Client, sample: SampleContract, sleep) -> dict:
 
 
 def _ask(client: _Client, contract_id: str, query: str, sleep) -> ContractAnswer:
+    """Asks with no `conversation_id`, so each case starts a Contract conversation of its own
+    and none sees another's turns."""
     data = _with_retries(
         lambda: _final_event(
             client.post(f"/contracts/{contract_id}/ask/stream", json={"query": query}),

@@ -79,6 +79,13 @@ class AskRequest(BaseModel):
         return v
 
 
+class ContractAskRequest(AskRequest):
+    """A Query about one Contract. Without `conversation_id` it starts a Contract
+    conversation; with it, it continues that one."""
+
+    conversation_id: str | None = None
+
+
 class AskResponse(BaseModel):
     response_type: ResponseType = "answer"
     refusal_reason: str | None = None
@@ -119,6 +126,20 @@ class ConversationTurn(BaseModel):
 
     query: str
     response: ContractAnswer
+
+
+class ConversationRef(BaseModel):
+    """A Contract conversation, named by its first Query."""
+
+    id: str
+    title: str
+
+
+class ConversationSummary(ConversationRef):
+    """A Contract conversation as listed on its Contract."""
+
+    created_at: datetime
+    updated_at: datetime  # when its latest Query was answered
 
 
 class BriefTerm(BaseModel):
@@ -170,6 +191,4 @@ class ContractDetail(ContractSummary):
     brief: ContractBrief | None = (
         None  # None for a Contract uploaded before briefs existed
     )
-    conversation: list[
-        ConversationTurn
-    ] = []  # the Queries after the brief, oldest first
+    conversations: list[ConversationSummary] = []  # the latest asked in first

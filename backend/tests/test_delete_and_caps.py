@@ -2,7 +2,6 @@
 
 These need a Postgres with pgvector (see the README) and skip without one."""
 
-import asyncio
 import base64
 import json
 import threading
@@ -21,6 +20,7 @@ from conftest import (
     auth_for,
     connect,
     parse_sse,
+    post_then_leave,
 )
 from fastapi.testclient import TestClient
 from svix.webhooks import Webhook
@@ -34,7 +34,14 @@ from legallens.rate_limit import DailyCaps
 
 SECRET = "whsec_" + base64.b64encode(b"test-signing-secret-bytes").decode()
 ID_NEVER = "00000000-0000-0000-0000-000000000000"
-TABLES = ["users", "contracts", "clauses", "contract_messages", "usage"]
+TABLES = [
+    "users",
+    "contracts",
+    "clauses",
+    "contract_conversations",
+    "contract_messages",
+    "usage",
+]
 
 
 class Clock:
@@ -97,8 +104,10 @@ def test_deleting_a_contract_removes_its_rows_from_every_table(make_client):
     c = make_client()
     cid = upload(c)
     assert ask_raw(c, cid).status_code == 200
+    assert ask_raw(c, cid).status_code == 200  # a second Contract conversation
     other = upload(c)
-    assert count("clauses") > 0 and count("contract_messages") == 4  # 2 briefs + a turn
+    assert ask_raw(c, other).status_code == 200
+    assert count("clauses") > 0 and count("contract_conversations") == 3
     assert c.delete(f"/contracts/{cid}").status_code == 204
     assert c.get(f"/contracts/{cid}").status_code == 404
     assert [x["id"] for x in c.get("/contracts").json()] == [other]
@@ -107,9 +116,12 @@ def test_deleting_a_contract_removes_its_rows_from_every_table(make_client):
         assert conn.execute(
             "SELECT count(*) FROM clauses WHERE contract_id = %s", (cid,)
         ).fetchone() == (0,)
-        assert conn.execute(
-            "SELECT count(*) FROM contract_messages WHERE contract_id = %s", (cid,)
-        ).fetchone() == (0,)
+        for table in ["contract_conversations", "contract_messages"]:
+            assert conn.execute(
+                f"SELECT count(*) FROM {table} WHERE contract_id = %s", (cid,)
+            ).fetchone() == (0,)
+    assert count("contract_conversations") == 1  # the other Contract keeps its own
+    assert count("contract_messages") == 2
 
 
 def test_deleting_another_users_contract_is_404_and_changes_nothing(make_client):
@@ -184,7 +196,8 @@ def test_the_fifty_first_query_in_a_day_is_429_with_retry_after(make_client):
     r = ask_raw(c, cid)
     assert r.status_code == 429
     assert int(r.headers["Retry-After"]) == 12 * 3600
-    assert count("contract_messages") == 1 + 4  # nothing was saved for the refused one
+    assert count("contract_messages") == 4  # nothing was saved for the refused one
+    assert count("contract_conversations") == 2
 
 
 def test_caps_are_per_user_and_the_two_counters_are_separate(make_client):
@@ -247,60 +260,17 @@ def test_leaving_during_an_upload_still_consumes_the_cap(make_client):
 
     caps = DailyCaps(contracts=1, queries=50, clock=Clock(NOON))
     app = make_client(caps=caps, llm=Stuck()).app
-    sent = upload_then_leave(app, after=b"contract_check", on_left=release.set)
+    sent = post_then_leave(
+        app,
+        "/contracts/stream",
+        urlencode({"text": RENT}).encode(),
+        "application/x-www-form-urlencoded",
+        after=b"contract_check",
+        on_left=release.set,
+    )
     assert b"contract_check" in sent and b"event: answer" not in sent
     assert count("contracts") == 0
     assert upload_raw(make_client(caps=caps)).status_code == 429
-
-
-def upload_then_leave(app, *, after: bytes, on_left) -> bytes:
-    """Posts RENT to the app over raw ASGI and disconnects once `after` has been streamed,
-    which TestClient cannot do. Returns what was streamed."""
-    body = urlencode({"text": RENT}).encode()
-    headers = {
-        **auth_for("user_a"),
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Content-Length": str(len(body)),
-    }
-    scope = {
-        "type": "http",
-        "asgi": {"version": "3.0", "spec_version": "2.3"},
-        "http_version": "1.1",
-        "method": "POST",
-        "scheme": "http",
-        "path": "/contracts/stream",
-        "raw_path": b"/contracts/stream",
-        "query_string": b"",
-        "root_path": "",
-        "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
-        "client": ("test", 1),
-        "server": ("test", 80),
-    }
-    sent = bytearray()
-
-    async def run():
-        left = asyncio.Event()
-        requests = [{"type": "http.request", "body": body, "more_body": False}]
-
-        async def receive():
-            if requests:
-                return requests.pop()
-            await left.wait()
-            return {"type": "http.disconnect"}
-
-        async def send(message):
-            sent.extend(message.get("body", b""))
-            if after in sent:
-                left.set()
-
-        try:
-            await asyncio.wait_for(app(scope, receive, send), timeout=10)
-            await asyncio.sleep(0.1)  # lets the cancelled upload finish unwinding
-        finally:
-            on_left()
-
-    asyncio.run(run())
-    return bytes(sent)
 
 
 def test_the_count_resets_the_next_day(make_client):

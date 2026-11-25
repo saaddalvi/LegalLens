@@ -40,12 +40,17 @@ export type ContractAnswer = AskResponse & {
 };
 export type ConversationTurn = { query: string; response: ContractAnswer };
 
-// brief is null for a Contract uploaded before briefs existed. conversation is the Queries after
-// the brief, oldest first.
+// A Contract conversation, titled by its first Query. The `conversation` event of
+// POST /contracts/{id}/ask/stream is a ConversationRef.
+export type ConversationRef = { id: string; title: string };
+export type ConversationSummary = ConversationRef & { created_at: string; updated_at: string };
+
+// brief is null for a Contract uploaded before briefs existed. conversations come with the
+// latest asked in first; the turns of each are fetched from /contracts/{id}/conversations/{cid}.
 export type ContractDetail = ContractSummary & {
   clauses: ClauseOut[];
   brief: ContractBrief | null;
-  conversation: ConversationTurn[];
+  conversations: ConversationSummary[];
 };
 
 // The final `answer` event of POST /contracts/stream.

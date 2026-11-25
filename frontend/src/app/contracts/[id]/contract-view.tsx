@@ -5,13 +5,17 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import { API_URL } from "@/lib/api-url";
-import type { ContractDetail } from "@/lib/contract-types";
+import type { ContractDetail, ConversationTurn } from "@/lib/contract-types";
 import BriefView from "./contract-brief";
 import DeleteContract from "../delete-contract";
 import { noteDeleted } from "../deleted-notice";
 import ContractConversation from "./contract-conversation";
 
-type State = { contract: ContractDetail } | { error: string } | null;
+// turns are those of the conversation on screen: the Contract's most recent one, if it has any.
+type State =
+  | { contract: ContractDetail; conversationId?: string; turns: ConversationTurn[] }
+  | { error: string }
+  | null;
 
 function failure(status: number | null): string {
   if (status === 404) return "We could not find that Contract. It may have been deleted.";
@@ -20,8 +24,8 @@ function failure(status: number | null): string {
   return "The service is unavailable right now. Please try again shortly.";
 }
 
-// The Contract brief, the Contract conversation (saved Queries and answers, and the box for the
-// next one), then the Contract's Clauses verbatim.
+// The Contract brief, the most recent Contract conversation (saved Queries and answers, and the
+// box for the next one), then the Contract's Clauses verbatim.
 export default function ContractView({ id }: { id: string }) {
   const { getToken } = useAuth();
   const router = useRouter();
@@ -32,12 +36,26 @@ export default function ContractView({ id }: { id: string }) {
     (async () => {
       try {
         const token = await getToken();
-        const res = await fetch(`${API_URL}/contracts/${encodeURIComponent(id)}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-          signal: controller.signal,
-        });
+        const get = (path: string) =>
+          fetch(`${API_URL}${path}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            signal: controller.signal,
+          });
+        const path = `/contracts/${encodeURIComponent(id)}`;
+        const res = await get(path);
         if (controller.signal.aborted) return;
-        setState(res.ok ? { contract: (await res.json()) as ContractDetail } : { error: failure(res.status) });
+        if (!res.ok) return setState({ error: failure(res.status) });
+        const contract = (await res.json()) as ContractDetail;
+        const latest = contract.conversations?.[0];
+        let turns: ConversationTurn[] = [];
+        if (latest) {
+          const saved = await get(`${path}/conversations/${encodeURIComponent(latest.id)}`);
+          if (controller.signal.aborted) return;
+          // A 404 here is not the Contract's, which has just loaded.
+          if (!saved.ok) return setState({ error: failure(saved.status === 404 ? null : saved.status) });
+          turns = (await saved.json()) as ConversationTurn[];
+        }
+        setState({ contract, conversationId: latest?.id, turns });
       } catch {
         if (!controller.signal.aborted) setState({ error: failure(null) });
       }
@@ -77,7 +95,7 @@ export default function ContractView({ id }: { id: string }) {
         }}
       />
       {contract.brief && <BriefView brief={contract.brief} />}
-      <ContractConversation contractId={contract.id} initial={contract.conversation ?? []} />
+      <ContractConversation contractId={contract.id} conversationId={state.conversationId} initial={state.turns} />
       <h2 className="condensed text-xl">The Contract, Clause by Clause</h2>
       <ol className="flex flex-col gap-6">
         {contract.clauses.map((c) => (

@@ -6,6 +6,7 @@ what a reopened Contract shows."""
 
 import json
 import logging
+import threading
 
 import pytest
 from conftest import (
@@ -19,6 +20,7 @@ from conftest import (
     auth_for,
     connect,
     parse_sse,
+    post_then_leave,
 )
 from fastapi.testclient import TestClient
 from test_contracts import RENT, ContractLLM, Embedder1024
@@ -124,10 +126,30 @@ def upload(client, text=RENT) -> str:
     return events[-1][1]["id"]
 
 
-def ask(client, cid, query=ASK):
-    r = client.post(f"/contracts/{cid}/ask/stream", json={"query": query})
+def ask(client, cid, query=ASK, conversation=None):
+    """Asks in the given Contract conversation, or in a new one."""
+    body = {"query": query}
+    if conversation:
+        body["conversation_id"] = conversation
+    r = client.post(f"/contracts/{cid}/ask/stream", json=body)
     assert r.status_code == 200, r.text
     return parse_sse(r.text)
+
+
+def conversation_of(events) -> str:
+    """The id in the `conversation` event of an answered Query."""
+    [data] = [d for e, d in events if e == "conversation"]
+    return data["id"]
+
+
+def conversations(client, cid) -> list[dict]:
+    return client.get(f"/contracts/{cid}").json()["conversations"]
+
+
+def turns(client, cid, conversation) -> list[dict]:
+    r = client.get(f"/contracts/{cid}/conversations/{conversation}")
+    assert r.status_code == 200, r.text
+    return r.json()
 
 
 def final(events):
@@ -323,41 +345,75 @@ def test_a_made_up_citation_forces_one_rewrite(make_client):
 # --- the conversation is remembered ------------------------------------------------------------
 
 
-def test_each_query_and_answer_is_saved_and_a_reopened_contract_shows_them_in_order(
+def test_a_first_query_starts_a_conversation_and_names_it_before_the_answer(
     make_client,
 ):
     c = make_client()
     cid = upload(c)
-    ask(c, cid, "What is the deposit?")
-    ask(c, cid, "What is the rent?")
-    detail = c.get(f"/contracts/{cid}").json()
-    assert [t["query"] for t in detail["conversation"]] == [
+    events = ask(c, cid, "What is the deposit?")
+    assert [e for e, _ in events if e != "stage"] == ["conversation", "answer"]
+    assert events[-2][1] == {
+        "id": conversation_of(events),
+        "title": "What is the deposit?",
+    }
+    [listed] = conversations(c, cid)
+    assert listed["id"] == conversation_of(events)
+    assert listed["title"] == "What is the deposit?"
+    assert listed["created_at"] and listed["updated_at"]
+    [turn] = turns(c, cid, listed["id"])
+    assert turn["query"] == "What is the deposit?"
+    assert turn["response"] == final(events)
+
+
+def test_a_query_in_a_conversation_is_appended_to_it(make_client):
+    c = make_client()
+    cid = upload(c)
+    first = conversation_of(ask(c, cid, "What is the deposit?"))
+    events = ask(c, cid, "What is the rent?", first)
+    assert events[-2] == (
+        "conversation",
+        {"id": first, "title": "What is the deposit?"},  # still its first Query
+    )
+    assert [t["query"] for t in turns(c, cid, first)] == [
         "What is the deposit?",
         "What is the rent?",
     ]
-    first = detail["conversation"][0]["response"]
-    assert first["answer"] == "Plain answer to: What is the deposit?"
-    assert first["clause_references"][0]["number"] == "3"
-    assert first["trust_label"] == "contract_and_corpus"
-    assert detail["brief"] is not None  # the brief is still the first message
+    answered = turns(c, cid, first)[0]["response"]
+    assert answered["answer"] == "Plain answer to: What is the deposit?"
+    assert answered["clause_references"][0]["number"] == "3"
+    assert answered["trust_label"] == "contract_and_corpus"
+    [listed] = conversations(c, cid)
+    assert listed["updated_at"] > listed["created_at"]
+
+
+def test_conversations_are_listed_with_the_latest_asked_first(make_client):
+    c = make_client()
+    cid = upload(c)
+    older = conversation_of(ask(c, cid, "What is the deposit?"))
+    newer = conversation_of(ask(c, cid, "What is the rent?"))
+    assert [x["id"] for x in conversations(c, cid)] == [newer, older]
+    ask(c, cid, "And the notice period?", older)
+    assert [x["id"] for x in conversations(c, cid)] == [older, newer]
 
 
 def test_a_refusal_is_part_of_the_saved_conversation(make_client):
     c = make_client(llm=ConversationLLM(scope=ContractScope(category="unrelated")))
     cid = upload(c)
-    ask(c, cid, "Tell me a joke")
-    turn = c.get(f"/contracts/{cid}").json()["conversation"][0]
+    conversation = conversation_of(ask(c, cid, "Tell me a joke"))
+    [turn] = turns(c, cid, conversation)
     assert turn["query"] == "Tell me a joke"
     assert turn["response"]["response_type"] == "refusal"
     assert turn["response"]["redirect_to_ask"] is True
 
 
-def test_a_contract_with_no_queries_has_an_empty_conversation(make_client):
+def test_a_contract_with_no_queries_has_no_conversation_but_has_its_brief(make_client):
     c = make_client()
-    assert c.get(f"/contracts/{upload(c)}").json()["conversation"] == []
+    detail = c.get(f"/contracts/{upload(c)}").json()
+    assert detail["conversations"] == []
+    assert detail["brief"] is not None
 
 
-def test_an_answer_that_failed_is_not_saved(make_client):
+def test_a_failed_first_query_leaves_no_conversation_behind(make_client):
     class Failing(ConversationLLM):
         def generate_contract_answer(self, *a, **k):
             raise RuntimeError("gemini 503")
@@ -367,36 +423,88 @@ def test_an_answer_that_failed_is_not_saved(make_client):
     events = ask(c, cid)
     assert events[-1][0] == "error"
     assert events[-1][1]["stage"] == "generation"
-    assert c.get(f"/contracts/{cid}").json()["conversation"] == []
+    assert "conversation" not in [e for e, _ in events]
+    assert conversations(c, cid) == []
 
 
-def test_previous_turns_reach_the_model_and_other_contracts_turns_never_do(make_client):
+def test_a_cancelled_first_query_leaves_no_conversation_behind(make_client):
+    release = threading.Event()
+
+    class Stuck(ConversationLLM):
+        def classify_contract_query(self, query, history):
+            release.wait(5)  # still checking when the client leaves
+            return super().classify_contract_query(query, history)
+
+    llm = Stuck()
+    c = make_client(llm=llm)
+    cid = upload(c)
+    sent = post_then_leave(
+        c.app,
+        f"/contracts/{cid}/ask/stream",
+        json.dumps({"query": ASK}).encode(),
+        "application/json",
+        after=b"scope_check",
+        on_left=release.set,
+    )
+    assert b"scope_check" in sent and b"event: answer" not in sent
+    assert llm.generations == 0  # the work stopped too
+    assert conversations(c, cid) == []
+
+
+def test_a_first_query_that_cannot_be_saved_leaves_no_conversation_behind(make_client):
+    c = make_client()
+    cid = upload(c)
+    # The conversation row can be written, but not its first Query and answer.
+    with connect() as conn:
+        conn.execute(
+            "CREATE FUNCTION refuse() RETURNS trigger LANGUAGE plpgsql AS "
+            "$$ BEGIN RAISE EXCEPTION 'refused'; END $$"
+        )
+        conn.execute(
+            "CREATE TRIGGER refuse BEFORE INSERT ON contract_messages "
+            "FOR EACH ROW EXECUTE FUNCTION refuse()"
+        )
+    try:
+        events = ask(c, cid)
+    finally:
+        with connect() as conn:
+            conn.execute("DROP FUNCTION refuse() CASCADE")
+    assert events[-1][0] == "error"
+    assert conversations(c, cid) == []
+
+
+def test_generation_sees_only_the_open_conversations_turns(make_client):
     llm = ConversationLLM()
     c = make_client(llm=llm)
     id_a = upload(c)
     id_b = upload(c, "1. Fee\nThe fee is Rs. 5.\n2. Term\nOne year.")
-    ask(c, id_a, "What is the deposit?")
-    ask(c, id_a, "And the rent?")
-    history = llm.histories[-1]  # what generation for the second Query was given
-    assert [t.query for t in history] == ["What is the deposit?"]
-    assert history[0].response.answer == "Plain answer to: What is the deposit?"
-    # A Query in the other Contract starts with none of Contract A's turns.
+    first = conversation_of(ask(c, id_a, "What is the deposit?"))
+    second = conversation_of(ask(c, id_a, "What is the notice period?"))
+    assert llm.histories[-1] == []  # a new conversation knows nothing of the other
+    ask(c, id_a, "And the rent?", first)
+    # What the scope check and generation were given: that conversation's turn and no more,
+    # neither the other conversation's nor the brief.
+    for history in llm.histories[-2:]:
+        assert [t.query for t in history] == ["What is the deposit?"]
+    assert llm.histories[-1][0].response.answer == (
+        "Plain answer to: What is the deposit?"
+    )
+    ask(c, id_a, "And after that?", second)
+    assert [t.query for t in llm.histories[-1]] == ["What is the notice period?"]
     ask(c, id_b, "What is the fee?")
     assert llm.histories[-1] == []
-    assert all("deposit" not in t.query for h in llm.histories[-2:] for t in h)
 
 
-def test_only_the_last_few_turns_are_given(make_client):
+def test_only_the_last_ten_turns_are_given(make_client):
     llm = ConversationLLM()
     c = make_client(llm=llm)
     cid = upload(c)
-    for i in range(7):
-        ask(c, cid, f"Question {i}?")
-    # The last Query (Question 6) is given the three turns before it.
+    conversation = conversation_of(ask(c, cid, "Question 0?"))
+    for i in range(1, 12):
+        ask(c, cid, f"Question {i}?", conversation)
+    # The last Query (Question 11) is given the ten turns before it.
     assert [t.query for t in llm.histories[-1]] == [
-        "Question 3?",
-        "Question 4?",
-        "Question 5?",
+        f"Question {i}?" for i in range(1, 11)
     ]
 
 
@@ -429,7 +537,7 @@ def test_another_users_contract_is_404_and_nothing_is_done(make_client):
     r = b.post(f"/contracts/{cid}/ask/stream", json={"query": ASK})
     assert r.status_code == 404
     assert llm.histories == [] and llm.generations == 0
-    assert a.get(f"/contracts/{cid}").json()["conversation"] == []
+    assert conversations(a, cid) == []
     assert (
         b.post(f"/contracts/{ID_NEVER}/ask/stream", json={"query": ASK}).status_code
         == 404
@@ -438,6 +546,116 @@ def test_another_users_contract_is_404_and_nothing_is_done(make_client):
         b.post("/contracts/not-a-uuid/ask/stream", json={"query": ASK}).status_code
         == 404
     )
+
+
+def reach(client, contract, conversation) -> list[int]:
+    """The statuses of asking in, reading and deleting a conversation."""
+    path = f"/contracts/{contract}/conversations/{conversation}"
+    body = {"query": ASK, "conversation_id": conversation}
+    return [
+        client.post(f"/contracts/{contract}/ask/stream", json=body).status_code,
+        client.get(path).status_code,
+        client.delete(path).status_code,
+    ]
+
+
+def test_a_conversation_is_404_outside_its_own_contract_and_user(make_client):
+    llm = ConversationLLM()
+    a, b = make_client("user_a", llm=llm), make_client("user_b", llm=llm)
+    cid, other = upload(a), upload(a)
+    conversation = conversation_of(ask(a, cid))
+    theirs = upload(b)
+    asked = llm.generations
+    for client, contract, wanted in [
+        (a, other, conversation),  # another Contract of the same user
+        (b, cid, conversation),  # another user, naming the Contract it is on
+        (b, theirs, conversation),  # another user, naming their own Contract
+        (a, cid, ID_NEVER),
+        (a, cid, "not-a-uuid"),
+        (a, "not-a-uuid", conversation),
+    ]:
+        assert reach(client, contract, wanted) == [404, 404, 404], (contract, wanted)
+    assert llm.generations == asked  # nothing was done
+    assert len(turns(a, cid, conversation)) == 1  # and nothing changed
+    assert conversations(a, other) == [] and conversations(b, theirs) == []
+
+
+def test_deleting_a_conversation_leaves_the_contract_and_its_others(make_client):
+    c = make_client()
+    cid = upload(c)
+    gone = conversation_of(ask(c, cid, "What is the deposit?"))
+    kept = conversation_of(ask(c, cid, "What is the rent?"))
+    r = c.delete(f"/contracts/{cid}/conversations/{gone}")
+    assert r.status_code == 204 and r.content == b""
+    assert reach(c, cid, gone) == [404, 404, 404]
+    assert [x["id"] for x in conversations(c, cid)] == [kept]
+    assert [t["query"] for t in turns(c, cid, kept)] == ["What is the rent?"]
+    assert c.get(f"/contracts/{cid}").json()["brief"] is not None
+    with connect() as conn:
+        assert conn.execute(
+            "SELECT count(*) FROM contract_messages WHERE conversation_id = %s", (gone,)
+        ).fetchone() == (0,)
+
+
+def test_deleting_a_contract_removes_all_its_conversations(make_client):
+    c = make_client()
+    cid = upload(c)
+    first = conversation_of(ask(c, cid, "What is the deposit?"))
+    second = conversation_of(ask(c, cid, "What is the rent?"))
+    assert c.delete(f"/contracts/{cid}").status_code == 204
+    for conversation in (first, second):
+        assert (
+            c.get(f"/contracts/{cid}/conversations/{conversation}").status_code == 404
+        )
+    with connect() as conn:
+        for table in ["contract_conversations", "contract_messages"]:
+            assert conn.execute(f"SELECT count(*) FROM {table}").fetchone() == (0,)
+
+
+def test_a_conversation_deleted_while_answering_is_an_error_and_saves_nothing(
+    make_client,
+):
+    class DeletesIt(ConversationLLM):
+        def classify_contract_query(self, query, history):
+            if history:
+                with connect() as conn:
+                    conn.execute("DELETE FROM contract_conversations")
+            return super().classify_contract_query(query, history)
+
+    c = make_client(llm=DeletesIt())
+    cid = upload(c)
+    conversation = conversation_of(ask(c, cid))
+    events = ask(c, cid, "And the rent?", conversation)
+    assert events[-1][0] == "error"
+    assert conversations(c, cid) == []
+
+
+@pytest.mark.parametrize(
+    ("query", "title"),
+    [
+        ("What is\nthe   deposit?", "What is the deposit?"),
+        ("a" * 60, "a" * 60),
+        (
+            "What happens to my security deposit if I leave the flat before the year ends?",
+            "What happens to my security deposit if I leave the flat…",
+        ),
+        ("x" * 75, "x" * 59 + "…"),  # one long word has no boundary to cut at
+        (
+            "क्या मकान मालिक मेरी जमा राशि पूरी तरह रोक सकता है अगर मैं साल पूरा होने से पहले घर छोड़ूँ?",
+            "क्या मकान मालिक मेरी जमा राशि पूरी तरह रोक सकता है अगर मैं…",
+        ),
+    ],
+)
+def test_a_long_first_query_is_shortened_at_a_word_boundary_for_the_title(
+    make_client, query, title
+):
+    c = make_client()
+    cid = upload(c)
+    events = ask(c, cid, query)
+    assert events[-2][1]["title"] == title
+    [listed] = conversations(c, cid)
+    assert listed["title"] == title
+    assert turns(c, cid, listed["id"])[0]["query"] == query  # the Query stays whole
 
 
 def test_asking_needs_sign_in(make_client):
@@ -512,7 +730,7 @@ def test_a_reader_who_left_during_the_last_stage_saves_nothing():
             return []
 
         async def add_turn(self, *a):
-            saved.append(a)
+            saved.append(a)  # the only thing that could start a conversation
 
     class Corp:
         def search(self, q, k):

@@ -1,6 +1,7 @@
 """Fakes shared across test files: a deterministic embedder, LLMs that behave or misbehave
 in one way each, and Fallbacks that return, record or fail."""
 
+import asyncio
 import hashlib
 import json
 import os
@@ -202,6 +203,61 @@ def parse_sse(text: str) -> list[tuple[str, dict]]:
         lines = dict(line.split(": ", 1) for line in frame.split("\n"))
         events.append((lines["event"], json.loads(lines["data"])))
     return events
+
+
+def post_then_leave(
+    app, path: str, body: bytes, content_type: str, *, after: bytes, on_left
+) -> bytes:
+    """Posts to the app as user_a over raw ASGI and disconnects once `after` has been
+    streamed, which TestClient cannot do. Returns what was streamed. `on_left` runs after the
+    app has seen the client leave, to let work that was held up carry on."""
+    headers = {
+        **auth_for("user_a"),
+        "Content-Type": content_type,
+        "Content-Length": str(len(body)),
+    }
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": path,
+        "raw_path": path.encode(),
+        "query_string": b"",
+        "root_path": "",
+        "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
+        "client": ("test", 1),
+        "server": ("test", 80),
+    }
+    sent = bytearray()
+
+    async def run():
+        left = asyncio.Event()
+        requests = [{"type": "http.request", "body": body, "more_body": False}]
+
+        async def receive():
+            if requests:
+                return requests.pop()
+            await left.wait()
+            return {"type": "http.disconnect"}
+
+        async def send(message):
+            sent.extend(message.get("body", b""))
+            if after in sent:
+                left.set()
+
+        try:
+            await asyncio.wait_for(app(scope, receive, send), timeout=10)
+        finally:
+            on_left()
+        # Lets the cancelled work finish unwinding before the event loop closes.
+        rest = asyncio.all_tasks() - {asyncio.current_task()}
+        if rest:
+            await asyncio.wait(rest, timeout=10)
+
+    asyncio.run(run())
+    return bytes(sent)
 
 
 @pytest.fixture

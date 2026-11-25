@@ -433,9 +433,10 @@ def test_a_valid_upload_carries_a_brief_whose_clause_references_match_stored_tex
     [cite] = flag["citations"]
     assert (cite["act"], cite["number"]) == (ART_21.act, ART_21.number)
     assert cite["text"] == ART_21.text  # verbatim from the Corpus
-    # The brief is the first message of the Contract conversation.
-    assert db("SELECT count(*) FROM contract_messages") == 1
-    assert db("SELECT role FROM contract_messages") == "assistant"
+    # The brief belongs to the Contract: it starts no Contract conversation.
+    assert db("SELECT brief->>'purpose' FROM contracts") == brief["purpose"]
+    assert db("SELECT count(*) FROM contract_conversations") == 0
+    assert db("SELECT count(*) FROM contract_messages") == 0
 
 
 def test_the_model_is_given_provisions_retrieved_from_the_corpus(pg_client):
@@ -522,7 +523,6 @@ def test_a_failing_brief_stores_nothing(pg_client, db):
     assert events[-1][1]["stage"] == "brief"
     assert "Aadhaar" not in json.dumps(events)
     assert db("SELECT count(*) FROM contracts") == 0
-    assert db("SELECT count(*) FROM contract_messages") == 0
 
 
 def test_reopening_a_contract_returns_the_stored_brief_without_the_llm(pg_client):
@@ -540,4 +540,4 @@ def test_deleting_a_user_deletes_the_brief(pg_client, db):
     upload_text(pg_client("user_gone"))
     with connect() as conn:
         conn.execute("DELETE FROM users WHERE id = 'user_gone'")
-    assert db("SELECT count(*) FROM contract_messages") == 0
+    assert db("SELECT count(*) FROM contracts") == 0  # the brief goes with its Contract

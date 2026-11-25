@@ -17,6 +17,7 @@ import asyncio
 import logging
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 from threading import Event
 from typing import Protocol
 
@@ -33,6 +34,7 @@ from .models import (
     AskResponse,
     ClauseReference,
     ContractAnswer,
+    ConversationRef,
     ConversationTurn,
     FallbackSource,
     Provision,
@@ -50,11 +52,11 @@ from .pipeline import (
 )
 from .request_log import RequestLog
 
-__all__ = ["ContractAnswerer", "ContractStore"]
+__all__ = ["ContractAnswered", "ContractAnswerer", "ContractStore"]
 
 log = logging.getLogger(__name__)
 
-HISTORY_TURNS = 3  # earlier Queries and answers the model is shown
+HISTORY_TURNS = 10  # earlier Queries and answers of the conversation the model is shown
 CLAUSE_PIECES = 5  # Clause pieces fetched by similarity
 MAX_CLAUSES = 5  # whole Clauses the model is shown
 
@@ -132,12 +134,24 @@ class ContractStore(Protocol):
     async def get_clauses(self, user_id: str, contract_id: str) -> dict[str, str]: ...
 
     async def recent_turns(
-        self, user_id: str, contract_id: str, count: int
+        self, user_id: str, contract_id: str, conversation_id: str, count: int
     ) -> list[ConversationTurn]: ...
 
     async def add_turn(
-        self, user_id: str, contract_id: str, query: str, response: ContractAnswer
-    ) -> None: ...
+        self,
+        user_id: str,
+        contract_id: str,
+        conversation_id: str | None,
+        query: str,
+        response: ContractAnswer,
+    ) -> ConversationRef: ...
+
+
+@dataclass
+class ContractAnswered(Answered):
+    """An `Answered` Query, with the Contract conversation it was saved to."""
+
+    conversation: ConversationRef
 
 
 class _ContractAndLLM(LLM, ConversationLLM, Protocol):
@@ -179,12 +193,14 @@ class ContractAnswerer:
         contract_id: str,
         query: str,
         *,
+        conversation_id: str | None = None,
         endpoint: str,
         on_stage: Callable[[Stage], None] | None = None,
         cancel: Event | None = None,
-    ) -> Answered:
+    ) -> ContractAnswered:
         """Answer a Query about one of the user's Contracts and append the Query and its answer
-        to the Contract conversation, writing the request log line whatever the outcome.
+        to the Contract conversation `conversation_id`, or start one with them when it is None,
+        writing the request log line whatever the outcome.
 
         `on_stage` hears each Stage as it starts. `cancel`, once set, stops the work at the next
         Stage boundary with `Cancelled`, and nothing is saved. Any other failure is raised as
@@ -205,12 +221,21 @@ class ContractAnswerer:
                 on_stage(Stage(stage_id, STAGE_LABELS_CONTRACT[stage_id][language]))
 
         try:
+            history = (
+                await self._store.recent_turns(
+                    user_id, contract_id, conversation_id, HISTORY_TURNS
+                )
+                if conversation_id
+                else []
+            )
             response = await self._answer(
-                user_id, contract_id, query, language, stage, decisions
+                user_id, contract_id, query, history, language, stage, decisions
             )
             if cancel is not None and cancel.is_set():
                 raise Cancelled()  # the reader left during the last Stage: save nothing
-            await self._store.add_turn(user_id, contract_id, query, response)
+            conversation = await self._store.add_turn(
+                user_id, contract_id, conversation_id, query, response
+            )
         except Cancelled:
             rlog.finish("client_gone", decisions=decisions)
             raise
@@ -223,19 +248,19 @@ class ContractAnswerer:
             rlog.finish("error", decisions=decisions)
             raise StageFailed(current[0] if current else None) from exc
         rlog.finish("answer", response, decisions=decisions)
-        return Answered(response, decisions)
+        return ContractAnswered(response, decisions, conversation)
 
     async def _answer(
         self,
         user_id: str,
         contract_id: str,
         query: str,
+        history: list[ConversationTurn],
         language: Language,
         stage: Callable[[str], None],
         decisions: Decisions,
     ) -> ContractAnswer:
         llm = self._llm
-        history = await self._store.recent_turns(user_id, contract_id, HISTORY_TURNS)
 
         stage("scope_check")
         scope = await asyncio.to_thread(llm.classify_contract_query, query, history)

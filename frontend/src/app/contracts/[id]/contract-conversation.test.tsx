@@ -78,24 +78,32 @@ const TURNS: ConversationTurn[] = [
   { query: "And the notice period?", response: answer({ answer: "Two months.", trust_label: "contract", citations: [], clause_references: [{ number: "7.2", text: "7.2 Notice is two months." }] }) },
 ];
 
-it("shows the saved conversation in order after a reload, with each answer's sources", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        id: "c1",
-        title: "Rent agreement",
-        created_at: "2026-03-01T10:00:00Z",
-        page_count: 1,
-        clause_count: 1,
-        clauses: [{ number: "3", heading: "Deposit", text: "3. Deposit" }],
-        brief: null,
-        conversation: TURNS,
-      }),
-    }),
-  );
+const listed = (id: string, title: string) => ({
+  id,
+  title,
+  created_at: "2026-03-01T10:00:00Z",
+  updated_at: "2026-03-01T10:00:00Z",
+});
+const DETAIL = {
+  id: "c1",
+  title: "Rent agreement",
+  created_at: "2026-03-01T10:00:00Z",
+  page_count: 1,
+  clause_count: 1,
+  clauses: [{ number: "3", heading: "Deposit", text: "3. Deposit" }],
+  brief: null,
+  conversations: [listed("newest", "What is the deposit?"), listed("older", "Who repairs?")],
+};
+const json = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
+
+it("shows the most recent conversation in order after a reload, with each answer's sources", async () => {
+  const user = userEvent.setup();
+  const fetchFn = vi
+    .fn()
+    .mockResolvedValueOnce(json(DETAIL))
+    .mockResolvedValueOnce(json(TURNS))
+    .mockResolvedValueOnce(sseResponse([frame("answer", answer({ answer: "Rs. 20,000." }))]));
+  vi.stubGlobal("fetch", fetchFn);
   render(<ContractView id="c1" />);
   await screen.findByText("The deposit is Rs. 1,00,000.");
   const queries = screen.getAllByText(/^(What is the deposit\?|And the notice period\?)$/).map((e) => e.textContent);
@@ -113,6 +121,52 @@ it("shows the saved conversation in order after a reload, with each answer's sou
     "href",
     "/law/Model%20Tenancy%20Act/11",
   );
+  const [url, init] = fetchFn.mock.calls[1];
+  expect(url).toMatch(/\/contracts\/c1\/conversations\/newest$/);
+  expect(init.headers.Authorization).toBe("Bearer tok");
+  // The next Query continues the conversation on screen.
+  await typeAndAsk(user, "And the rent?");
+  expect(await screen.findByText("Rs. 20,000.")).toBeInTheDocument();
+  expect(JSON.parse(fetchFn.mock.calls[2][1].body)).toEqual({ query: "And the rent?", conversation_id: "newest" });
+});
+
+it("loads no conversation for a Contract that has none", async () => {
+  const fetchFn = vi.fn().mockResolvedValue(json({ ...DETAIL, conversations: [] }));
+  vi.stubGlobal("fetch", fetchFn);
+  render(<ContractView id="c1" />);
+  expect(await screen.findByLabelText(/ask a question about this contract/i)).toBeInTheDocument();
+  expect(fetchFn).toHaveBeenCalledTimes(1);
+});
+
+it("says so when the conversation cannot be loaded, rather than starting another", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValueOnce(json(DETAIL)).mockResolvedValueOnce({ ok: false, status: 503 }),
+  );
+  render(<ContractView id="c1" />);
+  expect(await screen.findByRole("alert")).toHaveTextContent(/unavailable/i);
+  expect(screen.queryByLabelText(/ask a question about this contract/i)).not.toBeInTheDocument();
+});
+
+it("starts a conversation with the first Query and keeps the later ones in it", async () => {
+  const user = userEvent.setup();
+  const named = frame("conversation", { id: "new-1", title: "What is the deposit?" });
+  const fetchFn = vi
+    .fn()
+    .mockResolvedValueOnce(sseResponse([frame("error", { stage: "generation", message: "x" })]))
+    .mockResolvedValueOnce(sseResponse([named, frame("answer", ANSWER)]))
+    .mockResolvedValueOnce(sseResponse([named, frame("answer", answer({ answer: "Rs. 20,000." }))]));
+  vi.stubGlobal("fetch", fetchFn);
+  render(<ContractConversation contractId="c1" initial={[]} />);
+  const sent = (n: number) => JSON.parse(fetchFn.mock.calls[n][1].body);
+
+  await typeAndAsk(user, "What is the deposit?");
+  await user.click(await screen.findByRole("button", { name: "Try again" }));
+  expect(sent(1)).toEqual({ query: "What is the deposit?" }); // a failed first Query started none
+  await screen.findByText("The deposit is Rs. 1,00,000.");
+  await typeAndAsk(user, "And the rent?");
+  expect(await screen.findByText("Rs. 20,000.")).toBeInTheDocument();
+  expect(sent(2)).toEqual({ query: "And the rent?", conversation_id: "new-1" });
 });
 
 it("streams the Stages of each Query, then shows its answer", async () => {
@@ -190,6 +244,24 @@ it("explains a failed Query, names the Stage that failed and tries again", async
   expect(await screen.findByText("The deposit is Rs. 1,00,000.")).toBeInTheDocument();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   expect(JSON.parse(fetchFn.mock.calls[1][1].body)).toEqual({ query: "What is the deposit?" });
+});
+
+it("says a deleted conversation is gone, and Try again starts a new one", async () => {
+  const user = userEvent.setup();
+  const fetchFn = vi
+    .fn()
+    .mockResolvedValueOnce({ ok: false, status: 404 })
+    .mockResolvedValueOnce(
+      sseResponse([frame("conversation", { id: "new-1", title: "And the rent?" }), frame("answer", answer({ answer: "Rs. 20,000." }))]),
+    );
+  vi.stubGlobal("fetch", fetchFn);
+  render(<ContractConversation contractId="c1" conversationId="gone" initial={TURNS.slice(0, 1)} />);
+  await typeAndAsk(user, "And the rent?");
+  expect(await screen.findByRole("alert")).toHaveTextContent(/could not find that conversation/i);
+  expect(screen.queryByText("What is the deposit?")).not.toBeInTheDocument(); // its turns went with it
+  await user.click(screen.getByRole("button", { name: "Try again" }));
+  expect(await screen.findByText("Rs. 20,000.")).toBeInTheDocument();
+  expect(JSON.parse(fetchFn.mock.calls[1][1].body)).toEqual({ query: "And the rent?" });
 });
 
 it("tells the user a rate limit or an unknown Contract plainly", async () => {

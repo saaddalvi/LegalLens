@@ -41,8 +41,10 @@ from .models import (
     ActSummary,
     AskRequest,
     AskResponse,
+    ContractAskRequest,
     ContractDetail,
     ContractSummary,
+    ConversationTurn,
     Provision,
     ProvisionSummary,
 )
@@ -99,6 +101,9 @@ def is_fixture_corpus(corpus: Corpus) -> bool:
 
 
 KEEPALIVE_SECONDS = 10
+
+NO_CONTRACT = "No such Contract."
+NO_CONVERSATION = "No such conversation."
 
 
 def _frame(name: str, data: dict) -> str:
@@ -555,22 +560,33 @@ def create_app(
 
     background: set[asyncio.Task] = set()  # keeps running answers from being collected
 
+    def require_uuids(missing: str, *ids: str) -> None:
+        """404 for an id that is not a UUID: it names nothing."""
+        try:
+            for i in ids:
+                uuid.UUID(i)
+        except ValueError:
+            raise HTTPException(404, missing) from None
+
     @app.post(
         "/contracts/{contract_id}/ask/stream",
         dependencies=[Depends(limit)],
     )
     async def ask_contract(
-        contract_id: str, req: AskRequest, user: str = Depends(current_user)
+        contract_id: str, req: ContractAskRequest, user: str = Depends(current_user)
     ) -> StreamingResponse:
-        """Answers a follow-up Query about one of the caller's Contracts, streaming Stages and
-        ending in `answer` (or `error`). A Contract that is not theirs is a 404."""
+        """Answers a Query about one of the caller's Contracts, streaming Stages and ending in
+        `conversation` (the one it was saved to) and `answer`, or in `error`. Without
+        `conversation_id` the Query starts a new Contract conversation. A Contract, or a
+        conversation, that is not theirs is a 404."""
         db = contracts_db()
-        try:
-            uuid.UUID(contract_id)
-        except ValueError:
-            raise HTTPException(404, "No such Contract.") from None
+        require_uuids(NO_CONTRACT, contract_id)
         if not await db.owns_contract(user, contract_id):
-            raise HTTPException(404, "No such Contract.")
+            raise HTTPException(404, NO_CONTRACT)
+        if req.conversation_id is not None:
+            require_uuids(NO_CONVERSATION, req.conversation_id)
+            if not await db.owns_conversation(user, contract_id, req.conversation_id):
+                raise HTTPException(404, NO_CONVERSATION)
         try:
             a = contract_answerer()  # 503 here, before any stream starts
         except Exception as exc:
@@ -590,9 +606,14 @@ def create_app(
                     user,
                     contract_id,
                     req.query,
+                    conversation_id=req.conversation_id,
                     endpoint="contract_ask_stream",
                     on_stage=on_stage,
                     cancel=cancelled,
+                )
+                # Named first, so the client can move to the conversation's own address.
+                events.put_nowait(
+                    ("conversation", answered.conversation.model_dump(mode="json"))
                 )
                 events.put_nowait(("answer", answered.response.model_dump(mode="json")))
             except Cancelled:
@@ -627,26 +648,47 @@ def create_app(
     @app.get("/contracts/{contract_id}", response_model=ContractDetail)
     async def get_contract(contract_id: str, user: str = Depends(current_user)):
         # 404 for a Contract that is not yours, so its existence is not revealed.
-        try:
-            uuid.UUID(contract_id)
-        except ValueError:
-            raise HTTPException(404, "No such Contract.") from None
+        require_uuids(NO_CONTRACT, contract_id)
         found = await contracts_db().get_contract(user, contract_id)
         if found is None:
-            raise HTTPException(404, "No such Contract.")
+            raise HTTPException(404, NO_CONTRACT)
         return found
+
+    @app.get(
+        "/contracts/{contract_id}/conversations/{conversation_id}",
+        response_model=list[ConversationTurn],
+    )
+    async def get_conversation(
+        contract_id: str, conversation_id: str, user: str = Depends(current_user)
+    ):
+        """The Queries and answers of one Contract conversation, oldest first."""
+        db = contracts_db()
+        require_uuids(NO_CONVERSATION, contract_id, conversation_id)
+        turns = await db.get_conversation(user, contract_id, conversation_id)
+        if turns is None:
+            raise HTTPException(404, NO_CONVERSATION)
+        return turns
+
+    @app.delete(
+        "/contracts/{contract_id}/conversations/{conversation_id}", status_code=204
+    )
+    async def delete_conversation(
+        contract_id: str, conversation_id: str, user: str = Depends(current_user)
+    ):
+        """Deletes one Contract conversation, leaving the Contract and its other ones."""
+        db = contracts_db()
+        require_uuids(NO_CONVERSATION, contract_id, conversation_id)
+        if not await db.delete_conversation(user, contract_id, conversation_id):
+            raise HTTPException(404, NO_CONVERSATION)
 
     @app.delete("/contracts/{contract_id}", status_code=204)
     async def delete_contract(contract_id: str, user: str = Depends(current_user)):
-        """Deletes one of the caller's Contracts with its Clauses, vectors and conversation.
+        """Deletes one of the caller's Contracts with its Clauses, vectors and conversations.
         404 for one that is not theirs, so its existence is not revealed."""
         db = contracts_db()
-        try:
-            uuid.UUID(contract_id)
-        except ValueError:
-            raise HTTPException(404, "No such Contract.") from None
+        require_uuids(NO_CONTRACT, contract_id)
         if not await db.delete_contract(user, contract_id):
-            raise HTTPException(404, "No such Contract.")
+            raise HTTPException(404, NO_CONTRACT)
 
     return app
 

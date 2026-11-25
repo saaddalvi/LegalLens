@@ -19,6 +19,7 @@ const CONTRACT = {
     { number: "0", heading: "", text: "RENT AGREEMENT between Asha Rao and Ravi Kumar." },
     { number: "7.2", heading: "", text: "7.2 Notice is two months." },
   ],
+  conversations: [],
 };
 
 beforeEach(() => getToken.mockResolvedValue("tok"));

@@ -28,7 +28,7 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.dialects.postgresql import JSONB, insert
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.pool import NullPool
 
@@ -39,10 +39,13 @@ from .models import (
     ContractBrief,
     ContractDetail,
     ContractSummary,
+    ConversationRef,
+    ConversationSummary,
     ConversationTurn,
 )
 
 EMBEDDING_DIMENSIONS = 1024  # Qwen3-Embedding-0.6B (ADR 0003)
+TITLE_CHARS = 60  # the longest title of a Contract conversation, the ellipsis included
 
 
 class Base(DeclarativeBase):
@@ -71,6 +74,8 @@ class Contract(Base):
         Text
     )  # the extracted text; the file is never kept
     page_count: Mapped[int] = mapped_column(Integer)
+    # The Contract brief; null for a Contract uploaded before briefs existed.
+    brief: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -92,14 +97,35 @@ class Clause(Base):
     embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIMENSIONS))
 
 
+class Conversation(Base):
+    """One Contract conversation. It exists only once it has a Query and its answer."""
+
+    __tablename__ = "contract_conversations"
+
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
+    contract_id: Mapped[str] = mapped_column(
+        ForeignKey("contracts.id", ondelete="CASCADE"), index=True
+    )
+    title: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class ContractMessage(Base):
-    """One message of a Contract conversation. The first is the Contract brief."""
+    """One message of a Contract conversation: a Query or its answer."""
 
     __tablename__ = "contract_messages"
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
     contract_id: Mapped[str] = mapped_column(
         ForeignKey("contracts.id", ondelete="CASCADE"), index=True
+    )
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("contract_conversations.id", ondelete="CASCADE"), index=True
     )
     role: Mapped[str] = mapped_column(Text)
     payload: Mapped[dict] = mapped_column(JSONB)
@@ -122,8 +148,8 @@ class Usage(Base):
 
 
 def _turns(rows) -> list[ConversationTurn]:
-    """The Queries and answers among a Contract's messages, oldest answer first. A Query and
-    its answer share a `turn` id, so two Queries saved at once are never mixed up."""
+    """The Queries and answers among a Contract conversation's messages, oldest answer first.
+    A Query and its answer share a `turn` id, so two Queries saved at once are never mixed up."""
     queries: dict[str, str] = {}
     answered: list[tuple[str, dict]] = []
     for role, payload in rows:
@@ -148,6 +174,27 @@ class ClauseHit:
     heading: str
     text: str
     piece: int
+
+
+def conversation_title(query: str) -> str:
+    """A Contract conversation's title: its first Query on one line, shortened at a word
+    boundary with an ellipsis when it is long."""
+    text = " ".join(query.split())
+    if len(text) <= TITLE_CHARS:
+        return text
+    end = text.rfind(" ", 0, TITLE_CHARS)
+    return text[: end if end > 0 else TITLE_CHARS - 1] + "…"
+
+
+def _owned_conversation(user_id: str, contract_id: str, conversation_id: str) -> tuple:
+    """The conditions under which a Contract conversation is this one, on this Contract, and
+    the user's. Every read and write of one conversation goes through them."""
+    return (
+        Conversation.id == conversation_id,
+        Conversation.contract_id == contract_id,
+        Contract.id == Conversation.contract_id,
+        Contract.user_id == user_id,
+    )
 
 
 def driver_url(url: str) -> str:
@@ -199,8 +246,8 @@ class Database:
         vectors: list[list[float]],
         brief: ContractBrief,
     ) -> str:
-        """Stores a Contract, all its Clause pieces and its brief (the first message of its
-        Contract conversation) in one transaction; returns its id."""
+        """Stores a Contract with its brief and all its Clause pieces in one transaction;
+        returns its id."""
         contract_id = str(uuid.uuid4())
         async with self.engine.begin() as conn:
             await conn.execute(
@@ -210,6 +257,7 @@ class Database:
                     title=title,
                     text=text,
                     page_count=page_count,
+                    brief=brief.model_dump(mode="json"),
                 )
             )
             await conn.execute(
@@ -225,13 +273,6 @@ class Database:
                     }
                     for p, v in zip(pieces, vectors, strict=True)
                 ],
-            )
-            await conn.execute(
-                insert(ContractMessage).values(
-                    contract_id=contract_id,
-                    role="assistant",
-                    payload={"type": "brief", **brief.model_dump(mode="json")},
-                )
             )
         return contract_id
 
@@ -259,7 +300,8 @@ class Database:
     async def get_contract(
         self, user_id: str, contract_id: str
     ) -> ContractDetail | None:
-        """A Contract with its Clauses, or None when it does not exist or is not the user's."""
+        """A Contract with its brief, its Clauses and its list of Contract conversations, or
+        None when it does not exist or is not the user's."""
         async with self.engine.connect() as conn:
             head = (
                 await conn.execute(
@@ -275,26 +317,19 @@ class Database:
                 .where(Clause.contract_id == contract_id)
                 .order_by(Clause.id)
             )
-            messages = await conn.execute(
-                select(ContractMessage.role, ContractMessage.payload)
-                .where(
-                    ContractMessage.contract_id == contract_id,
-                    ContractMessage.payload["type"].astext.in_(["query", "answer"]),
+            listed = await conn.execute(
+                select(
+                    Conversation.id,
+                    Conversation.title,
+                    Conversation.created_at,
+                    Conversation.updated_at,
                 )
-                .order_by(ContractMessage.id)
+                .where(Conversation.contract_id == contract_id)
+                .order_by(
+                    Conversation.updated_at.desc(), Conversation.created_at.desc()
+                )
             )
-            conversation = _turns(messages)
-            stored = (
-                await conn.execute(
-                    select(ContractMessage.payload)
-                    .where(
-                        ContractMessage.contract_id == contract_id,
-                        ContractMessage.payload["type"].astext == "brief",
-                    )
-                    .order_by(ContractMessage.id)
-                    .limit(1)
-                )
-            ).scalar_one_or_none()
+            conversations = [ConversationSummary(**r._mapping) for r in listed]
         clauses: dict[str, ClauseOut] = {}
         for number, heading, text in pieces:
             if number in clauses:  # a later piece of the same Clause
@@ -308,8 +343,8 @@ class Database:
             page_count=head.page_count,
             clause_count=len(clauses),
             clauses=list(clauses.values()),
-            brief=ContractBrief.model_validate(stored) if stored else None,
-            conversation=conversation,
+            brief=ContractBrief.model_validate(head.brief) if head.brief else None,
+            conversations=conversations,
         )
 
     async def search_clauses(
@@ -351,52 +386,115 @@ class Database:
                 clauses[number] = clauses.get(number, "") + text
             return clauses
 
-    async def recent_turns(
-        self, user_id: str, contract_id: str, count: int
-    ) -> list[ConversationTurn]:
-        """The last `count` Queries of this Contract's conversation with their answers, oldest
-        first. Never another Contract's, and never someone else's."""
+    async def get_conversation(
+        self, user_id: str, contract_id: str, conversation_id: str
+    ) -> list[ConversationTurn] | None:
+        """A Contract conversation's Queries with their answers, oldest first, or None when it
+        does not exist, belongs to another Contract or is not the user's."""
         async with self.engine.connect() as conn:
+            if not await self._has_conversation(
+                conn, user_id, contract_id, conversation_id
+            ):
+                return None
             rows = await conn.execute(
                 select(ContractMessage.role, ContractMessage.payload)
-                .join(Contract, Contract.id == ContractMessage.contract_id)
-                .where(
-                    Contract.id == contract_id,
-                    Contract.user_id == user_id,
-                    ContractMessage.payload["type"].astext.in_(["query", "answer"]),
-                )
+                .where(ContractMessage.conversation_id == conversation_id)
                 .order_by(ContractMessage.id)
             )
-            return _turns(rows)[-count:] if count > 0 else []
+            return _turns(rows)
+
+    async def owns_conversation(
+        self, user_id: str, contract_id: str, conversation_id: str
+    ) -> bool:
+        async with self.engine.connect() as conn:
+            return await self._has_conversation(
+                conn, user_id, contract_id, conversation_id
+            )
+
+    @staticmethod
+    async def _has_conversation(
+        conn: AsyncConnection, user_id: str, contract_id: str, conversation_id: str
+    ) -> bool:
+        found = await conn.execute(
+            select(Conversation.id).where(
+                *_owned_conversation(user_id, contract_id, conversation_id)
+            )
+        )
+        return found.first() is not None
+
+    async def delete_conversation(
+        self, user_id: str, contract_id: str, conversation_id: str
+    ) -> bool:
+        """Deletes one Contract conversation; foreign keys cascade to its messages. False when
+        it does not exist, belongs to another Contract or is not the user's."""
+        async with self.engine.begin() as conn:
+            deleted = await conn.execute(
+                delete(Conversation)
+                .where(*_owned_conversation(user_id, contract_id, conversation_id))
+                .returning(Conversation.id)
+            )
+            return deleted.first() is not None
+
+    async def recent_turns(
+        self, user_id: str, contract_id: str, conversation_id: str, count: int
+    ) -> list[ConversationTurn]:
+        """The last `count` Queries of one Contract conversation with their answers, oldest
+        first. Never another conversation's, and never someone else's."""
+        turns = await self.get_conversation(user_id, contract_id, conversation_id)
+        return turns[-count:] if turns and count > 0 else []
 
     async def add_turn(
         self,
         user_id: str,
         contract_id: str,
+        conversation_id: str | None,
         query: str,
         response: ContractAnswer,
-    ) -> None:
-        """Appends a Query and its answer to the Contract's conversation, together or not at
-        all. Raises LookupError when the Contract is not the user's (or was just deleted)."""
+    ) -> ConversationRef:
+        """Appends a Query and its answer to a Contract conversation, or starts one with them
+        when `conversation_id` is None, all together or not at all. Returns the conversation.
+        Raises LookupError when the Contract or the conversation is not the user's (or was just
+        deleted)."""
         turn = str(uuid.uuid4())
         async with self.engine.begin() as conn:
-            owned = await conn.execute(
-                select(Contract.id).where(
-                    Contract.id == contract_id, Contract.user_id == user_id
+            if conversation_id is None:
+                owned = await conn.execute(
+                    select(Contract.id).where(
+                        Contract.id == contract_id, Contract.user_id == user_id
+                    )
                 )
-            )
-            if owned.first() is None:
-                raise LookupError("no such Contract")
+                if owned.first() is None:
+                    raise LookupError("no such Contract")
+                conversation_id = str(uuid.uuid4())
+                title = conversation_title(query)
+                await conn.execute(
+                    insert(Conversation).values(
+                        id=conversation_id, contract_id=contract_id, title=title
+                    )
+                )
+            else:
+                # Moves it to the head of the list, and locks it against a delete until commit.
+                touched = await conn.execute(
+                    update(Conversation)
+                    .where(*_owned_conversation(user_id, contract_id, conversation_id))
+                    .values(updated_at=func.now())
+                    .returning(Conversation.title)
+                )
+                title = touched.scalar_one_or_none()
+                if title is None:
+                    raise LookupError("no such Contract conversation")
             await conn.execute(
                 insert(ContractMessage),
                 [
                     {
                         "contract_id": contract_id,
+                        "conversation_id": conversation_id,
                         "role": "user",
                         "payload": {"type": "query", "turn": turn, "text": query},
                     },
                     {
                         "contract_id": contract_id,
+                        "conversation_id": conversation_id,
                         "role": "assistant",
                         "payload": {
                             "type": "answer",
@@ -406,10 +504,11 @@ class Database:
                     },
                 ],
             )
+        return ConversationRef(id=conversation_id, title=title)
 
     async def delete_contract(self, user_id: str, contract_id: str) -> bool:
         """Deletes the user's Contract; foreign keys cascade to its Clauses, vectors and
-        messages. False when it does not exist or is not the user's."""
+        Contract conversations. False when it does not exist or is not the user's."""
         async with self.engine.begin() as conn:
             deleted = await conn.execute(
                 delete(Contract)

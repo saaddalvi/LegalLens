@@ -9,7 +9,7 @@ import StageList from "../../stage-list";
 import { API_URL } from "@/lib/api-url";
 import { detectedLang, errorMessage } from "@/lib/ask-stream";
 import { dailyCapMessage, isDailyCap, retryAfterSeconds } from "@/lib/daily-cap";
-import type { ContractAnswer, ConversationTurn } from "@/lib/contract-types";
+import type { ContractAnswer, ConversationRef, ConversationTurn } from "@/lib/contract-types";
 import { readEvents } from "@/lib/sse";
 
 // `fresh` marks an answer that arrived while this page was open, which is revealed word by word;
@@ -23,13 +23,16 @@ type Pending = {
   failedStage: string | null;
 };
 
-// The saved Queries and answers of one Contract, and the box for the next Query. Each Query
-// streams its Stages as /ask does; a new Query cancels one still being answered.
+// The saved Queries and answers of one Contract conversation, and the box for the next Query.
+// Without a conversationId the first Query to be answered starts one. Each Query streams its
+// Stages as /ask does; a new Query cancels one still being answered.
 export default function ContractConversation({
   contractId,
+  conversationId,
   initial,
 }: {
   contractId: string;
+  conversationId?: string;
   initial: ConversationTurn[];
 }) {
   const { getToken } = useAuth();
@@ -37,6 +40,7 @@ export default function ContractConversation({
   const [pending, setPending] = useState<Pending | null>(null);
   const [query, setQuery] = useState("");
   const running = useRef<AbortController | null>(null);
+  const conversationIdRef = useRef(conversationId); // set by the backend once one is started
 
   useEffect(() => () => running.current?.abort(), []);
 
@@ -59,9 +63,16 @@ export default function ContractConversation({
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ query: q }),
+        body: JSON.stringify({ query: q, conversation_id: conversationIdRef.current }),
         signal: controller.signal,
       });
+      if (res.status === 404 && conversationIdRef.current) {
+        // Deleted elsewhere, perhaps with its Contract: the next try starts a new one, and says
+        // so if it was the Contract.
+        conversationIdRef.current = undefined;
+        setTurns([]);
+        return fail("We could not find that conversation. It may have been deleted. Try again to start a new one.");
+      }
       if (!res.ok) {
         return fail(
           res.status === 404
@@ -78,6 +89,8 @@ export default function ContractConversation({
         if (name === "stage") {
           latest = (data as Stage).id;
           setPending((p) => p && { ...p, stages: [...p.stages, data as Stage] });
+        } else if (name === "conversation") {
+          conversationIdRef.current = (data as ConversationRef).id;
         } else if (name === "answer") {
           finished = true;
           setTurns((t) => [...t, { query: q, response: data as ContractAnswer, fresh: true }]);
