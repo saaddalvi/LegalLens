@@ -19,6 +19,8 @@ export default function ConfirmDelete({
   thing,
   returnTo,
   onDeleted,
+  icon,
+  triggerClassName,
 }: {
   // What to send DELETE to, under the API's address.
   path: string;
@@ -30,6 +32,9 @@ export default function ConfirmDelete({
   // Where signing in again comes back to.
   returnTo?: string;
   onDeleted: () => void;
+  // In place of the word "Delete" on the button, with the classes that then dress it.
+  icon?: React.ReactNode;
+  triggerClassName?: string;
 }) {
   const { getToken, isSignedIn } = useAuth();
   const [confirming, setConfirming] = useState(false);
@@ -82,17 +87,20 @@ export default function ConfirmDelete({
         type="button"
         aria-label={label}
         onClick={ask}
-        className="inline-flex min-h-11 min-w-11 items-center self-start text-sm text-muted underline underline-offset-4 hover:text-ink"
+        title={icon ? "Delete" : undefined}
+        className={triggerClassName ?? "inline-flex min-h-11 min-w-11 items-center self-start text-sm text-muted underline underline-offset-4 hover:text-ink"}
       >
-        Delete
+        {icon ?? "Delete"}
       </button>
     );
   return (
     <div
       onKeyDown={(e) => {
-        if (e.key === "Escape") dismiss();
+        if (e.key !== "Escape") return;
+        e.preventDefault();
+        dismiss();
       }}
-      className="flex w-full flex-col items-start gap-2"
+      className={`flex w-full flex-col items-start gap-2 ${icon ? "px-3 py-2" : ""}`}
     >
       <p id={questionId} className="text-sm">
         {question}

@@ -82,16 +82,13 @@
   --font-serif: var(--font-tiro), Georgia, serif;
 }
 
-/*
- * A box held at the foot of the screen (a Contract conversation's) says how tall it is. The page
- * then ends above it, and nothing focused or scrolled to is left underneath.
- */
-html {
-  scroll-padding-bottom: var(--dock-height, 0px);
+/* Nothing focused or scrolled to is left under the bar that leads back from a Clause. */
+[data-panel]:has([data-return-bar]) {
+  padding-bottom: 5rem;
+  scroll-padding-bottom: 5rem;
 }
 
 body {
-  padding-bottom: var(--dock-height, 0px);
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font-sans);
@@ -105,6 +102,14 @@ body {
 /* Selected text is marked in ink; violet is kept for what has been checked. */
 ::selection {
   background: color-mix(in srgb, var(--ink) 18%, transparent);
+}
+
+/* The thin scrollbars of the parts of a page that scroll on their own, in the theme's inks. */
+.scroll-area {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) transparent;
 }
 
 /* Condensed headings, after the lettering on bare-act covers. */

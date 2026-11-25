@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, Fragment, useContext, useEffect, useState } from "react";
+import { createContext, Fragment, useContext, useEffect, useEffectEvent, useState } from "react";
 import { flushSync } from "react-dom";
 import { BUTTON_CLASS } from "./ask-box";
 
@@ -39,11 +39,15 @@ const Context = createContext<Jumps | null>(null);
 export default function ClauseJumps({
   numbers,
   view,
+  onReveal,
   children,
 }: {
   numbers: string[];
   // Changes when the page shows something else, which ends any way back into what it showed.
   view?: number;
+  // Brings the part of the page holding an element into view, before it is scrolled to or
+  // focused. For a page that shows one part at a time.
+  onReveal?: (element: HTMLElement) => void;
   children: React.ReactNode;
 }) {
   const [jump, setJump] = useState<Jump | null>(null);
@@ -53,8 +57,11 @@ export default function ClauseJumps({
     setJump(null);
   }
 
+  const reveal = useEffectEvent((element: HTMLElement) => onReveal?.(element));
+
   function restore(from: HTMLElement) {
     setJump(null);
+    onReveal?.(from);
     from.focus({ preventScroll: true });
     // The browser puts the scroll position back itself after Back. Scroll only if it did not.
     requestAnimationFrame(() => {
@@ -73,6 +80,7 @@ export default function ClauseJumps({
     window.history[state?.clauseJump ? "replaceState" : "pushState"]({ ...state, clauseJump: true }, "");
     const label = from.closest<HTMLElement>("[data-place]")?.dataset.place ?? "where you were";
     flushSync(() => setJump(first ? { ...first, number } : { number, from, label }));
+    onReveal?.(target);
     jumpTo(target);
   }
 
@@ -89,11 +97,12 @@ export default function ClauseJumps({
     target?.querySelector<HTMLElement>("[data-jump-focus]")?.focus({ preventScroll: true });
   }
 
+  const returnTo = useEffectEvent(restore);
   useEffect(() => {
     const from = jump?.from;
     if (!from) return;
     const onPop = () => {
-      if (!window.history.state?.clauseJump) restore(from);
+      if (!window.history.state?.clauseJump) returnTo(from);
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -108,6 +117,7 @@ export default function ClauseJumps({
     if (number === undefined || !target) return;
     const frame = requestAnimationFrame(() => {
       setJump({ number, from: null, label: "" });
+      reveal(target);
       jumpTo(target);
     });
     return () => cancelAnimationFrame(frame);
@@ -201,20 +211,12 @@ export function LinkedText({ text, except }: { text: string; except?: string }) 
   return parts.map((p, i) => <Fragment key={i}>{p}</Fragment>);
 }
 
-// The way back, held at the foot of the screen, above any box already held there
-// (--dock-height). It sits just after the Clause's heading in the page, so it is also the next
-// stop for the Tab key.
+// The way back, held at the foot of the screen, clear of the sidebar. It sits just after the Clause's heading in the
+// page, so it is also the next stop for the Tab key. A scrolling part of the page that holds it
+// keeps clear of it (globals.css).
 function ReturnBar({ label, onBack, onStay }: { label: string; onBack: () => void; onStay: () => void }) {
-  // Keeps whatever is focused or scrolled to clear of the bar.
-  useEffect(() => {
-    const root = document.documentElement;
-    root.style.scrollPaddingBottom = "calc(5rem + var(--dock-height, 0px))";
-    return () => {
-      root.style.scrollPaddingBottom = "";
-    };
-  }, []);
   return (
-    <div className="fixed inset-x-0 bottom-[var(--dock-height,0px)] z-10 border-t-2 border-ink bg-paper px-4 pb-[env(safe-area-inset-bottom)] sm:px-8">
+    <div data-return-bar className="fixed inset-x-0 bottom-0 z-10 lg:left-72 border-t-2 border-ink bg-paper px-4 pb-[env(safe-area-inset-bottom)] sm:px-8">
       <div className="mx-auto flex max-w-[44rem] items-center justify-between gap-3 py-2">
         <button type="button" onClick={onBack} className={`${BUTTON_CLASS} min-h-11 min-w-0`}>
           Back to {label}

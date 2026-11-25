@@ -348,16 +348,36 @@ it("cancels the answer being written when the page is left, and shows no sign of
   expect(window.location.pathname).toBe("/contracts/c1/conversations/newest");
 });
 
-// On screens with no margin to hold it.
-it("folds the list of conversations away until asked, and again once one is chosen", async () => {
+// On screens too narrow to keep it beside the page.
+it("opens the conversations as a drawer, and closes it once one is chosen", async () => {
   const { user } = await open("/contracts/c1/conversations/newest");
-  const toggle = within(index()).getByRole("button", { name: "Show conversations (2)" });
+  const toggle = screen.getByRole("button", { name: "Show conversations (2)" });
   expect(toggle).toHaveAttribute("aria-expanded", "false");
+
   await user.click(toggle);
   expect(toggle).toHaveAttribute("aria-expanded", "true");
-  expect(toggle).toHaveAccessibleName("Hide conversations");
+  expect(within(index()).getByRole("link", { name: "New conversation" })).toHaveFocus();
+  expect(screen.getByRole("main")).toHaveAttribute("inert");
+
+  await user.keyboard("{Escape}");
+  expect(toggle).toHaveAttribute("aria-expanded", "false");
+  expect(toggle).toHaveFocus();
+  expect(screen.getByRole("main")).not.toHaveAttribute("inert");
+
+  await user.click(toggle);
   await user.click(within(index()).getByRole("link", { name: "Who repairs the flat?" }));
   expect(toggle).toHaveAttribute("aria-expanded", "false");
+  expect(screen.getByRole("heading", { name: "Ask about this Contract" })).toHaveFocus();
+});
+
+it("leaves the drawer open when Escape dismisses a delete confirmation", async () => {
+  const { user } = await open("/contracts/c1/conversations/newest");
+  const toggle = screen.getByRole("button", { name: "Show conversations (2)" });
+  await user.click(toggle);
+  await user.click(remove("What is the deposit?"));
+  await user.keyboard("{Escape}");
+  expect(screen.queryByText(/delete this conversation\?/i)).not.toBeInTheDocument();
+  expect(toggle).toHaveAttribute("aria-expanded", "true");
 });
 
 it("starts empty on New conversation after one has just been saved", async () => {

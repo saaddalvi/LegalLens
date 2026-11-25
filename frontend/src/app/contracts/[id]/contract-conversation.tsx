@@ -31,9 +31,9 @@ type Pending = {
   failedStage: string | null;
 };
 
-// One Query and what came of it. A `live` turn, asked while this page was open, is given at
-// least a screen's height while it is the latest, so that its question can be scrolled to the
-// top with nothing of the page below crowding in under it.
+// One Query and what came of it: the question in a bubble on the right, the reply on the left.
+// A `live` turn, asked while this page was open, is given at least the height of the
+// conversation's window while it is the latest, so that its question can be scrolled to the top.
 function Turn({
   query,
   questionRef,
@@ -50,19 +50,28 @@ function Turn({
   return (
     <li
       data-place="the answer"
-      className={`flex flex-col gap-5 ${latest && live ? "min-h-[calc(100dvh-var(--dock-height,0px))]" : ""}`}
+      className={`flex flex-col gap-5 ${latest && live ? "min-h-[calc(100cqh-1.5rem)]" : ""}`}
     >
       <p
         ref={latest ? questionRef : undefined}
         tabIndex={-1}
         lang={detectedLang(query)}
-        className="measure scroll-mt-4 break-words border-b border-rule pb-2 font-medium"
+        className="max-w-[85%] scroll-mt-4 self-end whitespace-pre-wrap break-words rounded-3xl rounded-br-md bg-ledger px-4 py-2.5"
       >
         <span className="sr-only">You asked: </span>
         {query}
       </p>
       {children}
     </li>
+  );
+}
+
+// The scrolling window onto the conversation, with its column of messages.
+function Messages({ scroller, children }: { scroller?: React.Ref<HTMLDivElement>; children: React.ReactNode }) {
+  return (
+    <div ref={scroller} className="scroll-area @container-size relative min-h-0 flex-1">
+      <div className="mx-auto flex min-h-full w-full max-w-2xl flex-col px-4 py-6">{children}</div>
+    </div>
   );
 }
 
@@ -86,6 +95,8 @@ export default function ContractConversation({
   contractId,
   conversationId,
   starters = [],
+  flaggedCount,
+  onReadBrief,
   onSaved,
   onMissing,
   onGone,
@@ -96,6 +107,9 @@ export default function ContractConversation({
   conversationId?: string;
   // Offered while the conversation is empty.
   starters?: Starter[];
+  // How many Clauses the Contract brief flags, and the way to read it, offered there too.
+  flaggedCount?: number;
+  onReadBrief?: () => void;
   // A Query was answered and saved to this conversation.
   onSaved: (conversation: ConversationRef) => void;
   // The conversation to be loaded is no longer there.
@@ -118,6 +132,8 @@ export default function ContractConversation({
   const asked = useRef(0); // numbers the Queries asked on this page, for their keys
   const form = useRef<HTMLFormElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  const opened = useRef(false); // whether a loaded conversation has been moved to its latest turn
   // Tells a screen reader that the reply has arrived, as the Stages that were being read go.
   const [notice, setNotice] = useState("");
 
@@ -156,6 +172,16 @@ export default function ContractConversation({
     })();
     return () => controller.abort();
   }, [unloaded, loads, contractId, getToken]);
+
+  // A saved conversation opens on its latest question, as it was left. Only its own window
+  // moves, and only once.
+  useLayoutEffect(() => {
+    const view = scroller.current;
+    const question = latestQuestion.current;
+    if (opened.current || !conversationId || !view || !question) return;
+    opened.current = true;
+    view.scrollTop = question.offsetTop - 16;
+  }, [conversationId, turns]);
 
   async function ask(q: string) {
     running.current?.abort(); // a new Query cancels the one in flight
@@ -269,31 +295,40 @@ export default function ContractConversation({
       setLoads((n) => n + 1);
     }
     return (
-      <div role="alert" className="flex flex-col items-start gap-3 border-l-2 border-redtape pl-4">
-        <p className="text-redtape">{gone ? MISSING : errorMessage(loadError.status)}</p>
-        <button type="button" onClick={gone ? onStartNew : retry} className={BUTTON_CLASS}>
-          {gone ? "Start a new conversation" : "Try again"}
-        </button>
-      </div>
+      <Messages>
+        <div role="alert" className="flex flex-col items-start gap-3 border-l-2 border-redtape pl-4">
+          <p className="text-redtape">{gone ? MISSING : errorMessage(loadError.status)}</p>
+          <button type="button" onClick={gone ? onStartNew : retry} className={BUTTON_CLASS}>
+            {gone ? "Start a new conversation" : "Try again"}
+          </button>
+        </div>
+      </Messages>
     );
   }
-  if (turns === null) return <p className="text-muted">Loading…</p>;
+  if (turns === null)
+    return (
+      <Messages>
+        <p className="text-muted">Loading…</p>
+      </Messages>
+    );
   return (
     <>
+      <Messages scroller={scroller}>
       {turns.length === 0 && !pending && (
-        <div className="flex flex-col gap-3">
+        <div className="my-auto flex flex-col gap-4">
+          <p className="condensed text-balance text-3xl">What do you want to know about this Contract?</p>
           <p className="measure text-muted">
             Your first question starts a new conversation, answered without your other conversations.
           </p>
           {starters.length > 0 && (
-            <ul aria-label="Questions to start with" className="measure border-t border-rule">
+            <ul aria-label="Questions to start with" className="flex flex-col items-start gap-2">
               {starters.map((s) => (
-                <li key={s.query} className="border-b border-rule">
+                <li key={s.query}>
                   <button
                     type="button"
                     lang="en"
                     onClick={() => void ask(s.query)}
-                    className="min-h-11 w-full break-words py-2 text-left underline decoration-rule underline-offset-4 hover:decoration-ink"
+                    className="min-h-11 break-words rounded-3xl border border-rule px-4 py-2 text-left hover:border-ink hover:bg-ledger"
                   >
                     <StarterText starter={s} />
                   </button>
@@ -301,6 +336,23 @@ export default function ContractConversation({
               ))}
             </ul>
           )}
+          <div className="flex flex-wrap items-center gap-x-5">
+            {onReadBrief && (
+              <button type="button" onClick={onReadBrief} className="min-h-11 text-left underline underline-offset-4">
+                {flaggedCount
+                  ? `Read the Contract brief (${flaggedCount} Flagged ${flaggedCount === 1 ? "clause" : "clauses"})`
+                  : "Read the Contract brief"}
+              </button>
+            )}
+            <button
+              type="button"
+              lang="hi"
+              onClick={() => box.current?.focus()}
+              className="min-h-11 text-left underline decoration-rule underline-offset-4 hover:decoration-ink"
+            >
+              इस Contract के बारे में हिंदी में भी पूछ सकते हैं
+            </button>
+          </div>
         </div>
       )}
 
@@ -313,7 +365,7 @@ export default function ContractConversation({
                 {t.response.response_type === "refusal" ? (
                   <Refusal result={t.response} query={t.query} onReformulate={reformulate} instant={!t.fresh} level={3} />
                 ) : (
-                  <Answer result={t.response} query={t.query} instant={!t.fresh} scope={`turn-${i}-`} level={3} />
+                  <Answer result={t.response} query={t.query} instant={!t.fresh} scope={`turn-${i}-`} level={3} foldSources />
                 )}
               </Turn>
             )),
@@ -340,6 +392,7 @@ export default function ContractConversation({
           ]}
         </ol>
       )}
+      </Messages>
 
       <p role="status" aria-label="Answer notice" className="sr-only">
         {notice}

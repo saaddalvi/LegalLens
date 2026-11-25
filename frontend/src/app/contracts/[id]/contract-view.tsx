@@ -4,17 +4,20 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { useEffect, useLayoutEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import { API_URL } from "@/lib/api-url";
 import { contractFacts } from "@/lib/contract-facts";
 import type { ContractDetail, ConversationRef } from "@/lib/contract-types";
-import ClauseJumps, { ClauseItem, isModifiedClick, jumpTo } from "../../clause-links";
+import ClauseJumps, { ClauseItem } from "../../clause-links";
 import BriefView, { Section } from "./contract-brief";
 import DeleteContract from "../delete-contract";
 import { noteDeleted } from "../deleted-notice";
 import ContractConversation from "./contract-conversation";
 import { NEW, useOpenConversation } from "./conversation-address";
 import ConversationList from "./conversation-list";
+import Sidebar, { MenuButton, useSidebar } from "./sidebar";
 import { starterQuestions } from "./starter-questions";
+import Tabs, { Panel, type Tab, type TabEntry } from "./tabs";
 
 type State = { contract: ContractDetail } | { error: string } | null;
 
@@ -23,43 +26,6 @@ function failure(status: number | null): string {
   if (status === 401) return "Your session has expired. Please sign in again.";
   if (status === null) return "We could not reach the LegalLens service. Check your connection and try again.";
   return "The service is unavailable right now. Please try again shortly.";
-}
-
-// Follows an in-page link by scrolling and moving focus. A modified click is left to the browser.
-function jumpOnClick(e: React.MouseEvent, id: string) {
-  const target = document.getElementById(id);
-  if (!target || isModifiedClick(e)) return;
-  e.preventDefault();
-  jumpTo(target);
-}
-
-// The parts of this Contract's page, in order, as links.
-function PageIndex({ brief }: { brief: ContractDetail["brief"] }) {
-  const flags = brief?.flagged_clauses.length ?? 0;
-  const entries = [
-    brief && ["flagged", flags > 0 ? `Flagged clauses (${flags})` : "Flagged clauses"],
-    brief && brief.key_terms.length > 0 && ["terms", "Key terms"],
-    brief && brief.obligations.length > 0 && ["obligations", "What each party must do"],
-    ["ask", "Ask about this Contract"],
-    ["contract-text", "The Contract"],
-  ].filter((e): e is string[] => Array.isArray(e));
-  return (
-    <nav aria-label="On this page" className="border-y border-rule py-1">
-      <ul className="flex flex-wrap gap-x-5 xl:flex-col">
-        {entries.map(([id, label]) => (
-          <li key={id}>
-            <a
-              href={`#${id}`}
-              onClick={(e) => jumpOnClick(e, id)}
-              className="inline-flex min-h-11 items-center underline decoration-rule underline-offset-4 hover:decoration-ink"
-            >
-              {label}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </nav>
-  );
 }
 
 // Names the tab for as long as this page is on screen. The Contract's title is only known
@@ -87,9 +53,9 @@ function useTabTitle(name: string | null) {
   }, [name]);
 }
 
-// An index, the Contract brief, the open Contract conversation (saved Queries and answers, and
-// the box for the next one), the Contract's Clauses verbatim, and then Delete. The index also
-// lists the conversations; the address says which one is open.
+// A Contract's page, filling the window: its conversations at the side, and one of three parts in
+// front. The open Contract conversation, the Contract brief, or the Contract's Clauses verbatim
+// with Delete after them. The address says which conversation is open.
 export default function ContractView({ id }: { id: string }) {
   const { getToken } = useAuth();
   const router = useRouter();
@@ -117,6 +83,14 @@ export default function ContractView({ id }: { id: string }) {
   const loaded = state && "contract" in state ? state.contract : null;
   useTabTitle(loaded && `${loaded.title} | LegalLens`);
   const conversation = useOpenConversation(id, loaded ? (loaded.conversations[0]?.id ?? null) : undefined);
+  const [tab, setTab] = useState<Tab>("chat");
+  // Another conversation, however it was reached, is shown in front.
+  const [seen, setSeen] = useState(conversation);
+  if (seen.key !== conversation.key) {
+    setSeen(conversation);
+    if (seen.id !== undefined) setTab("chat");
+  }
+  const menu = useSidebar();
 
   // The list is the Contract's, so what happens to a conversation is written to both.
   function relist(change: (list: ContractDetail["conversations"]) => ContractDetail["conversations"]) {
@@ -156,92 +130,131 @@ export default function ContractView({ id }: { id: string }) {
   }
 
   function show(conversationId: string) {
+    flushSync(() => {
+      setTab("chat");
+      menu.dismiss();
+    });
     conversation.show(conversationId);
-    const section = document.getElementById("ask");
-    if (section) jumpTo(section);
+    document.getElementById("conversation")?.focus({ preventScroll: true });
   }
 
-  if (state === null) return <p className="text-muted">Loading…</p>;
+  // A Clause, or the link that led to it, may be on a part that is behind.
+  function reveal(element: HTMLElement) {
+    const part = element.closest<HTMLElement>("[data-panel]")?.dataset.panel as Tab | undefined;
+    if (part) flushSync(() => setTab(part));
+  }
+
+  if (state === null)
+    return (
+      <main className="p-4">
+        <p className="text-muted">Loading…</p>
+      </main>
+    );
   if ("error" in state)
     return (
-      <div role="alert" className="flex flex-col items-start gap-3 border-l-2 border-redtape pl-4">
-        <p className="text-redtape">{state.error}</p>
-        <Link href="/contracts" className="inline-flex min-h-11 items-center underline underline-offset-4">
-          Back to your Contracts
-        </Link>
-      </div>
+      <main className="p-4">
+        <div role="alert" className="mx-auto flex max-w-2xl flex-col items-start gap-3 border-l-2 border-redtape pl-4">
+          <p className="text-redtape">{state.error}</p>
+          <Link href="/contracts" className="inline-flex min-h-11 items-center underline underline-offset-4">
+            Back to your Contracts
+          </Link>
+        </div>
+      </main>
     );
   const { contract } = state;
+  const flags = contract.brief?.flagged_clauses.length ?? 0;
+  const tabs: TabEntry[] = [
+    { id: "chat", label: "Chat" },
+    ...(contract.brief ? [{ id: "brief" as const, label: "Brief" }] : []),
+    { id: "contract", label: "Contract" },
+  ];
+
+  function readBrief() {
+    flushSync(() => setTab("brief"));
+    document.getElementById("tab-brief")?.focus();
+  }
+
   return (
-    <ClauseJumps key={contract.id} numbers={contract.clauses.map((c) => c.number)} view={conversation.key}>
-      <article className="relative flex flex-col gap-12">
-        <header className="flex flex-col gap-2">
-          <Link href="/contracts" className="inline-flex min-h-11 items-center self-start text-sm text-muted underline underline-offset-4 hover:text-ink">
-            Your Contracts
-          </Link>
-          <h1 className="condensed break-words text-3xl">{contract.title}</h1>
-          <p className="text-sm text-muted">{contractFacts(contract)}</p>
-          <a
-            href="#ask"
-            lang="hi"
-            onClick={(e) => jumpOnClick(e, "ask")}
-            className="inline-flex min-h-11 items-center self-start underline decoration-rule underline-offset-4 hover:decoration-ink"
-          >
-            इस Contract के बारे में हिंदी में भी पूछ सकते हैं
-          </a>
-          {/* The page's index: under the title, or on wide screens in the empty margin left of
-              the page column, where it stays in view as the page scrolls. */}
-          <div className="mt-2 xl:absolute xl:inset-y-0 xl:right-full xl:mt-0 xl:mr-8 xl:w-56 2xl:mr-12 2xl:w-72">
-            {/* The padding keeps focus rings from being clipped by the scrolling box. */}
-            <div className="flex flex-col gap-4 xl:sticky xl:top-2 xl:-m-2 xl:max-h-[calc(100dvh-1rem-var(--dock-height,0px))] xl:overflow-y-auto xl:p-2">
-              <PageIndex brief={contract.brief} />
-              <ConversationList
-                contractId={contract.id}
-                conversations={contract.conversations}
-                openId={conversation.id}
-                onOpen={show}
-                onDeleted={deleted}
-              />
-            </div>
-          </div>
-        </header>
-        {contract.brief && <BriefView brief={contract.brief} />}
-        <section id="ask" aria-labelledby="conversation" className="flex scroll-mt-4 flex-col gap-8">
-          <h2 id="conversation" tabIndex={-1} data-jump-focus className="condensed self-start text-2xl">
-            Ask about this Contract
-          </h2>
-          {conversation.id && (
-            <ContractConversation
-              key={conversation.key}
-              contractId={contract.id}
-              conversationId={conversation.id === NEW ? undefined : conversation.id}
-              starters={starterQuestions(contract)}
-              onSaved={saved}
-              onMissing={unlist}
-              onGone={gone}
-              onStartNew={() => show(NEW)}
-            />
-          )}
-        </section>
-        <Section id="contract-text" title="The Contract, Clause by Clause">
-          <ol data-clause-list className="flex flex-col gap-4">
-            {contract.clauses.map((c) => (
-              <ClauseItem key={c.number} number={c.number} heading={c.heading} text={c.text} />
-            ))}
-          </ol>
-        </Section>
-        <div className="border-t border-rule pt-4">
-          <DeleteContract
+    <ClauseJumps
+      key={contract.id}
+      numbers={contract.clauses.map((c) => c.number)}
+      view={conversation.key}
+      onReveal={reveal}
+    >
+      <div className="flex min-h-0 flex-1">
+        <Sidebar menu={menu}>
+          <ConversationList
             contractId={contract.id}
-            title={contract.title}
-            returnTo={`/contracts/${contract.id}`}
-            onDeleted={() => {
-              noteDeleted({ id: contract.id, title: contract.title });
-              router.push("/contracts");
-            }}
+            conversations={contract.conversations}
+            openId={conversation.id}
+            onOpen={show}
+            onDeleted={deleted}
           />
-        </div>
-      </article>
+        </Sidebar>
+        <main inert={menu.open} className="flex min-w-0 flex-1 flex-col">
+          <div className="flex shrink-0 flex-wrap items-center gap-x-4 border-b border-rule px-4">
+            <div className="flex min-w-0 flex-1 basis-full items-center gap-2 sm:basis-0">
+              <MenuButton menu={menu} count={contract.conversations.length} />
+              <h1 title={contract.title} className="condensed min-w-0 truncate py-2 text-xl">
+                {contract.title}
+              </h1>
+            </div>
+            <Tabs tabs={tabs} current={tab} onChoose={setTab} />
+          </div>
+          {/* The parts are stacked, so each keeps its place while another is in front. */}
+          <div className="relative min-h-0 flex-1">
+            <Panel id="chat" current={tab} className="flex flex-col">
+              <h2 id="conversation" tabIndex={-1} className="sr-only">
+                Ask about this Contract
+              </h2>
+              {conversation.id && (
+                <ContractConversation
+                  key={conversation.key}
+                  contractId={contract.id}
+                  conversationId={conversation.id === NEW ? undefined : conversation.id}
+                  starters={starterQuestions(contract)}
+                  flaggedCount={flags}
+                  onReadBrief={contract.brief ? readBrief : undefined}
+                  onSaved={saved}
+                  onMissing={unlist}
+                  onGone={gone}
+                  onStartNew={() => show(NEW)}
+                />
+              )}
+            </Panel>
+            {contract.brief && (
+              <Panel id="brief" current={tab} className="scroll-area">
+                <div className="mx-auto w-full max-w-2xl px-4 py-6">
+                  <BriefView brief={contract.brief} />
+                </div>
+              </Panel>
+            )}
+            <Panel id="contract" current={tab} className="scroll-area">
+              <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 py-6">
+                <p className="text-sm text-muted">{contractFacts(contract)}</p>
+                <Section id="contract-text" title="The Contract, Clause by Clause">
+                  <ol data-clause-list className="flex flex-col gap-4">
+                    {contract.clauses.map((c) => (
+                      <ClauseItem key={c.number} number={c.number} heading={c.heading} text={c.text} />
+                    ))}
+                  </ol>
+                </Section>
+                <div className="border-t border-rule pt-4">
+                  <DeleteContract
+                    contractId={contract.id}
+                    title={contract.title}
+                    returnTo={`/contracts/${contract.id}`}
+                    onDeleted={() => {
+                      noteDeleted({ id: contract.id, title: contract.title });
+                      router.push("/contracts");
+                    }}
+                  />
+                </div>
+              </div>
+            </Panel>
+          </div>
+        </main>
+      </div>
     </ClauseJumps>
   );
 }

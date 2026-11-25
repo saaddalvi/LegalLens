@@ -1,5 +1,10 @@
 import ContractsScreen from "./contracts-screen";
+import ContractsFrame from "./frame";
 
 export default function ContractsPage() {
-  return <ContractsScreen />;
+  return (
+    <ContractsFrame>
+      <ContractsScreen />
+    </ContractsFrame>
+  );
 }

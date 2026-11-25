@@ -141,8 +141,13 @@ it("shows the most recent conversation in order after a reload, with each answer
     ["contract_and_corpus", "From your Contract and statute text"],
     ["contract", "From your Contract"],
   ]);
-  expect(where("Your Contract, Clause 3")).toBeInTheDocument();
-  expect(where("Your Contract, Clause 7.2")).toBeInTheDocument();
+  // What each rests on is counted, and waits behind the count until asked for.
+  expect(screen.queryByRole("link", { name: /Open full Provision/ })).not.toBeInTheDocument();
+  expect(where("Your Contract, Clause 3")).not.toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Sources: 1 Clause, 1 Citation" }));
+  await user.click(screen.getByRole("button", { name: "Sources: 1 Clause" }));
+  expect(where("Your Contract, Clause 3")).toBeVisible();
+  expect(where("Your Contract, Clause 7.2")).toBeVisible();
   expect(screen.getByRole("link", { name: /Open full Provision: Model Tenancy Act, Section 11/ })).toHaveAttribute(
     "href",
     "/law/Model%20Tenancy%20Act/11",
@@ -382,6 +387,7 @@ it("puts an answer's headings under the conversation's", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(json(DETAIL)).mockResolvedValueOnce(json(TURNS.slice(0, 1))));
   render(<ContractView id="c1" />);
   await screen.findByText("The deposit is Rs. 1,00,000.");
+  await userEvent.click(screen.getByRole("button", { name: /^Sources:/ }));
   const level = (name: string | RegExp) => screen.getByRole("heading", { name }).tagName;
   expect(level("Ask about this Contract")).toBe("H2");
   expect(level("Answer")).toBe("H3");
@@ -573,7 +579,7 @@ it("leaves focus where the reader has moved it while the answer was written", as
   renderConversation({ conversationId: "saved" });
   await screen.findByText("The deposit is Rs. 1,00,000.");
   await user.type(questionBox(), "And the rent?{Enter}");
-  const elsewhere = screen.getByRole("link", { name: /Open full Provision/ });
+  const elsewhere = screen.getByRole("button", { name: /^Sources:/ });
   elsewhere.focus();
   stream.push(frame("answer", answer({ answer: "Rs. 20,000.", citations: [], clause_references: [] })));
   expect(await screen.findByText("Rs. 20,000.")).toBeInTheDocument();
@@ -595,4 +601,24 @@ it("keeps focus on the question when its conversation turns out to be gone", asy
   await user.click(await screen.findByRole("button", { name: "Try again" }));
   expect(await screen.findByText(/could not find that conversation/i)).toBeInTheDocument();
   expect(screen.getByText("You asked:").parentElement).toHaveFocus();
+});
+
+it("opens the folded sources on the Citation a mention in the answer names", async () => {
+  const user = userEvent.setup();
+  Element.prototype.scrollIntoView = vi.fn();
+  const mentions = answer({ answer: "Section 11 of the Model Tenancy Act caps the deposit." });
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(json([{ query: "What is the cap?", response: mentions }])));
+  renderConversation({ conversationId: "saved" });
+  const toggle = await screen.findByRole("button", { name: /^Sources:/ });
+  expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await user.click(screen.getByRole("button", { name: /^Section 11/ }));
+  expect(toggle).toHaveAttribute("aria-expanded", "true");
+  expect(screen.getByText(/security deposit shall not exceed two months/)).toBeVisible();
+});
+
+it("says a Citation is repealed while the sources are still folded", async () => {
+  const repealed = answer({ citations: [{ ...ANSWER.citations[0], status: "repealed" }] });
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(json([{ query: "What is the cap?", response: repealed }])));
+  renderConversation({ conversationId: "saved" });
+  expect(await screen.findByRole("button", { name: /^Sources: 1 Clause, 1 Citation\s*\(1 repealed\)$/ })).toBeVisible();
 });

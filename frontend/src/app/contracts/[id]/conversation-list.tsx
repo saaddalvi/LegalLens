@@ -1,14 +1,12 @@
-import { useId, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { BUTTON_CLASS } from "../../ask-box";
 import { isModifiedClick } from "../../clause-links";
 import ConfirmDelete from "../confirm-delete";
 import { detectedLang } from "@/lib/ask-stream";
 import type { ConversationRef } from "@/lib/contract-types";
 import { conversationHref, NEW } from "./conversation-address";
 
-// The Contract's conversations, newest first, under the way to start another. Narrower screens
-// have no margin to hold the list, so there it is folded away until asked for.
+// The Contract's conversations, newest first, under the way to start another.
 export default function ConversationList({
   contractId,
   conversations,
@@ -23,8 +21,6 @@ export default function ConversationList({
   onDeleted: (conversationId: string) => void;
 }) {
   const [announcement, setAnnouncement] = useState("");
-  const [unfolded, setUnfolded] = useState(false);
-  const listId = useId();
   const rows = useRef(new Map<string, HTMLLIElement>());
   const startButton = useRef<HTMLAnchorElement>(null);
 
@@ -46,31 +42,24 @@ export default function ConversationList({
     onClick: (e: React.MouseEvent) => {
       if (isModifiedClick(e)) return;
       e.preventDefault();
-      // Folded before the page moves to the conversation, which sits below the list.
-      flushSync(() => setUnfolded(false));
       onOpen(conversationId);
     },
   });
   return (
-    <nav aria-label="Conversations" className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-        <a ref={startButton} {...link(NEW)} className={`${BUTTON_CLASS} inline-flex min-h-11 items-center`}>
-          New conversation
-        </a>
-        {conversations.length > 0 && (
-          <button
-            type="button"
-            aria-expanded={unfolded}
-            aria-controls={listId}
-            onClick={() => setUnfolded((u) => !u)}
-            className="min-h-11 underline underline-offset-4 xl:hidden"
-          >
-            {unfolded ? "Hide conversations" : `Show conversations (${conversations.length})`}
-          </button>
-        )}
-      </div>
+    <nav aria-label="Conversations" className="flex min-h-0 flex-1 flex-col gap-3">
+      <a
+        ref={startButton}
+        {...link(NEW)}
+        className="mx-3 flex min-h-11 shrink-0 items-center gap-2 rounded-full border border-ink bg-paper px-4 font-semibold hover:bg-ink hover:text-ink-contrast"
+      >
+        <svg aria-hidden="true" viewBox="0 0 16 16" className="size-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75">
+          <path d="M8 3v10M3 8h10" strokeLinecap="round" />
+        </svg>
+        New conversation
+      </a>
       {conversations.length > 0 && (
-        <ul id={listId} className={`flex-col border-t border-rule xl:flex xl:text-sm ${unfolded ? "flex" : "hidden"}`}>
+        // The padding keeps focus rings from being clipped by the scrolling box.
+        <ul className="scroll-area flex min-h-0 flex-1 flex-col gap-0.5 px-3 py-1.5 text-sm">
           {conversations.map((c) => (
             <li
               key={c.id}
@@ -79,14 +68,15 @@ export default function ConversationList({
                 rows.current.set(c.id, row);
                 return () => void rows.current.delete(c.id);
               }}
-              className="flex flex-wrap items-start gap-x-3 border-b border-rule"
+              className="group flex shrink-0 flex-wrap items-center rounded-lg hover:bg-paper/60 has-[a[aria-current]]:bg-paper"
             >
               <a
                 {...link(c.id)}
                 lang={detectedLang(c.title)}
-                className="flex min-h-11 min-w-0 flex-1 items-center py-2 underline decoration-rule underline-offset-4 wrap-anywhere hover:decoration-ink aria-[current]:font-semibold aria-[current]:decoration-ink aria-[current]:decoration-2"
+                title={c.title}
+                className="flex min-h-11 min-w-0 flex-1 items-center rounded-lg px-3 py-2 aria-[current]:font-semibold"
               >
-                {c.title}
+                <span className="line-clamp-2 wrap-anywhere">{c.title}</span>
               </a>
               <ConfirmDelete
                 path={conversationHref(contractId, c.id)}
@@ -95,6 +85,13 @@ export default function ConversationList({
                 thing="conversation"
                 returnTo={conversationHref(contractId, c.id)}
                 onDeleted={() => deleted(c)}
+                // On a pointer it waits for the row to be pointed at or focused.
+                icon={
+                  <svg aria-hidden="true" viewBox="0 0 16 16" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.4">
+                    <path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4M6.6 6.5v4.5M9.4 6.5v4.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                }
+                triggerClassName="inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-muted hover:text-ink mouse:opacity-0 mouse:group-focus-within:opacity-100 mouse:group-hover:opacity-100"
               />
             </li>
           ))}

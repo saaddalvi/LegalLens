@@ -87,14 +87,13 @@ it("settles on a tab name when the Contract's title has repeated spaces", async 
   expect(document.title).toBe("Contract | LegalLens");
 });
 
-it("offers Hindi under the title, as a way to the question box", async () => {
-  Element.prototype.scrollIntoView = vi.fn();
+it("offers Hindi in an empty conversation, as a way to the question box", async () => {
   stub({ ok: true, status: 200, json: async () => CONTRACT });
   render(<ContractView id="c1" />);
-  const link = await screen.findByRole("link", { name: /हिंदी में भी पूछ सकते हैं/ });
-  expect(link).toHaveAttribute("lang", "hi");
-  await userEvent.click(link);
-  expect(screen.getByRole("heading", { name: "Ask about this Contract" })).toHaveFocus();
+  const offer = await screen.findByRole("button", { name: /हिंदी में भी पूछ सकते हैं/ });
+  expect(offer).toHaveAttribute("lang", "hi");
+  await userEvent.click(offer);
+  expect(screen.getByLabelText(/ask a question about this contract/i)).toHaveFocus();
 });
 
 it("says the Contract was not found on a 404 (someone else's looks the same)", async () => {
@@ -357,43 +356,60 @@ describe("Clause links", () => {
   });
 });
 
-describe("the page's order", () => {
-  it("has an index under the title, Flagged clauses after the purpose and Delete last", async () => {
+describe("the page's parts", () => {
+  const tab = (name: string) => screen.getByRole("tab", { name });
+  const panel = (name: string) => screen.getByRole("tabpanel", { name });
+
+  it("opens on the chat, with the brief and the Contract behind it and Delete last", async () => {
     await renderWithBrief(BRIEF);
-    expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
-      "Parties",
-      "What it is for",
-      "Flagged clauses",
-      "Key terms",
-      "What each party must do",
-      "Ask about this Contract",
-      "The Contract, Clause by Clause",
-    ]);
-    const index = screen.getByRole("navigation", { name: "On this page" });
-    expect(within(index).getAllByRole("link").map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
-      ["Flagged clauses (1)", "#flagged"],
-      ["Key terms", "#terms"],
-      ["What each party must do", "#obligations"],
-      ["Ask about this Contract", "#ask"],
-      ["The Contract", "#contract-text"],
-    ]);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Chat", "Brief", "Contract"]);
+    expect(tab("Chat")).toHaveAttribute("aria-selected", "true");
+    expect(panel("Chat")).not.toHaveAttribute("inert");
+    expect(document.getElementById("panel-brief")).toHaveAttribute("inert");
+    expect(document.getElementById("panel-contract")).toHaveAttribute("inert");
     const remove = screen.getByRole("button", { name: /delete/i });
-    const last = document.getElementById("contract-text")!;
-    expect(last.compareDocumentPosition(remove) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const clauses = document.getElementById("contract-text")!;
+    expect(clauses.compareDocumentPosition(remove) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // Each Clause sits under the Contract's own heading.
     expect(screen.getByRole("heading", { level: 3, name: "Clause 7.2" })).toBeInTheDocument();
   });
 
-  it("moves focus to a section chosen from the index", async () => {
-    Element.prototype.scrollIntoView = vi.fn();
+  it("changes part by a tab, or by the arrow keys", async () => {
+    const user = userEvent.setup();
     await renderWithBrief(BRIEF);
-    await userEvent.setup().click(screen.getByRole("link", { name: "Ask about this Contract" }));
-    expect(screen.getByRole("heading", { name: "Ask about this Contract" })).toHaveFocus();
+    await user.click(tab("Brief"));
+    expect(panel("Brief")).not.toHaveAttribute("inert");
+    expect(document.getElementById("panel-chat")).toHaveAttribute("inert");
+    await user.keyboard("{ArrowRight}");
+    expect(tab("Contract")).toHaveFocus();
+    expect(tab("Contract")).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{ArrowRight}");
+    expect(tab("Chat")).toHaveAttribute("aria-selected", "true");
   });
 
-  it("indexes only the parts a Contract without a brief has", async () => {
+  it("offers the brief from an empty conversation, counting its Flagged clauses", async () => {
+    await renderWithBrief(BRIEF);
+    await userEvent.click(screen.getByRole("button", { name: "Read the Contract brief (1 Flagged clause)" }));
+    expect(tab("Brief")).toHaveAttribute("aria-selected", "true");
+    expect(tab("Brief")).toHaveFocus();
+  });
+
+  it("brings the Contract forward for a Clause link, and the brief back on the way back", async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const user = userEvent.setup();
+    await renderWithBrief({ ...BRIEF, key_terms: [{ label: "Notice", value: "Two months", clause: "7.2" }] });
+    await user.click(tab("Brief"));
+    const link = within(panel("Brief")).getByRole("link", { name: "Clause 7.2" });
+    await user.click(link);
+    expect(tab("Contract")).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByRole("button", { name: "Back to Key terms" }));
+    await waitFor(() => expect(link).toHaveFocus());
+    expect(tab("Brief")).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("has no Brief tab for a Contract without a brief", async () => {
     await renderWithBrief(null);
-    const index = screen.getByRole("navigation", { name: "On this page" });
-    expect(within(index).getAllByRole("link")).toHaveLength(2);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Chat", "Contract"]);
+    expect(screen.queryByRole("button", { name: /Contract brief/ })).not.toBeInTheDocument();
   });
 });

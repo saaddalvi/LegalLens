@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { flushSync } from "react-dom";
 import CitationCard, { cardId } from "./citation-card";
 import { LinkedText } from "./clause-links";
@@ -181,14 +181,29 @@ function CopyAnswer({ result, query }: { result: AskResponse; query: string }) {
   );
 }
 
+const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+
+// What an answer rests on, counted: "1 Clause, 2 Citations".
+function sourceCounts(clauses: number, citations: number, web: number): string {
+  return [
+    clauses > 0 && plural(clauses, "Clause"),
+    citations > 0 && plural(citations, "Citation"),
+    web > 0 && plural(web, "web source"),
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
 // `instant` shows an answer already read (one reloaded from a Contract conversation) with no
 // reveal. `scope` is a prefix for the element ids of this answer's Citation cards.
+// `foldSources` keeps what the answer rests on behind one button until it is asked for.
 export function Answer({
   result,
   query,
   instant: shownAtOnce = false,
   scope = "",
   level = 2,
+  foldSources = false,
 }: {
   result: AskResponse & { clause_references?: ClauseReference[] };
   // The Query this answers, which is copied with it.
@@ -196,17 +211,26 @@ export function Answer({
   instant?: boolean;
   scope?: string;
   level?: Level;
+  foldSources?: boolean;
 }) {
   const { tag: Heading, card: cardHeading, size } = HEADING[level];
   const { delay, instant, settled, skip } = useReveal(result.answer, shownAtOnce);
   const clauseReferences = result.clause_references ?? [];
   const fade = instant ? "" : "reveal-in";
   const [opened, setOpened] = useState<Set<string>>(new Set());
+  const [unfolded, setUnfolded] = useState(false);
+  const sourcesId = useId();
+  const counts = sourceCounts(clauseReferences.length, result.citations.length, result.fallback_sources.length);
+  // A repealed Provision is said so even while its card is folded away.
+  const repealed = result.citations.filter((c) => c.status === "repealed").length;
   // The cards are already on the page once the text has settled, so a chip click opens its
   // card, then scrolls to it and moves focus there. The card is opened first, so the scroll
   // is measured against its full height, and its heading lands at the top of the screen.
   const goToCitation = (m: { act: string; number: string }) => {
-    flushSync(() => setOpened((o) => new Set(o).add(provisionKey(m))));
+    flushSync(() => {
+      setUnfolded(true);
+      setOpened((o) => new Set(o).add(provisionKey(m)));
+    });
     const card = document.getElementById(cardId(m, scope));
     card?.scrollIntoView?.({ behavior: instant ? "auto" : "smooth", block: "start" });
     card?.querySelector("button")?.focus({ preventScroll: true });
@@ -218,7 +242,7 @@ export function Answer({
       return next;
     });
   return (
-    <section className="flex flex-col gap-8" aria-label="Answer">
+    <section className={`flex flex-col ${foldSources ? "gap-5" : "gap-8"}`} aria-label="Answer">
       <Heading className="sr-only">Answer</Heading>
       {/* The Trust label leads: it is known when the answer arrives, and a
           reader should learn how far to trust the text before reading it. */}
@@ -246,20 +270,43 @@ export function Answer({
       </div>
 
       {/* Held close to the answer it qualifies. */}
-      <div className="-mt-4 flex flex-col items-start gap-1">
+      <div className={`${foldSources ? "-mt-2" : "-mt-4"} flex flex-col items-start ${foldSources ? "gap-2" : "gap-1"}`}>
         <p role="note" className="measure text-sm text-muted">
           {DISCLAIMER}
         </p>
         {settled && (
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            {foldSources && counts && (
+              <button
+                type="button"
+                aria-expanded={unfolded}
+                aria-controls={sourcesId}
+                onClick={() => setUnfolded((u) => !u)}
+                className="inline-flex min-h-11 items-center gap-2 rounded-3xl border border-rule px-4 py-2 text-left text-sm font-medium hover:border-ink"
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 16 16"
+                  className={`size-3.5 shrink-0 ${unfolded ? "rotate-90" : ""}`}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                >
+                  <path d="M6 3.5 10.5 8 6 12.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span>
+                  Sources: {counts}
+                  {repealed > 0 && <span className="text-redtape"> ({repealed} repealed)</span>}
+                </span>
+              </button>
+            )}
             <CopyAnswer result={result} query={query} />
           </div>
         )}
       </div>
 
       {settled && (
-        <>
-
+        <div id={sourcesId} hidden={foldSources && !unfolded} className={foldSources && !unfolded ? "" : "contents"}>
           {clauseReferences.length > 0 && (
             <div className={`${fade} flex flex-col gap-5 border-t border-rule pt-6`}>
               <Heading className={`condensed ${size}`}>From your Contract</Heading>
@@ -302,7 +349,7 @@ export function Answer({
               </ul>
             </div>
           )}
-        </>
+        </div>
       )}
     </section>
   );

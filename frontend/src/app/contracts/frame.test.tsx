@@ -1,14 +1,14 @@
 import { render, screen, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import ContractsLayout from "./layout";
+import ContractsFrame from "./frame";
 
 vi.mock("@clerk/nextjs", () => ({ useAuth: () => ({ isLoaded: false }) }));
 
 it("keeps the site header and footer outside <main>", () => {
   render(
-    <ContractsLayout>
+    <ContractsFrame>
       <p>The page</p>
-    </ContractsLayout>,
+    </ContractsFrame>,
   );
   const main = screen.getByRole("main");
   expect(within(main).getByText("The page")).toBeInTheDocument();
