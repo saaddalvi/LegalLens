@@ -6,7 +6,7 @@ The frontend change that goes with this is the minimum needed to keep the page w
 
 **Blocked by:** none
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] The brief moves to a `contracts.brief` JSONB column, its `contract_messages` rows are deleted, and `conversation_id` ends up NOT NULL
 - [x] Migration test (upgrade the test Postgres to `0004` with `migrate.upgrade(url, "0004")`, seed rows the old way, then upgrade to head): a Contract with saved Queries gets one conversation titled with its first Query, containing all its turns in order. A Contract with none gets no conversation. The brief is still returned by `GET /contracts/{id}`.
@@ -21,7 +21,7 @@ The frontend change that goes with this is the minimum needed to keep the page w
 
 ## Comments
 
-2026-11-25: Implemented in commit 31c6bb6. 524 backend and 222 frontend tests pass on the working tree, and typecheck and eslint are clean. `ruff check` still reports one issue in `llm.py` and `ruff format --check` one file, `test_llm_prompt.py`; both predate this ticket. The `API_ROUTES.md` and `DATA_FLOW.md` updates are in the working tree but not committed, because both files were already untracked.
+2026-11-25: Implemented in commit 31c6bb6. 524 backend and 222 frontend tests pass on the working tree, and typecheck and eslint are clean. `ruff check` still reports one issue in `llm.py` and `ruff format --check` one file, `test_llm_prompt.py`; both predate this ticket. The `API_ROUTES.md` and `DATA_FLOW.md` updates were committed in 8537ff0.
 
 For ticket 02: `DATA_FLOW.md` section 6 says the searches, Graders and Fallback see the new Query alone. Update it when the Follow-up rewrite lands.
 
