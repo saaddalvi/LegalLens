@@ -2,7 +2,7 @@
 
 import { SignInButton, useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { BUTTON_CLASS, FIELD_CLASS } from "../ask-box";
 import { Answer, Refusal } from "../answer-view";
 import type { Stage } from "../stage-list";
@@ -13,62 +13,107 @@ import { DISCLAIMER } from "@/lib/answer-text";
 import type { AskResponse } from "@/lib/ask-types";
 import { detectedLang, errorMessage } from "@/lib/ask-stream";
 import { retryAfterSeconds } from "@/lib/daily-cap";
+import { keepAnswer, keptAnswer } from "@/lib/kept-answers";
 import { readEvents } from "@/lib/sse";
 
 // The longest Query the backend accepts, and how close to it the count of what is left shows.
 const MAX_QUERY = 2000;
 const COUNT_FROM = 200;
 
-type Asked = { q: string };
+// What a repeat says when it brings back nothing to put in place of the answer already shown.
+const NOTHING_NEW = "This time LegalLens found no source it could stand behind.";
+const EARLIER_STANDS = "Your earlier answer is still shown below.";
+
+// One attempt to answer a Query. `again` marks one the reader asked for, which is sent even
+// when an answer to that Query is already kept.
+type Asked = { q: string; again: boolean };
 type Outcome = {
   for: Asked;
-  result: AskResponse | null;
   error: string | null;
   // The service refused the session token.
   unauthorized?: boolean;
   // The Stage that was running when answering failed, when there was one.
   failedStage?: string | null;
+  // The answer arrived while the page was being read, so it is revealed word by word.
+  fresh?: boolean;
 };
 type Progress = { for: Asked; stages: Stage[] };
 
+const fromAddress = (q?: string): Asked | null => (q ? { q, again: false } : null);
+
+// The reply that says no source supports an answer, which a temporary outage can cause.
+const foundNothing = (r: AskResponse) => r.response_type === "answer" && r.trust_label === "none";
+
+// Kept answers change only here, followed by a state change that draws them.
+const subscribe = () => () => {};
+
 export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
   const router = useRouter();
-  const { getToken, isSignedIn } = useAuth();
+  const { getToken, isLoaded, isSignedIn, userId } = useAuth();
+  // Whose answers these are. It stays when a session ends, so what is shown stays too.
+  const [owner, setOwner] = useState(userId ?? "");
   const [query, setQuery] = useState(initialQuery ?? "");
-  // The Query being answered. A new object per submission, so asking the same
-  // Query again asks again.
-  const [asked, setAsked] = useState<Asked | null>(
-    initialQuery ? { q: initialQuery } : null,
-  );
+  // The Query being answered. A new object per attempt.
+  const [asked, setAsked] = useState(() => fromAddress(initialQuery));
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [addressQuery, setAddressQuery] = useState(initialQuery);
   const [missing, setMissing] = useState(false);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
   const submitRef = useRef<HTMLButtonElement>(null);
+  // The last attempt that came to an end, with an answer or an error.
+  const settled = useRef<Asked | null>(null);
 
   // The address is the source of truth: when it changes to another Query (a
-  // link, a reload, back or forward), the ask box shows that Query and it is
-  // answered, unless this screen is already answering it.
+  // link, back or forward), the ask box shows that Query and its answer, unless
+  // this screen is already answering it.
   if (initialQuery !== addressQuery) {
     setAddressQuery(initialQuery);
     setQuery(initialQuery ?? "");
     setMissing(false);
-    if (initialQuery !== asked?.q) setAsked(initialQuery ? { q: initialQuery } : null);
+    if (initialQuery !== asked?.q) setAsked(fromAddress(initialQuery));
   }
 
+  if (userId && userId !== owner) {
+    setOwner(userId);
+    // Someone else has signed in, and Next may have kept this page: start from the address.
+    if (owner) {
+      setQuery(initialQuery ?? "");
+      setMissing(false);
+      setAsked(fromAddress(initialQuery));
+    }
+  }
+
+  // Next may keep a page that is left and show it again. An answer shown then is not revealed
+  // afresh, and the Stages of an unfinished attempt go, as it starts over.
+  useLayoutEffect(
+    () => () => {
+      setOutcome((o) => o && { ...o, fresh: false });
+      setProgress((p) => (p && p.for === settled.current ? p : null));
+    },
+    [],
+  );
+
+  // Sends the Query, unless this attempt has already ended or a kept answer stands in for it.
+  // Leaving cancels an attempt in flight, and showing the page again restarts it.
   useEffect(() => {
-    if (!asked) return;
+    if (!asked || !isLoaded || settled.current === asked) return;
+    if (!asked.again && keptAnswer(owner, asked.q)) return;
     const controller = new AbortController();
+    const stages: Stage[] = [];
     let running: string | null = null; // the latest Stage to start
-    const done = (
-      result: AskResponse | null,
-      error: string | null,
-      failedStage: string | null = null,
-      unauthorized = false,
-    ) => {
-      if (!controller.signal.aborted)
-        setOutcome({ for: asked, result, error, failedStage, unauthorized });
+    const settle = (end: Omit<Outcome, "for">) => {
+      if (controller.signal.aborted) return;
+      settled.current = asked;
+      setOutcome({ for: asked, ...end });
+    };
+    const fail = (error: string, failedStage: string | null = null) => settle({ error, failedStage });
+    const answered = (result: AskResponse) => {
+      if (controller.signal.aborted) return;
+      const earlier = keptAnswer(owner, asked.q);
+      if (earlier && !foundNothing(earlier) && foundNothing(result)) return fail(NOTHING_NEW);
+      keepAnswer(owner, asked.q, result);
+      settle({ error: null, fresh: true });
     };
     (async () => {
       try {
@@ -84,38 +129,45 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
           signal: controller.signal,
         });
         if (!res.ok) {
-          const message = errorMessage(res.status, retryAfterSeconds(res));
-          return done(null, message, null, res.status === 401);
+          const error = errorMessage(res.status, retryAfterSeconds(res));
+          return settle({ error, unauthorized: res.status === 401 });
         }
-        if (!res.body) return done(null, errorMessage(null));
+        if (!res.body) return fail(errorMessage(null));
         let finished = false;
         await readEvents(res.body, (name, data) => {
           if (controller.signal.aborted) return;
           if (name === "stage") {
             running = (data as Stage).id;
-            setProgress((p) => ({
-              for: asked,
-              stages: [...(p?.for === asked ? p.stages : []), data as Stage],
-            }));
+            stages.push(data as Stage);
+            setProgress({ for: asked, stages: [...stages] });
           } else if (name === "answer") {
             finished = true;
-            done(data as AskResponse, null);
+            answered(data as AskResponse);
           } else if (name === "error") {
             finished = true;
-            done(null, errorMessage(503), (data as { stage?: string }).stage ?? running);
+            fail(errorMessage(503), (data as { stage?: string }).stage ?? running);
           }
         });
-        if (!finished) done(null, errorMessage(null), running);
+        if (!finished) fail(errorMessage(null), running);
       } catch {
-        done(null, errorMessage(null), running);
+        fail(errorMessage(null), running);
       }
     })();
     return () => controller.abort();
-  }, [asked, getToken]);
+  }, [asked, isLoaded, owner, getToken]);
 
+  // The answer shown for the Query: the latest that came back for it.
+  const result = useSyncExternalStore(
+    subscribe,
+    () => (asked ? keptAnswer(owner, asked.q) : null),
+    () => null,
+  );
   const current = outcome?.for === asked ? outcome : null;
-  const loading = asked !== null && current === null;
-  const result = current?.result ?? null;
+  // Until Clerk says who is reading, a kept answer cannot be looked for.
+  const waiting = asked !== null && !asked.again && !isLoaded;
+  const loading =
+    asked !== null && current === null && !waiting && (asked.again || result === null);
+  const busy = loading || waiting;
   const error = current?.error ?? null;
   const stages = progress?.for === asked ? progress.stages : [];
   const failedStage = current?.failedStage ?? null;
@@ -124,7 +176,7 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
   // The button pressed goes away with the error, so focus moves to Ask.
   function tryAgain() {
     if (!asked) return;
-    setAsked({ q: asked.q });
+    setAsked({ q: asked.q, again: true });
     submitRef.current?.focus();
   }
 
@@ -146,14 +198,14 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
   function submit(e: React.FormEvent) {
     e.preventDefault();
     // The button stays focusable while an answer is being written, so it is checked here.
-    if (loading) return;
+    if (busy) return;
     const q = query.trim();
     if (!q) {
       setMissing(true);
       fieldRef.current?.focus();
       return;
     }
-    setAsked({ q });
+    setAsked({ q, again: true });
     if (q !== initialQuery) {
       router.push(`/ask?${new URLSearchParams({ q })}`, { scroll: false });
     }
@@ -193,7 +245,7 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
           <button
             ref={submitRef}
             type="submit"
-            aria-disabled={loading || undefined}
+            aria-disabled={busy || undefined}
             className={`${BUTTON_CLASS} aria-disabled:cursor-progress aria-disabled:bg-ledger aria-disabled:text-muted aria-disabled:hover:bg-ledger`}
           >
             {loading ? "Thinking…" : "Ask"}
@@ -210,12 +262,14 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
 
       {/* Tells a screen reader the reply has arrived, as the Stages that were being read go. */}
       <p role="status" className="sr-only">
-        {result?.response_type === "answer"
-          ? "Your answer is ready."
-          : result
-            ? "LegalLens could not answer that question."
-            : ""}
+        {!result || loading || error
+          ? ""
+          : result.response_type === "answer"
+            ? "Your answer is ready."
+            : "LegalLens could not answer that question."}
       </p>
+
+      {waiting && <p className="text-muted">Loading…</p>}
 
       {showStages && (
         <StageList
@@ -228,7 +282,10 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
 
       {error && (
         <div role="alert" className="flex flex-col items-start gap-3 border border-rule bg-ledger px-4 py-4">
-          <p>{error}</p>
+          <p>
+            {error}
+            {result && ` ${EARLIER_STANDS}`}
+          </p>
           {current?.unauthorized && isSignedIn === false ? (
             <SignInButton>
               <button type="button" className={BUTTON_CLASS}>
@@ -249,11 +306,17 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
           result={result}
           query={asked?.q ?? ""}
           onReformulate={fillAskBox}
+          instant={!current?.fresh}
         />
       )}
 
       {result?.response_type === "answer" && (
-        <Answer key={`${asked?.q}-${result.answer}`} result={result} query={asked?.q ?? ""} />
+        <Answer
+          key={`${asked?.q}-${result.answer}`}
+          result={result}
+          query={asked?.q ?? ""}
+          instant={!current?.fresh}
+        />
       )}
 
       <footer className="flex flex-col items-start gap-6 border-t border-rule pt-6">

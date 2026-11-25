@@ -54,10 +54,10 @@ function paragraphsOf(text: string): string[] {
 // Drives one reveal: `settled` once the text is fully shown (so the rest can
 // appear), `instant` when nothing should animate (reduced motion, or the
 // reader clicked to skip).
-function useReveal(text: string, startInstant = false) {
+function useReveal(text: string, shownAtOnce = false) {
   const [reduced] = useState(prefersReducedMotion);
   const [finished, setFinished] = useState(false);
-  const [skipped, setSkipped] = useState(startInstant);
+  const [skipped, setSkipped] = useState(false);
   const count = paragraphsOf(text).reduce((n, p) => n + wordsOf(p).length, 0);
   const delay = Math.min(MAX_WORD_DELAY_MS, (REVEAL_MS - FADE_MS) / Math.max(count - 1, 1));
   const total = Math.max(count - 1, 0) * delay + FADE_MS;
@@ -66,7 +66,7 @@ function useReveal(text: string, startInstant = false) {
     const t = setTimeout(() => setFinished(true), total);
     return () => clearTimeout(t);
   }, [reduced, total]);
-  const instant = reduced || skipped;
+  const instant = reduced || skipped || shownAtOnce;
   // Escape ends the reveal for keyboard readers, as a click does for pointers.
   useEffect(() => {
     if (instant || finished) return;
@@ -194,8 +194,8 @@ function sourceCounts(clauses: number, citations: number, web: number): string {
     .join(", ");
 }
 
-// `instant` shows an answer already read (one reloaded from a Contract conversation) with no
-// reveal. `scope` is a prefix for the element ids of this answer's Citation cards.
+// `instant` shows an answer already read (a saved one, or one returned to) with no reveal.
+// `scope` is a prefix for the element ids of this answer's Citation cards.
 // `foldSources` keeps what the answer rests on behind one button until it is asked for.
 export function Answer({
   result,

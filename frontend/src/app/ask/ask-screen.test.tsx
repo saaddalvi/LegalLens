@@ -1,15 +1,16 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Activity } from "react";
 import AskScreen from "./ask-screen";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 
 const getToken = vi.fn();
-const session: { isSignedIn?: boolean } = {};
+const session: { isLoaded?: boolean; isSignedIn?: boolean; userId?: string | null } = {};
 vi.mock("@clerk/nextjs", () => ({
-  useAuth: () => ({ getToken, ...session }),
+  useAuth: () => ({ getToken, isLoaded: true, userId: "user_1", ...session }),
   SignInButton: ({ children }: { children: React.ReactNode }) => children,
   UserButton: () => null,
 }));
@@ -88,7 +89,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
   push.mockReset();
   getToken.mockReset();
+  delete session.isLoaded;
   delete session.isSignedIn;
+  delete session.userId;
+  window.sessionStorage.clear();
 });
 
 describe("AskScreen", () => {
@@ -333,6 +337,11 @@ describe("AskScreen", () => {
     rerender(<AskScreen initialQuery="second" />);
     expect(await screen.findByText("Second answer.")).toBeInTheDocument();
     expect(screen.getByLabelText(/ask a question/i)).toHaveValue("second");
+    rerender(<AskScreen initialQuery="first" />);
+    expect(screen.getByText("First answer.")).toBeInTheDocument();
+    expect(screen.queryByText("Second answer.")).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/ask a question/i)).toHaveValue("first");
+    expect(screen.queryByRole("button", { name: /thinking/i })).not.toBeInTheDocument();
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
@@ -537,10 +546,34 @@ describe("answer reveal", () => {
     expect(screen.getByText(/Constitution of India/)).toBeInTheDocument();
   });
 
+  it("does not reveal an answer afresh when the screen is shown again", async () => {
+    allowMotion();
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(sseResponse([frame("answer", { ...base, answer: longAnswer })])),
+    );
+    const view = (mode: "visible" | "hidden") => (
+      <Activity mode={mode}>
+        <AskScreen initialQuery="What is Article 14?" />
+      </Activity>
+    );
+    const { rerender, container } = render(view("visible"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(container.querySelector(".reveal-word")).not.toBeNull();
+    await act(async () => rerender(view("hidden")));
+    await act(async () => rerender(view("visible")));
+    expect(container.querySelector(".reveal-word, .reveal-in")).toBeNull();
+    expect(screen.getByText(/Constitution of India/)).toBeInTheDocument();
+  });
+
   it("says what a web-sourced Trust label means before the answer, and nothing extra for statute text", async () => {
     await startAnswering({ ...base, answer: "Short.", trust_label: "fallback" });
     expect(screen.getByText(/draws on web search/)).toBeInTheDocument();
     cleanup();
+    window.sessionStorage.clear();
     await startAnswering({ ...base, answer: "Short." });
     expect(screen.queryByText(/Every claim rests on/)).not.toBeInTheDocument();
   });
@@ -756,5 +789,232 @@ describe("Citation links to the law", () => {
       "href",
       "/law/Indian%20Penal%20Code/302",
     );
+  });
+});
+
+describe("returning to a Query", () => {
+  const Q = "What is Article 14?";
+  const reply = (text: string, extra: object = {}) =>
+    sseResponse([
+      stageFrame("scope_check", "Checking your question"),
+      frame("answer", { ...base, answer: text, ...extra }),
+    ]);
+  const nothing = { trust_label: "none", citations: [] };
+
+  // The screen as Next keeps it: hidden on leaving for another page, shown again on return.
+  const kept = (visible: boolean) => (
+    <Activity mode={visible ? "visible" : "hidden"}>
+      <AskScreen initialQuery={Q} />
+    </Activity>
+  );
+
+  async function answeredThen(...next: unknown[]) {
+    const fn = vi.fn().mockResolvedValueOnce(reply("First answer."));
+    next.forEach((r) => fn.mockResolvedValueOnce(r));
+    vi.stubGlobal("fetch", fn);
+    const view = render(kept(true));
+    await screen.findByText("First answer.");
+    return { fn, ...view };
+  }
+
+  const askAgain = () => userEvent.click(screen.getByRole("button", { name: "Ask" }));
+
+  async function leaveAndReturn(rerender: (ui: React.ReactElement) => void) {
+    await act(async () => rerender(kept(false)));
+    await act(async () => rerender(kept(true)));
+  }
+
+  it("sends nothing when the screen is shown again, and keeps an opened Citation open", async () => {
+    const { fn, rerender } = await answeredThen();
+    const toggle = screen.getByRole("button", { name: /Constitution of India, Article 14/ });
+    await userEvent.click(toggle);
+    await leaveAndReturn(rerender);
+    expect(screen.getByText("First answer.")).toBeVisible();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the answer again after a reload without sending the Query", async () => {
+    const { fn, unmount } = await answeredThen();
+    unmount();
+    render(<AskScreen initialQuery={Q} />);
+    expect(screen.getByText("First answer.")).toBeInTheDocument();
+    expect(screen.getByText("Your answer is ready.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /thinking/i })).not.toBeInTheDocument();
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for Clerk before deciding whether a reloaded Query needs sending", async () => {
+    const { fn, unmount } = await answeredThen();
+    unmount();
+    session.isLoaded = false;
+    session.userId = null;
+    const { rerender } = render(<AskScreen initialQuery={Q} />);
+    expect(screen.getByText("Loading…")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ask" })).toHaveAttribute("aria-disabled", "true");
+    session.isLoaded = true;
+    session.userId = "user_1";
+    rerender(<AskScreen initialQuery={Q} />);
+    expect(screen.getByText("First answer.")).toBeInTheDocument();
+    expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not show one user's answer to another", async () => {
+    const { fn, rerender } = await answeredThen(reply("Their own answer."));
+    session.userId = "user_2";
+    await act(async () => rerender(kept(true)));
+    expect(await screen.findByText("Their own answer.")).toBeInTheDocument();
+    expect(screen.queryByText("First answer.")).not.toBeInTheDocument();
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it("restarts a request that leaving interrupted, with its Stages once each", async () => {
+    const first = controlledResponse();
+    const second = controlledResponse();
+    const fn = vi.fn().mockResolvedValueOnce(first.res).mockResolvedValueOnce(second.res);
+    vi.stubGlobal("fetch", fn);
+    const { rerender } = render(kept(true));
+    first.push(stageFrame("scope_check", "Checking your question"));
+    await screen.findByText("Checking your question");
+    await act(async () => rerender(kept(false)));
+    expect(fn.mock.calls[0][1].signal.aborted).toBe(true);
+    await act(async () => rerender(kept(true)));
+    await waitFor(() => expect(fn).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
+    second.push(stageFrame("scope_check", "Checking your question"));
+    await waitFor(() => expect(screen.getAllByRole("listitem")).toHaveLength(1));
+    second.push(frame("answer", base));
+    second.close();
+    expect(await screen.findByText("From statute text")).toBeInTheDocument();
+  });
+
+  it("restarts a request that a reload interrupted", async () => {
+    const fn = vi
+      .fn()
+      .mockReturnValueOnce(new Promise(() => {}))
+      .mockResolvedValueOnce(reply("First answer."));
+    vi.stubGlobal("fetch", fn);
+    const { unmount } = render(<AskScreen initialQuery={Q} />);
+    await waitFor(() => expect(fn).toHaveBeenCalledTimes(1));
+    unmount();
+    render(<AskScreen initialQuery={Q} />);
+    expect(await screen.findByText("First answer.")).toBeInTheDocument();
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it("leaves a failed request failed on return, until Try again", async () => {
+    const fn = vi.fn().mockResolvedValue({ ok: false, status: 503 });
+    vi.stubGlobal("fetch", fn);
+    const { rerender } = render(kept(true));
+    await screen.findByRole("alert");
+    await leaveAndReturn(rerender);
+    expect(screen.getByRole("alert")).toHaveTextContent(/unavailable/i);
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/earlier answer/i);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the shown answer while the same Query is asked again, then replaces it", async () => {
+    const again = controlledResponse();
+    const { fn } = await answeredThen(again.res);
+    await askAgain();
+    expect(screen.getByRole("button", { name: /thinking/i })).toBeInTheDocument();
+    expect(screen.getByText("First answer.")).toBeInTheDocument();
+    expect(screen.queryByText("Your answer is ready.")).not.toBeInTheDocument();
+    again.push(frame("answer", { ...base, answer: "Newer answer." }));
+    again.close();
+    expect(await screen.findByText("Newer answer.")).toBeInTheDocument();
+    expect(screen.queryByText("First answer.")).not.toBeInTheDocument();
+    expect(screen.getByText("Your answer is ready.")).toBeInTheDocument();
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ["the service refuses it", () => ({ ok: false, status: 503 })],
+    ["the daily limit is reached", () => ({ ok: false, status: 429 })],
+    ["a Stage fails", () => sseResponse([frame("error", { stage: "generation", message: "x" })])],
+    ["the stream drops", () => sseResponse([stageFrame("scope_check", "Checking")])],
+    ["it finds no source", () => reply("Cannot answer.", nothing)],
+  ])("keeps the shown answer, also after a reload, when a repeat fails because %s", async (_, res) => {
+    const { fn, unmount } = await answeredThen(res());
+    await askAgain();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Your earlier answer is still shown below.");
+    expect(screen.getByText("First answer.")).toBeInTheDocument();
+    expect(screen.queryByText("Cannot answer.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Your answer is ready.")).not.toBeInTheDocument();
+    unmount();
+    render(<AskScreen initialQuery={Q} />);
+    expect(screen.getByText("First answer.")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the shown answer when the network or the session is lost during a repeat", async () => {
+    const { fn } = await answeredThen();
+    fn.mockRejectedValueOnce(new TypeError("fail"));
+    await askAgain();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/could not reach.*earlier answer/i);
+    fn.mockImplementationOnce(async () => {
+      session.isSignedIn = false;
+      session.userId = null;
+      return { ok: false, status: 401 };
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() =>
+      expect(within(screen.getByRole("alert")).getByRole("button", { name: "Sign in" })).toBeInTheDocument(),
+    );
+    expect(screen.getByText("First answer.")).toBeInTheDocument();
+  });
+
+  it("replaces a reply that found no source when a repeat does better", async () => {
+    const fn = vi
+      .fn()
+      .mockResolvedValueOnce(reply("Cannot answer.", nothing))
+      .mockResolvedValueOnce(reply("Found it."));
+    vi.stubGlobal("fetch", fn);
+    render(<AskScreen initialQuery={Q} />);
+    await screen.findByText("Cannot answer.");
+    await askAgain();
+    expect(await screen.findByText("Found it.")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("still returns to an answer when the browser refuses to store it", async () => {
+    session.userId = "user_without_storage";
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("full", "QuotaExceededError");
+    });
+    try {
+      const { fn, unmount } = await answeredThen();
+      unmount();
+      render(<AskScreen initialQuery={Q} />);
+      expect(screen.getByText("First answer.")).toBeInTheDocument();
+      expect(fn).toHaveBeenCalledTimes(1);
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+
+  it("sends the Query when what was stored cannot be read", async () => {
+    window.sessionStorage.setItem("legallens.ask.answers.v1", "{oops");
+    const { fn } = await answeredThen();
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps only the latest 20 answers", async () => {
+    const fn = vi.fn().mockImplementation(async () => reply("An answer."));
+    vi.stubGlobal("fetch", fn);
+    const { rerender } = render(<AskScreen initialQuery="q0" />);
+    for (let i = 0; i <= 20; i++) {
+      rerender(<AskScreen initialQuery={`q${i}`} />);
+      await screen.findByText("An answer.");
+    }
+    expect(fn).toHaveBeenCalledTimes(21);
+    rerender(<AskScreen initialQuery="q1" />);
+    expect(screen.getByText("An answer.")).toBeInTheDocument();
+    expect(fn).toHaveBeenCalledTimes(21);
+    rerender(<AskScreen initialQuery="q0" />);
+    await screen.findByText("An answer.");
+    expect(fn).toHaveBeenCalledTimes(22);
   });
 });
