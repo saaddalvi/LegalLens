@@ -8,6 +8,7 @@ import { API_URL } from "@/lib/api-url";
 import type { ContractDetail } from "@/lib/contract-types";
 import BriefView from "./contract-brief";
 import DeleteContract from "../delete-contract";
+import { noteDeleted } from "../deleted-notice";
 import ContractConversation from "./contract-conversation";
 
 type State = { contract: ContractDetail } | { error: string } | null;
@@ -66,7 +67,15 @@ export default function ContractView({ id }: { id: string }) {
           {contract.clause_count} {contract.clause_count === 1 ? "Clause" : "Clauses"}
         </p>
       </header>
-      <DeleteContract contractId={contract.id} title={contract.title} onDeleted={() => router.push("/contracts")} />
+      <DeleteContract
+        contractId={contract.id}
+        title={contract.title}
+        returnTo={`/contracts/${contract.id}`}
+        onDeleted={() => {
+          noteDeleted({ id: contract.id, title: contract.title });
+          router.push("/contracts");
+        }}
+      />
       {contract.brief && <BriefView brief={contract.brief} />}
       <ContractConversation contractId={contract.id} initial={contract.conversation ?? []} />
       <h2 className="condensed text-xl">The Contract, Clause by Clause</h2>

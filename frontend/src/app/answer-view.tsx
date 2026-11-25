@@ -32,14 +32,14 @@ function CitationCard({
   // repealed one is ruled in red instead, as struck out.
   const rule = c.status === "repealed" ? "border-redtape" : "border-stamp";
   return (
-    <article id={cardId(c, scope)} className={`flex flex-col gap-2 border-l-2 ${rule} pl-4`}>
+    <article id={cardId(c, scope)} className={`flex flex-col gap-1 border-l-2 ${rule} pl-4`}>
       <h3>
         <button
           type="button"
           aria-expanded={open}
           aria-controls={panelId}
           onClick={onToggle}
-          className="flex w-full items-baseline justify-between gap-4 py-1 text-left"
+          className="group flex min-h-11 w-full items-baseline justify-between gap-4 pt-1.5 text-left"
         >
           <span className="min-w-0 break-words">
             <span className={`font-semibold ${c.status === "repealed" ? "line-through decoration-redtape decoration-2" : ""}`}>
@@ -49,7 +49,7 @@ function CitationCard({
               ({c.chapter}, {STATUS_TEXT[c.status]})
             </span>
           </span>
-          <span aria-hidden="true" className="shrink-0 text-sm text-muted underline underline-offset-4">
+          <span aria-hidden="true" className="shrink-0 text-sm text-muted underline underline-offset-4 group-hover:text-ink">
             {open ? "Hide text" : "Show text"}
           </span>
         </button>
@@ -58,7 +58,7 @@ function CitationCard({
       <Link
         href={lawHref(c.act, c.number)}
         aria-label={`Open full Provision: ${c.act}, ${c.number}`}
-        className="self-start text-sm text-muted underline underline-offset-4 hover:text-ink"
+        className="inline-flex min-h-11 items-center self-start text-sm text-muted underline underline-offset-4 hover:text-ink"
       >
         Open full Provision
       </Link>
@@ -72,6 +72,14 @@ function CitationCard({
       )}
     </article>
   );
+}
+
+function siteOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
 }
 
 // Reveal timing: the whole reveal finishes within REVEAL_MS however long the
@@ -163,14 +171,21 @@ function RevealedParagraphs({
           : onMention
             ? splitMentions(para, citations).map((seg, j) =>
                 "act" in seg ? (
-                  <button
+                  // Not a <button>, which cannot break across lines inside a sentence.
+                  <span
                     key={j}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => onMention(seg)}
-                    className="text-stamp underline decoration-stamp/50 decoration-2 underline-offset-4 hover:decoration-stamp"
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter" && e.key !== " ") return;
+                      e.preventDefault();
+                      onMention(seg);
+                    }}
+                    className="cursor-pointer text-stamp underline decoration-stamp/50 decoration-2 underline-offset-4 hover:decoration-stamp"
                   >
                     {seg.text}
-                  </button>
+                  </span>
                 ) : (
                   seg.text
                 ),
@@ -205,7 +220,7 @@ function CopyAnswer({ result }: { result: AskResponse }) {
       <button
         type="button"
         onClick={copy}
-        className="text-sm text-muted underline underline-offset-4 hover:text-ink"
+        className="inline-flex min-h-11 items-center text-sm text-muted underline underline-offset-4 hover:text-ink"
       >
         Copy answer
       </button>
@@ -247,6 +262,7 @@ export function Answer({
     });
   return (
     <section className="flex flex-col gap-8" aria-label="Answer">
+      <h2 className="sr-only">Answer</h2>
       {/* The Trust label leads: it is known when the answer arrives, and a
           reader should learn how far to trust the text before reading it. */}
       <div className="flex flex-col items-start gap-2">
@@ -307,10 +323,12 @@ export function Answer({
               <h2 className="condensed text-2xl">Web sources</h2>
               <ul className="flex flex-col break-words">
                 {result.fallback_sources.map((s) => (
-                  <li key={s.url} className="border-b border-rule py-2">
-                    <a href={s.url} className="underline decoration-rule underline-offset-4 hover:decoration-ink">
+                  <li key={s.url} className="flex flex-col items-start border-b border-rule pb-2 last:border-b-0">
+                    <a href={s.url} className="inline-flex min-h-11 items-center underline decoration-rule underline-offset-4 hover:decoration-ink">
                       {s.title}
                     </a>
+                    {/* The site, so a reader can judge it before opening it. */}
+                    <span className="text-sm text-muted">{siteOf(s.url)}</span>
                   </li>
                 ))}
               </ul>
@@ -355,7 +373,7 @@ export function Refusal({
           <button
             type="button"
             onClick={() => onReformulate(result.suggested_reformulation ?? "")}
-            className="text-left underline underline-offset-4"
+            className="min-h-11 text-left underline underline-offset-4"
           >
             {result.suggested_reformulation}
           </button>

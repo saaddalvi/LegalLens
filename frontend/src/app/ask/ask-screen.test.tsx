@@ -7,7 +7,12 @@ const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 
 const getToken = vi.fn();
-vi.mock("@clerk/nextjs", () => ({ useAuth: () => ({ getToken }) }));
+const session: { isSignedIn?: boolean } = {};
+vi.mock("@clerk/nextjs", () => ({
+  useAuth: () => ({ getToken, ...session }),
+  SignInButton: ({ children }: { children: React.ReactNode }) => children,
+  UserButton: () => null,
+}));
 
 const base = {
   response_type: "answer",
@@ -83,6 +88,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   push.mockReset();
   getToken.mockReset();
+  delete session.isSignedIn;
 });
 
 describe("AskScreen", () => {
@@ -158,7 +164,12 @@ describe("AskScreen", () => {
   it("shows a loading state while waiting", async () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
     await ask();
-    expect(screen.getByRole("button", { name: /thinking/i })).toBeDisabled();
+    const button = screen.getByRole("button", { name: /thinking/i });
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    // It keeps focus, and pressing it again sends nothing.
+    expect(button).toHaveFocus();
+    await userEvent.click(button);
+    expect(fetch).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("status", { name: /progress/i })).toBeInTheDocument();
   });
 
@@ -166,6 +177,84 @@ describe("AskScreen", () => {
     mockFetch({ ok: false, status: 429 });
     await ask();
     expect(await screen.findByRole("alert")).toHaveTextContent(/too many questions/i);
+  });
+
+  it("says how long to wait when the limit will not lift for hours", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        headers: new Headers({ "Retry-After": "19800" }),
+      }),
+    );
+    await ask();
+    expect(await screen.findByRole("alert")).toHaveTextContent("try again in 5 hours 30 minutes");
+  });
+
+  it("offers sign-in instead of Try again once the session has ended", async () => {
+    session.isSignedIn = false;
+    mockFetch({ ok: false, status: 401 });
+    render(<AskScreen initialQuery="What is Article 14?" />);
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).getByRole("button", { name: "Sign in" })).toBeInTheDocument();
+    expect(within(alert).queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+  });
+
+  it("asks for a question when the box is empty", async () => {
+    const fn = mockFetch({ ok: true, status: 200, body: base });
+    const user = userEvent.setup();
+    render(<AskScreen />);
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    expect(screen.getByText("Type your question first, in English or Hindi.")).toBeInTheDocument();
+    expect(screen.getByLabelText(/ask a question/i)).toBeInvalid();
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("stops at the longest Query and counts down near it", () => {
+    render(<AskScreen />);
+    const box = screen.getByLabelText(/ask a question/i);
+    expect(box).toHaveAttribute("maxlength", "2000");
+    expect(screen.queryByText(/characters left/)).not.toBeInTheDocument();
+    fireEvent.change(box, { target: { value: "a".repeat(1900) } });
+    expect(screen.getByText("100 characters left")).toBeInTheDocument();
+  });
+
+  it("announces that the answer is ready", async () => {
+    mockFetch({ ok: true, status: 200, body: base });
+    await ask();
+    expect(await screen.findByText("Your answer is ready.")).toHaveAttribute("role", "status");
+  });
+
+  it("moves to the ask box when a suggested question is chosen", async () => {
+    mockFetch({
+      ok: true,
+      status: 200,
+      body: {
+        ...base,
+        response_type: "refusal",
+        refusal_reason: "Outside Indian law.",
+        suggested_reformulation: "What does Article 14 say?",
+        answer: "",
+        citations: [],
+      },
+    });
+    const user = await ask();
+    await user.click(await screen.findByRole("button", { name: "What does Article 14 say?" }));
+    const box = screen.getByLabelText(/ask a question/i);
+    expect(box).toHaveValue("What does Article 14 say?");
+    expect(box).toHaveFocus();
+  });
+
+  it("opens a mentioned Provision from the keyboard", async () => {
+    mockFetch({ ok: true, status: 200, body: { ...base, answer: "See Article 14." } });
+    const user = await ask();
+    (await screen.findByRole("button", { name: "Article 14" })).focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("button", { name: /Constitution of India, 14/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
   });
 
   it("sends the Clerk session token as a bearer token", async () => {
@@ -570,6 +659,7 @@ describe("Copy answer", () => {
     const copied = writeText.mock.calls[0][0] as string;
     expect(copied).toContain("Equality before the law is guaranteed.");
     expect(copied).toContain("- Constitution of India, 14");
+    expect(copied.startsWith("From statute text")).toBe(true);
     expect(copied).toMatch(/not legal advice/i);
     expect(await screen.findByText("Copied")).toBeInTheDocument();
   });

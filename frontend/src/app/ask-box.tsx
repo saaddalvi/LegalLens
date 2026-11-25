@@ -8,7 +8,12 @@ import { askHref } from "@/lib/corpus";
 export const FIELD_CLASS =
   "w-full resize-y rounded-t border-0 border-b-2 border-ink bg-ledger px-3 py-2.5 font-serif text-lg leading-relaxed text-ink placeholder:text-muted focus-visible:outline-offset-0";
 export const BUTTON_CLASS =
-  "rounded bg-ink px-6 py-2.5 text-base font-semibold text-ink-contrast disabled:opacity-50";
+  "rounded bg-ink px-6 py-2.5 text-base font-semibold text-ink-contrast hover:bg-ink/85 disabled:opacity-50 disabled:hover:bg-ink";
+
+// A button that cannot act yet stays focusable (aria-disabled, not disabled), and looks it.
+export const DIMMED_BUTTON_CLASS =
+  "aria-disabled:bg-ledger aria-disabled:text-muted aria-disabled:hover:bg-ledger";
+export const BUSY_BUTTON_CLASS = `aria-disabled:cursor-progress ${DIMMED_BUTTON_CLASS}`;
 
 export default function AskBox() {
   const router = useRouter();

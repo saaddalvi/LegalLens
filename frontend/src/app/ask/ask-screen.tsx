@@ -1,26 +1,31 @@
 "use client";
 
-import Link from "next/link";
-import { useAuth } from "@clerk/nextjs";
+import { SignInButton, useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import AccountNav from "../account-nav";
 import { BUTTON_CLASS, FIELD_CLASS } from "../ask-box";
 import { Answer, Refusal } from "../answer-view";
 import type { Stage } from "../stage-list";
 import StageList from "../stage-list";
-import ThemeToggle from "../theme-toggle";
+import SiteHeader from "../site-header";
 import { API_URL } from "@/lib/api-url";
 import { DISCLAIMER } from "@/lib/answer-text";
 import type { AskResponse } from "@/lib/ask-types";
 import { detectedLang, errorMessage } from "@/lib/ask-stream";
+import { retryAfterSeconds } from "@/lib/daily-cap";
 import { readEvents } from "@/lib/sse";
+
+// The longest Query the backend accepts, and how close to it the count of what is left shows.
+const MAX_QUERY = 2000;
+const COUNT_FROM = 200;
 
 type Asked = { q: string };
 type Outcome = {
   for: Asked;
   result: AskResponse | null;
   error: string | null;
+  // The service refused the session token.
+  unauthorized?: boolean;
   // The Stage that was running when answering failed, when there was one.
   failedStage?: string | null;
 };
@@ -28,7 +33,7 @@ type Progress = { for: Asked; stages: Stage[] };
 
 export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
   const router = useRouter();
-  const { getToken } = useAuth();
+  const { getToken, isSignedIn } = useAuth();
   const [query, setQuery] = useState(initialQuery ?? "");
   // The Query being answered. A new object per submission, so asking the same
   // Query again asks again.
@@ -38,7 +43,9 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [addressQuery, setAddressQuery] = useState(initialQuery);
+  const [missing, setMissing] = useState(false);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
+  const submitRef = useRef<HTMLButtonElement>(null);
 
   // The address is the source of truth: when it changes to another Query (a
   // link, a reload, back or forward), the ask box shows that Query and it is
@@ -46,6 +53,7 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
   if (initialQuery !== addressQuery) {
     setAddressQuery(initialQuery);
     setQuery(initialQuery ?? "");
+    setMissing(false);
     if (initialQuery !== asked?.q) setAsked(initialQuery ? { q: initialQuery } : null);
   }
 
@@ -57,9 +65,10 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
       result: AskResponse | null,
       error: string | null,
       failedStage: string | null = null,
+      unauthorized = false,
     ) => {
       if (!controller.signal.aborted)
-        setOutcome({ for: asked, result, error, failedStage });
+        setOutcome({ for: asked, result, error, failedStage, unauthorized });
     };
     (async () => {
       try {
@@ -74,7 +83,10 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
           body: JSON.stringify({ query: asked.q }),
           signal: controller.signal,
         });
-        if (!res.ok) return done(null, errorMessage(res.status));
+        if (!res.ok) {
+          const message = errorMessage(res.status, retryAfterSeconds(res));
+          return done(null, message, null, res.status === 401);
+        }
         if (!res.body) return done(null, errorMessage(null));
         let finished = false;
         await readEvents(res.body, (name, data) => {
@@ -109,60 +121,98 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
   const failedStage = current?.failedStage ?? null;
   const showStages = loading || (error !== null && stages.length > 0);
 
+  // The button pressed goes away with the error, so focus moves to Ask.
   function tryAgain() {
-    if (asked) setAsked({ q: asked.q });
+    if (!asked) return;
+    setAsked({ q: asked.q });
+    submitRef.current?.focus();
+  }
+
+  // Puts text in the ask box and takes the reader to it.
+  function fillAskBox(q: string) {
+    setQuery(q);
+    setMissing(false);
+    fieldRef.current?.scrollIntoView?.({ block: "center" });
+    fieldRef.current?.focus({ preventScroll: true });
   }
 
   // Starts over: the address drops the Query, which clears the ask box and the answer.
   function askAnother() {
     router.push("/ask", { scroll: false });
-    setQuery("");
     setAsked(null);
-    fieldRef.current?.scrollIntoView?.({ block: "center" });
-    fieldRef.current?.focus({ preventScroll: true });
+    fillAskBox("");
   }
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    // The button stays focusable while an answer is being written, so it is checked here.
+    if (loading) return;
     const q = query.trim();
-    if (!q) return;
+    if (!q) {
+      setMissing(true);
+      fieldRef.current?.focus();
+      return;
+    }
     setAsked({ q });
     if (q !== initialQuery) {
       router.push(`/ask?${new URLSearchParams({ q })}`, { scroll: false });
     }
   }
 
+  const left = MAX_QUERY - query.length;
+
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-10 px-4 pb-16 sm:px-8">
-      <header className="border-b border-rule pt-5 pb-4">
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="condensed text-2xl">
-            <Link href="/">LegalLens</Link>
-          </h1>
-          <div className="flex items-center gap-4">
-            <AccountNav />
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
+      <SiteHeader current="ask" />
 
       <form onSubmit={submit} className="flex flex-col gap-3">
-        <label htmlFor="query" className="font-medium">
-          Ask a question about Indian law
-        </label>
+        <h1 className="condensed text-balance text-3xl">
+          <label htmlFor="query">Ask a question about Indian law</label>
+        </h1>
         <textarea
           id="query"
           ref={fieldRef}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setMissing(false);
+          }}
+          lang={query ? detectedLang(query) : undefined}
           rows={3}
+          maxLength={MAX_QUERY}
+          aria-required="true"
+          aria-invalid={missing || undefined}
+          aria-describedby="query-hint query-count"
           placeholder="In English or Hindi"
           className={FIELD_CLASS}
         />
-        <button type="submit" disabled={loading} className={`${BUTTON_CLASS} self-start`}>
-          {loading ? "Thinking…" : "Ask"}
-        </button>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <button
+            ref={submitRef}
+            type="submit"
+            aria-disabled={loading || undefined}
+            className={`${BUTTON_CLASS} aria-disabled:cursor-progress aria-disabled:bg-ledger aria-disabled:text-muted aria-disabled:hover:bg-ledger`}
+          >
+            {loading ? "Thinking…" : "Ask"}
+          </button>
+          {/* Always in the page so a screen reader announces the text when it appears. */}
+          <p id="query-hint" role="status" className="font-medium">
+            {missing ? "Type your question first, in English or Hindi." : ""}
+          </p>
+          <p id="query-count" className="ml-auto text-sm text-muted tabular-nums">
+            {left <= COUNT_FROM ? `${left} ${left === 1 ? "character" : "characters"} left` : ""}
+          </p>
+        </div>
       </form>
+
+      {/* Tells a screen reader the reply has arrived, as the Stages that were being read go. */}
+      <p role="status" className="sr-only">
+        {result?.response_type === "answer"
+          ? "Your answer is ready."
+          : result
+            ? "LegalLens could not answer that question."
+            : ""}
+      </p>
 
       {showStages && (
         <StageList
@@ -176,9 +226,17 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
       {error && (
         <div role="alert" className="flex flex-col items-start gap-3 border border-rule bg-ledger px-4 py-4">
           <p>{error}</p>
-          <button type="button" onClick={tryAgain} className={BUTTON_CLASS}>
-            Try again
-          </button>
+          {current?.unauthorized && isSignedIn === false ? (
+            <SignInButton>
+              <button type="button" className={BUTTON_CLASS}>
+                Sign in
+              </button>
+            </SignInButton>
+          ) : (
+            <button type="button" onClick={tryAgain} className={BUTTON_CLASS}>
+              Try again
+            </button>
+          )}
         </div>
       )}
 
@@ -186,7 +244,7 @@ export default function AskScreen({ initialQuery }: { initialQuery?: string }) {
         <Refusal
           key={`${asked?.q}-${result.refusal_reason}`}
           result={result}
-          onReformulate={setQuery}
+          onReformulate={fillAskBox}
         />
       )}
 

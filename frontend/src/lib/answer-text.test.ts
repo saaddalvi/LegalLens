@@ -24,9 +24,9 @@ const answer: AskResponse = {
 };
 
 describe("answerAsText", () => {
-  it("lists the answer, its Citations and the disclaimer", () => {
+  it("lists the Trust label, the answer, its Citations and the disclaimer", () => {
     expect(answerAsText(answer)).toBe(
-      `Equality before the law is guaranteed.\n\nCitations:\n- Constitution of India, 14\n\n${DISCLAIMER}`,
+      `From statute text\n\nEquality before the law is guaranteed.\n\nCitations:\n- Constitution of India, 14\n\n${DISCLAIMER}`,
     );
   });
 
@@ -72,6 +72,6 @@ describe("answerAsText", () => {
 
   it("leaves out sections that are empty", () => {
     const text = answerAsText({ ...answer, citations: [] });
-    expect(text).toBe(`Equality before the law is guaranteed.\n\n${DISCLAIMER}`);
+    expect(text).toBe(`From statute text\n\nEquality before the law is guaranteed.\n\n${DISCLAIMER}`);
   });
 });

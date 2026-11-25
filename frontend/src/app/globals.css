@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* A mouse or trackpad, which can drag a file onto the page. */
+@custom-variant mouse (@media (hover: hover) and (pointer: fine));
+
 /*
  * "Stamp pad": bare-act statute pages, with violet stamp-pad ink marking only
  * what LegalLens has checked against the Corpus. Red marks only what is struck
@@ -24,6 +27,8 @@
    which sets data-theme on <html>. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    /* So native controls and scrollbars are drawn dark too. */
+    color-scheme: dark;
     --paper: #1b1a2e;
     --ledger: #25243b;
     --ink: #e8e6f0;
@@ -86,6 +91,11 @@ body {
 :focus-visible {
   outline: 2px solid var(--stamp);
   outline-offset: 3px;
+}
+
+/* Selected text is marked in ink; violet is kept for what has been checked. */
+::selection {
+  background: color-mix(in srgb, var(--ink) 18%, transparent);
 }
 
 /* Condensed headings, after the lettering on bare-act covers. */

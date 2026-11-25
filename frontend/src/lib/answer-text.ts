@@ -1,4 +1,5 @@
 import type { AskResponse, Citation } from "./ask-types";
+import { TRUST_TEXT } from "./trust-labels";
 
 // Shown on the asking screen and carried along when an answer is copied, so the
 // caveat travels with the text.
@@ -19,10 +20,10 @@ function citationLine(c: Citation): string {
   return `- ${c.act}, ${c.number}${note}`;
 }
 
-// An answer as plain text for pasting into a message or an email: the answer,
-// its Citations and web sources, and the disclaimer.
+// An answer as plain text for pasting into a message or an email: the Trust label, the
+// answer, its Citations and web sources, and the disclaimer.
 export function answerAsText(result: AskResponse): string {
-  const parts = [result.answer.trim()];
+  const parts = [TRUST_TEXT[result.trust_label], result.answer.trim()];
   if (result.citations.length > 0)
     parts.push(["Citations:", ...result.citations.map(citationLine)].join("\n"));
   if (result.fallback_sources.length > 0)
