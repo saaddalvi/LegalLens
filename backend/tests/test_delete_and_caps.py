@@ -2,10 +2,13 @@
 
 These need a Postgres with pgvector (see the README) and skip without one."""
 
+import asyncio
 import base64
 import json
+import threading
 import time
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlencode
 
 import pytest
 from conftest import (
@@ -214,6 +217,90 @@ def test_a_contract_check_refusal_does_not_consume_the_cap(make_client):
     refused = make_client(caps=caps, llm=NotAContract())
     assert parse_sse(upload_raw(refused).text)[-1][0] == "refusal"
     upload(make_client(caps=caps))
+
+
+@pytest.mark.parametrize("failing_call", ["check_contract", "write_brief"])
+def test_a_mid_run_service_error_does_not_consume_the_cap(make_client, failing_call):
+    from test_contracts import ContractLLM
+
+    def boom(self, *a, **k):
+        raise RuntimeError("the model service is down")
+
+    broken_llm = type("Broken", (ContractLLM,), {failing_call: boom})()
+    caps = DailyCaps(contracts=1, queries=50, clock=Clock(NOON))
+    broken = make_client(caps=caps, llm=broken_llm)
+    assert parse_sse(upload_raw(broken).text)[-1][0] == "error"
+    c = make_client(caps=caps)
+    upload(c)  # the one allowed Contract still goes through
+    assert upload_raw(c).status_code == 429
+
+
+def test_leaving_during_an_upload_still_consumes_the_cap(make_client):
+    from test_contracts import ContractLLM
+
+    release = threading.Event()
+
+    class Stuck(ContractLLM):
+        def check_contract(self, *a, **k):
+            release.wait(5)  # still reading when the client leaves
+            return super().check_contract(*a, **k)
+
+    caps = DailyCaps(contracts=1, queries=50, clock=Clock(NOON))
+    app = make_client(caps=caps, llm=Stuck()).app
+    sent = upload_then_leave(app, after=b"contract_check", on_left=release.set)
+    assert b"contract_check" in sent and b"event: answer" not in sent
+    assert count("contracts") == 0
+    assert upload_raw(make_client(caps=caps)).status_code == 429
+
+
+def upload_then_leave(app, *, after: bytes, on_left) -> bytes:
+    """Posts RENT to the app over raw ASGI and disconnects once `after` has been streamed,
+    which TestClient cannot do. Returns what was streamed."""
+    body = urlencode({"text": RENT}).encode()
+    headers = {
+        **auth_for("user_a"),
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Length": str(len(body)),
+    }
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/contracts/stream",
+        "raw_path": b"/contracts/stream",
+        "query_string": b"",
+        "root_path": "",
+        "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
+        "client": ("test", 1),
+        "server": ("test", 80),
+    }
+    sent = bytearray()
+
+    async def run():
+        left = asyncio.Event()
+        requests = [{"type": "http.request", "body": body, "more_body": False}]
+
+        async def receive():
+            if requests:
+                return requests.pop()
+            await left.wait()
+            return {"type": "http.disconnect"}
+
+        async def send(message):
+            sent.extend(message.get("body", b""))
+            if after in sent:
+                left.set()
+
+        try:
+            await asyncio.wait_for(app(scope, receive, send), timeout=10)
+            await asyncio.sleep(0.1)  # lets the cancelled upload finish unwinding
+        finally:
+            on_left()
+
+    asyncio.run(run())
+    return bytes(sent)
 
 
 def test_the_count_resets_the_next_day(make_client):

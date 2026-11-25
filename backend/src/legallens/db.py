@@ -436,7 +436,7 @@ class Database:
             return row.first() is not None
 
     async def release(self, user_id: str, kind: str, day: date) -> None:
-        """Gives back one `reserve`, for an upload that was refused."""
+        """Gives back one `reserve`, for an upload that was refused or failed."""
         column = Usage.contracts if kind == "contracts" else Usage.queries
         async with self.engine.begin() as conn:
             await conn.execute(

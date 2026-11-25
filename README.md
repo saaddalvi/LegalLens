@@ -134,6 +134,8 @@ Contracts: `POST /contracts/stream` takes a PDF, a DOCX or pasted text and strea
 English, over about 30 pages, unreadable) or `error`. Only the extracted text and its Clauses (with 1024-dimension
 vectors) are stored; the file never is. `GET /contracts` and `GET /contracts/{id}` return the signed-in user's own
 Contracts, and 404 for anyone else's. Scanned PDFs are read by Gemini, so they need `GOOGLE_API_KEY`.
+An upload that is refused or ends in `error` does not count towards the daily Contract cap; one the
+client disconnects from does.
 
 ### Logs
 

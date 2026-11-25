@@ -409,8 +409,8 @@ def create_app(
     async def reserve(user: str, kind: str) -> date | None:
         """Counts one `kind` against the user's daily cap, or answers 429 with the time until the
         count resets (midnight UTC). Returns the day it was counted on, or None when nothing was
-        counted, so a refused upload can be given back to that same day. Runs before any work or
-        stream starts."""
+        counted, so an upload that is refused or fails can be given back to that same day. Runs
+        before any work or stream starts."""
         if daily_caps is None:
             return None
         cap = daily_caps.limit(kind)
@@ -519,6 +519,9 @@ def create_app(
                     running[0] if running else None,
                     type(exc).__name__,
                 )
+                # The failure is the service's, so the upload is not counted. A client that
+                # leaves (above) is still counted: otherwise leaving would reset the cap.
+                await give_back(user, "contracts", counted_on)
                 rlog.finish("error")
                 events.put_nowait(
                     (
