@@ -26,6 +26,24 @@ class Generation(BaseModel):
     citations: list[ProvisionRef]
 
 
+class _GenerationOut(BaseModel):
+    """What the model fills in. The answer comes back as a list of paragraphs because a
+    newline inside a JSON string is unreliable (the model writes "nn" for "\\n\\n"); the
+    paragraphs are joined with blank lines into `Generation.answer`."""
+
+    paragraphs: list[str] = Field(
+        description="The answer as a list of paragraphs, in order, each a plain-text string "
+        "with no Markdown. Start with a short lead-in paragraph. When the answer covers "
+        "several points, write each point as its own paragraph starting '1.', '2.', '3.' and "
+        "so on. Constitution provisions are 'Article N', never 'Section N'"
+    )
+    citations: list[ProvisionRef]
+
+    def to_generation(self) -> "Generation":
+        text = "\n\n".join(p.strip() for p in self.paragraphs if p.strip())
+        return Generation(answer=text, citations=self.citations)
+
+
 class RelevanceScore(BaseModel):
     score: float  # 0.0 (irrelevant) to 1.0 (fully answers the question)
 
@@ -208,9 +226,6 @@ cite web sources as Provisions. If the material does not answer the question, sa
 cite nothing. When there are no Provisions, answer from the web sources, say plainly that the
 answer rests on less reliable web sources and not on statute text, and still cite nothing.
 Do not give personal advice.
-Write plain text with no Markdown. Separate paragraphs with a blank line. When you list
-several items, put each numbered item in its own paragraph, starting "1.", "2.", and so on,
-with a blank line between items. Call Constitution provisions "Article N", never "Section N".
 Provisions marked "repealed" are no longer law since 1 July 2024: say so, point to the
 Provision that replaced them, and prefer citing the in-force Provision. When an in-force
 Provision lists the old Provision it replaces, mention that old equivalent.
@@ -221,7 +236,11 @@ tell the user their own State's law may differ and that they should check it.
 Provisions:
 {provisions}
 {web}
-Question: {query}"""
+Question: {query}
+
+Format of the answer: plain text, no Markdown. When it covers several points, write a short
+lead-in paragraph and then each point as its own numbered paragraph ("1.", "2.", ...), with a
+blank line between paragraphs. Call Constitution provisions "Article N", never "Section N"."""
 
 _WEB_NOTE = """
 Web sources (less reliable than Provisions; never cite them as Provisions, and say
@@ -446,7 +465,7 @@ class GeminiLLM:
         web = ""
         if sources:
             web = _WEB_NOTE.format(sources=self._format_sources(sources))
-        return self._structured(Generation).invoke(
+        out = self._structured(_GenerationOut).invoke(
             _PROMPT.format(
                 provisions=self._format(provisions),
                 web=web,
@@ -454,6 +473,7 @@ class GeminiLLM:
                 language_name=LANGUAGE_NAMES[language],
             )
         )
+        return out.to_generation()
 
     def read_document(self, data: bytes, mime_type: str) -> str:
         message = HumanMessage(

@@ -168,7 +168,7 @@ def test_the_generation_prompt_carries_the_fenced_sources():
         def with_structured_output(self, schema):
             def run(prompt):
                 prompts.append(prompt)
-                return schema(answer="ok", citations=[])
+                return schema(paragraphs=["ok"], citations=[])
 
             return RunnableLambda(run)
 
@@ -185,7 +185,7 @@ def test_no_web_section_is_added_when_there_are_no_sources():
         def with_structured_output(self, schema):
             def run(prompt):
                 prompts.append(prompt)
-                return schema(answer="ok", citations=[])
+                return schema(paragraphs=["ok"], citations=[])
 
             return RunnableLambda(run)
 
@@ -193,3 +193,19 @@ def test_no_web_section_is_added_when_there_are_no_sources():
         "q", [provision("in_force")], []
     )
     assert "web_source" not in prompts[0]
+
+
+def test_a_list_of_paragraphs_becomes_an_answer_with_blank_lines_between_them():
+    class ListChat:
+        def with_structured_output(self, schema):
+            return RunnableLambda(
+                lambda prompt: schema(
+                    paragraphs=["You have rights:", " 1. Be told why. ", "", "2. Call a lawyer."],
+                    citations=[],
+                )
+            )
+
+    generation = GeminiLLM("primary", chat_factory=lambda name: ListChat()).generate(
+        "q", [provision("in_force")], []
+    )
+    assert generation.answer == "You have rights:\n\n1. Be told why.\n\n2. Call a lawyer."
