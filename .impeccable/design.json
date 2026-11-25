@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-25T00:00:00Z",
+  "generatedAt": "2026-11-25T18:00:00Z",
   "title": "Design System: LegalLens",
   "extensions": {
     "colorMeta": {
@@ -11,7 +11,7 @@
     },
     "typographyMeta": {
       "display": { "displayName": "Display", "purpose": "Landing headline and specimen section number, condensed to 78% width." },
-      "law": { "displayName": "Law", "purpose": "Answers, statute text, Citations, Clause quotes and the Query field, in serif." }
+      "law": { "displayName": "Law", "purpose": "Answers, statute text, Citations, Clause quotes, the Query field and composer, in serif." }
     },
     "shadows": [],
     "motion": [
@@ -49,19 +49,44 @@
       "description": "Verbatim Contract text with a left rule and a source label.",
       "html": "<figure class=\"ds-quote\"><figcaption>Your Contract, Clause 4</figcaption><blockquote>The tenant shall pay rent by the 5th of each month.</blockquote></figure>",
       "css": ".ds-quote{margin:0;display:flex;flex-direction:column;gap:8px;border-left:2px solid var(--ink,#1f2330);padding-left:16px}.ds-quote figcaption{font-size:.875rem;color:var(--muted,#5c6170)}.ds-quote blockquote{margin:0;max-width:54ch;font-family:Georgia,serif;font-size:1.125rem;line-height:1.6}"
+    },
+    {
+      "name": "Query Bubble", "kind": "custom", "refersTo": "query-bubble",
+      "description": "The user's own Query, on the right of the Contract chat.",
+      "html": "<div class=\"ds-bubble-row\"><p class=\"ds-bubble\">How much notice do I need to give?</p></div>",
+      "css": ".ds-bubble-row{display:flex;justify-content:flex-end}.ds-bubble{margin:0;max-width:85%;background:var(--ledger,#eceee8);color:var(--ink,#1f2330);border-radius:24px 24px 6px 24px;padding:10px 16px;font-size:1rem;line-height:1.5;white-space:pre-wrap}"
+    },
+    {
+      "name": "Composer", "kind": "input", "refersTo": "composer",
+      "description": "Pill-shaped question box with a round send button, at the foot of the Contract chat.",
+      "html": "<div class=\"ds-composer\"><textarea rows=\"1\" placeholder=\"Ask in English or Hindi\" aria-label=\"Ask a question\"></textarea><button type=\"button\" aria-label=\"Ask\"><svg viewBox=\"0 0 16 16\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\"><path d=\"M8 13V3.5M3.75 7.5 8 3.25l4.25 4.25\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg></button></div>",
+      "css": ".ds-composer{display:flex;align-items:flex-end;gap:8px;background:var(--ledger,#eceee8);border:1px solid var(--muted,#5c6170);border-radius:28px;padding:6px 6px 6px 20px}.ds-composer:focus-within{border-color:var(--ink,#1f2330)}.ds-composer:has(textarea:focus-visible){outline:2px solid var(--stamp,#5a3e9b);outline-offset:2px}.ds-composer textarea{flex:1;min-width:0;min-height:44px;resize:none;border:0;outline:0;background:transparent;color:var(--ink,#1f2330);padding:6px 0;font-family:Georgia,serif;font-size:1.125rem;line-height:1.6}.ds-composer textarea::placeholder{color:var(--muted,#5c6170)}.ds-composer button{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border:0;border-radius:999px;background:var(--ink,#1f2330);color:var(--ink-contrast,#fbfbf8);cursor:pointer}"
+    },
+    {
+      "name": "Chip", "kind": "chip", "refersTo": "chip",
+      "description": "Starter questions and the Sources button in the Contract chat.",
+      "html": "<button class=\"ds-chip\">Sources: 1 Clause, 1 Citation</button>",
+      "css": ".ds-chip{min-height:44px;background:var(--paper,#fbfbf8);color:var(--ink,#1f2330);border:1px solid var(--rule,#cdd0c7);border-radius:24px;padding:8px 16px;font-size:.875rem;font-weight:500;text-align:left;cursor:pointer}.ds-chip:hover{border-color:var(--ink,#1f2330)}.ds-chip:focus-visible{outline:2px solid var(--stamp,#5a3e9b);outline-offset:3px}"
+    },
+    {
+      "name": "Part Tabs", "kind": "nav",
+      "description": "Chat, Brief and Contract on a Contract's page.",
+      "html": "<div class=\"ds-tabs\" role=\"tablist\"><button role=\"tab\" aria-selected=\"true\">Chat</button><button role=\"tab\" aria-selected=\"false\">Brief</button><button role=\"tab\" aria-selected=\"false\">Contract</button></div>",
+      "css": ".ds-tabs{display:flex;gap:24px;border-bottom:1px solid var(--rule,#cdd0c7)}.ds-tabs button{min-height:44px;min-width:44px;margin-bottom:-1px;background:none;border:0;border-bottom:2px solid transparent;color:var(--muted,#5c6170);font-size:1rem;cursor:pointer}.ds-tabs button:hover{color:var(--ink,#1f2330)}.ds-tabs button[aria-selected=true]{border-bottom-color:var(--ink,#1f2330);color:var(--ink,#1f2330);font-weight:600}.ds-tabs button:focus-visible{outline:2px solid var(--stamp,#5a3e9b);outline-offset:-2px}"
     }
   ],
   "narrative": {
     "northStar": "The Stamp Pad",
-    "overview": "LegalLens reads like a page from a bare act: off-white paper, dark ink, a narrow marginal note beside each block of text, and the law itself set in a serif. The one saturated colour, stamp-pad violet, appears only where LegalLens has verified something against the Corpus. Red appears only for what is struck out (a repealed Provision) or has failed. Everything else is ink on paper.",
+    "overview": "LegalLens reads like a page from a bare act: off-white paper, dark ink, a narrow marginal note beside each block of text, and the law itself set in a serif. The one saturated colour, stamp-pad violet, appears only where LegalLens has verified something against the Corpus. Red appears only for what is struck out (a repealed Provision) or has failed. Everything else is ink on paper.\n\nThe system is calm and document-like. The one app-like screen is a Contract's page, a chat that fills the window and uses the same inks and type.",
     "keyCharacteristics": ["Paper and ink neutrals; violet is rare and meaningful.", "Sans for the interface, serif for the law.", "Condensed bold headings, after bare-act cover lettering.", "Flat surfaces, rules and borders instead of shadows.", "One orchestrated motion: the Trust label is stamped onto the answer."],
     "rules": [
       { "name": "The Verified-Only Violet Rule", "body": "Violet means \"checked against the Corpus\". It never decorates.", "section": "colors" },
       { "name": "The Struck-Out Red Rule", "body": "Red marks only repealed or failed. Never use it for emphasis or errors of style.", "section": "colors" },
       { "name": "The Two Voices Rule", "body": "Sans speaks for LegalLens; serif speaks for the law. Never set statute or Contract text in the sans.", "section": "typography" },
-      { "name": "The No-Shadow Rule", "body": "Surfaces are paper, ledger or ruled. Do not add box-shadows or blur.", "section": "elevation" }
+      { "name": "The No-Shadow Rule", "body": "Surfaces are paper, ledger or ruled. Do not add box-shadows or blur.", "section": "elevation" },
+      { "name": "The Chat-Only Curve Rule", "body": "Rounded bubbles, chips and the pill composer belong to the Contract chat. Elsewhere, buttons and fields keep the 4px radius. Buttons that confirm or retry keep it inside the chat too.", "section": "shapes" }
     ],
-    "dos": ["Do reserve violet for verified content and red for repealed or failed.", "Do set law and quotes in the serif at no more than the measure (54ch), with lang=\"en\" on English statute text.", "Do keep every theme token defined for light and dark; honour prefers-color-scheme and the saved toggle.", "Do respect prefers-reduced-motion for every animation.", "Do use the glossary terms in copy (Provision, Clause, Citation, Flagged clause)."],
-    "donts": ["Don't use shadows, gradients or glass effects.", "Don't use red or violet as general emphasis or decoration.", "Don't set statute or Contract text in the sans.", "Don't word Flagged clauses as \"risky\" or \"red flag\", or imply whether to sign."]
+    "dos": ["Do reserve violet for verified content and red for repealed or failed.", "Do set law and quotes in the serif at no more than the measure (54ch), with lang=\"en\" on English statute text.", "Do keep every theme token defined for light and dark; honour prefers-color-scheme and the saved toggle.", "Do respect prefers-reduced-motion for every animation.", "Do use the glossary terms in copy (Provision, Clause, Citation, Flagged clause).", "Do keep every answer's sources one press away, and show that a Citation is repealed while they are folded."],
+    "donts": ["Don't use shadows, gradients or glass effects.", "Don't use red or violet as general emphasis or decoration.", "Don't set statute or Contract text in the sans.", "Don't word Flagged clauses as \"risky\" or \"red flag\", or imply whether to sign.", "Don't put an answer in a bubble; only the user's Query has one."]
   }
 }
