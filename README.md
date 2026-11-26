@@ -163,9 +163,14 @@ Secrets live in the hosts' settings and are never committed or baked into the im
 ./scripts/deploy-wizard.sh
 ```
 
-The wizard walks through the steps only you can do (Hugging Face token and Space, API keys, the Vercel
-project, the allowed frontend address), runs the upload for you after asking, and finishes by checking the
-live `/ready` and CORS. It stores its values in `.deploy.env`, which is gitignored, and can be re-run.
+The wizard walks through the steps only you can do (Hugging Face token and Space, Clerk keys and webhook,
+the Neon database, API keys, the Vercel project, the allowed frontend address), runs the migrations and the
+upload for you after asking, and finishes by checking the live `/ready`, CORS and the webhook. It stores its
+values, including the Hugging Face token and the database connection string, in `.deploy.env`, which is
+gitignored, and can be re-run.
+
+Use a Clerk **development** instance while the site is on a `*.vercel.app` address: Clerk's
+[production instance](https://clerk.com/docs/guides/development/deployment/production) needs a domain you own.
 
 What it does, if you would rather do it by hand:
 
@@ -181,8 +186,9 @@ What it does, if you would rather do it by hand:
    (the Neon connection string) and `CLERK_WEBHOOK_SECRET` (secrets), `CLERK_ISSUER` and
    `CLERK_AUTHORIZED_PARTIES`, and `CORS_ORIGINS` set to the Vercel address (variables). In Clerk, add a
    webhook endpoint `https://<space>/webhooks/clerk` subscribed to `user.deleted`.
-4. **Deploy the frontend** on Vercel with root directory `frontend` and `NEXT_PUBLIC_API_URL` set to the
-   Space's address. It is read at build time, so changing it needs a redeploy.
+4. **Deploy the frontend** on Vercel with root directory `frontend`, `NEXT_PUBLIC_API_URL` set to the
+   Space's address, and `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` from Clerk. The
+   `NEXT_PUBLIC_` ones are read at build time, so changing them needs a redeploy.
 
 The Space sleeps when idle, so the first question after a quiet spell is slow. The container starts uvicorn
 with `--proxy-headers`, so the request log sees each visitor's real address; the streaming endpoint sends

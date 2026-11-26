@@ -200,7 +200,7 @@ finish() {
 
 run_wizard() {
 
-TOTAL_STAGES=7
+TOTAL_STAGES=10
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Values live in their own gitignored file, apart from backend/.env (the app's secrets).
@@ -226,17 +226,79 @@ while true; do
   warn "That is not in USER/SPACE form. Try again."
 done
 write_env HF_SPACE "$HF_SPACE"
-
-stage "Upload the backend to the Space"
-say "This uploads the backend code and the built Corpus (about 66 MB) to"
-say "https://huggingface.co/spaces/$HF_SPACE"
-say "No API keys are uploaded: you add those in the next stage."
-warn "The Space is created public, because the browser must reach it. Anyone can read its files."
 if [[ ! -x "$PYTHON" ]]; then
   warn "No backend virtualenv at $PYTHON"
   note "Create it first (see the README, 'Backend setup'), then re-run this wizard."
   exit 1
 fi
+
+stage "Clerk: sign-in keys"
+say "Asking a question and uploading a Contract both need a signed-in user."
+open_url "https://dashboard.clerk.com/last-active?path=api-keys"
+step "Choose your LegalLens application and stay on its Development instance."
+note "Clerk's production keys need a domain you own; they do not work on a *.vercel.app address."
+step "Copy the Publishable key (it starts pk_test_, or pk_live_ with your own domain)."
+while true; do
+  ask CLERK_PUBLISHABLE_KEY "Paste the publishable key:"
+  # The key is pk_test_ or pk_live_ followed by base64 of "<Frontend API host>$".
+  CLERK_HOST=""
+  if [[ "$CLERK_PUBLISHABLE_KEY" =~ ^pk_(test|live)_([A-Za-z0-9+/=]+)$ ]]; then
+    ENCODED="${BASH_REMATCH[2]}"
+    while (( ${#ENCODED} % 4 )); do ENCODED+="="; done
+    CLERK_HOST="$(printf '%s' "$ENCODED" | base64 --decode 2>/dev/null || true)"
+  fi
+  if [[ "$CLERK_HOST" =~ ^[A-Za-z0-9.-]+\$$ ]]; then break; fi
+  warn "That is not a Clerk publishable key. Copy it again."
+done
+write_env CLERK_PUBLISHABLE_KEY "$CLERK_PUBLISHABLE_KEY"
+CLERK_ISSUER="https://${CLERK_HOST%?}"
+write_env CLERK_ISSUER "$CLERK_ISSUER"
+if curl -fsS --max-time 15 "$CLERK_ISSUER/.well-known/jwks.json" 2>/dev/null | grep -q '"keys"'; then
+  say "✓ Clerk answers at $CLERK_ISSUER"
+else
+  warn "Could not read Clerk's signing keys at $CLERK_ISSUER"
+  confirm "Continue anyway?" || exit 1
+fi
+note "The Secret key on the same page goes straight into Vercel later; the wizard does not ask for it."
+pause "Press Enter for the next stage."
+
+stage "Neon: database and migrations"
+say "Users and Contracts live in Postgres. The tables must exist before the Space starts."
+open_url "https://console.neon.tech"
+step "Use a database for the live site only, not the one you develop against."
+note "A separate Neon project, or a separate database in your project, both work."
+step "Click 'Connect' and copy the connection string (it starts postgresql://)."
+while true; do
+  ask_secret DATABASE_URL "Paste the connection string:"
+  # Neon's snippets and .env files often wrap it in quotes, which must not be kept.
+  DATABASE_URL="${DATABASE_URL#[\"\']}"
+  DATABASE_URL="${DATABASE_URL%[\"\']}"
+  [[ "$DATABASE_URL" =~ ^postgres(ql)?:// ]] && break
+  warn "That does not start with postgresql://. Copy only the connection string."
+done
+write_env DATABASE_URL "$DATABASE_URL"
+DB_HOST="${DATABASE_URL##*@}"
+DB_HOST="${DB_HOST%%\?*}"
+say "The migrations will run against: $DB_HOST"
+note "Re-run this wizard after any release that adds a migration."
+if confirm "Run the migrations now?"; then
+  if ! (cd "$ROOT/backend" && DATABASE_URL="$DATABASE_URL" "$PYTHON" -m legallens.migrate); then
+    warn "The migrations failed, so nothing has been uploaded."
+    note "Fix the error above, then re-run this wizard."
+    exit 1
+  fi
+  say "✓ The database is up to date."
+elif ! confirm "Are the migrations already applied to this database?"; then
+  say "Stopping: the Space must not start without its tables. Re-run when ready."
+  exit 0
+fi
+pause "Press Enter for the next stage."
+
+stage "Upload the backend to the Space"
+say "This uploads the backend code and the built Corpus (about 66 MB) to"
+say "https://huggingface.co/spaces/$HF_SPACE"
+say "No keys or secrets are uploaded: you add those in the next stage."
+warn "The Space is created public, because the browser must reach it. Anyone can read its files."
 if confirm "Create the Space and upload now?"; then
   STAGE_DIR="$(mktemp -d)"
   HF_TOKEN="$HF_TOKEN" "$PYTHON" "$ROOT/backend/scripts/deploy_space.py" "$STAGE_DIR/space" --push "$HF_SPACE"
@@ -249,20 +311,41 @@ else
 fi
 pause "Press Enter for the next stage."
 
-stage "Space: API keys and address"
+stage "Space: secrets, variables and address"
 open_url "https://huggingface.co/spaces/$HF_SPACE/settings"
 step "Scroll to 'Variables and secrets' and click 'New secret'."
 step "Add GOOGLE_API_KEY, with the value from backend/.env."
 step "Add WEB_SEARCH_API_KEY (the Tavily key), also from backend/.env."
 note "This wizard deliberately does not ask for these two, so they never pass through it."
-pause "Both secrets added?"
+step "Add DATABASE_URL: the connection string from the Neon stage, without quotes."
+pause "All three secrets added?"
+say ""
+step "Now click 'New variable' and add:"
+say "      CLERK_ISSUER = $CLERK_ISSUER"
+step "If backend/.env sets GEMINI_MODEL or GEMINI_FALLBACK_MODEL, add those as variables too."
+pause "Variables added?"
 say ""
 step "Open the Space page, click the ⋮ menu at the top right, choose 'Embed this Space', copy the Direct URL."
 note "If you cannot find it: it is https://USER-SPACE.hf.space, lower case, with '-' for '_' and '.'."
 open_url "https://huggingface.co/spaces/$HF_SPACE"
-ask BACKEND_URL "Paste the Direct URL:"
-BACKEND_URL="${BACKEND_URL%/}"
+while true; do
+  ask BACKEND_URL "Paste the Direct URL:"
+  BACKEND_URL="${BACKEND_URL%/}"
+  [[ "$BACKEND_URL" =~ ^https://[A-Za-z0-9.-]+$ ]] && break
+  warn "Give the whole address, like https://name.example.app, with no path."
+done
 write_env BACKEND_URL "$BACKEND_URL"
+
+stage "Clerk: tell the backend about deleted users"
+say "When a user is deleted in Clerk, this webhook deletes their data too."
+open_url "https://dashboard.clerk.com/last-active?path=webhooks"
+step "Click 'Add Endpoint'."
+say "      Endpoint URL: $BACKEND_URL/webhooks/clerk"
+step "Subscribe to the user.deleted event only, then create the endpoint."
+step "Copy its Signing Secret (it starts whsec_)."
+open_url "https://huggingface.co/spaces/$HF_SPACE/settings"
+step "In the Space, click 'New secret', name it CLERK_WEBHOOK_SECRET and paste the value."
+pause "Secret saved?"
 
 stage "GitHub: push the code Vercel will build"
 say "Vercel builds the frontend from GitHub, so the commits must be pushed."
@@ -295,22 +378,29 @@ step "Under 'Root Directory' click Edit and choose: frontend"
 step "Framework Preset should show Next.js."
 step "Open 'Environment Variables' and add:"
 say "      NEXT_PUBLIC_API_URL = $BACKEND_URL"
-note "It is read when the site is built, so changing it later needs a redeploy."
+say "      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = $CLERK_PUBLISHABLE_KEY"
+say "      CLERK_SECRET_KEY = the Secret key from Clerk's API keys page"
+note "The NEXT_PUBLIC_ ones are read when the site is built, so changing them needs a redeploy."
 step "Click Deploy and wait for it to finish."
 step "Copy the production address of the site (e.g. https://legallens.vercel.app), with no path."
-ask FRONTEND_URL "Paste the site address:"
-FRONTEND_URL="${FRONTEND_URL%/}"
+while true; do
+  ask FRONTEND_URL "Paste the site address:"
+  FRONTEND_URL="${FRONTEND_URL%/}"
+  [[ "$FRONTEND_URL" =~ ^https://[A-Za-z0-9.-]+$ ]] && break
+  warn "Give the whole address, like https://name.example.app, with no path."
+done
 write_env FRONTEND_URL "$FRONTEND_URL"
 
 stage "Space: allow the frontend's address"
-say "The backend only accepts browser requests from addresses it is told about."
+say "The backend only accepts browser requests, and sign-ins, from addresses it is told about."
 open_url "https://huggingface.co/spaces/$HF_SPACE/settings"
 step "Under 'Variables and secrets', click 'New variable'."
 step "Name: CORS_ORIGINS"
 say "      Value: $FRONTEND_URL"
-note "A variable is enough, it is not a secret. No trailing slash, no path."
+step "Add a second variable, CLERK_AUTHORIZED_PARTIES, with the same value."
+note "Variables are enough, these are not secrets. No trailing slash, no path."
 step "Save. The Space restarts, which takes a minute or two."
-pause "Variable saved?"
+pause "Both variables saved?"
 
 stage "Check the live deployment"
 say "Waiting for the backend at $BACKEND_URL (a first build can take 10+ minutes)..."
@@ -335,7 +425,7 @@ else
   fi
   ALLOW="$(curl -sS -i --max-time 15 -X OPTIONS "$BACKEND_URL/ask/stream" \
     -H "Origin: $FRONTEND_URL" -H 'Access-Control-Request-Method: POST' \
-    -H 'Access-Control-Request-Headers: content-type' 2>/dev/null \
+    -H 'Access-Control-Request-Headers: authorization,content-type' 2>/dev/null \
     | tr -d '\r' | grep -i '^access-control-allow-origin:' || true)"
   if [[ -n "$ALLOW" ]]; then
     say "✓ CORS allows the frontend ($ALLOW)"
@@ -343,14 +433,27 @@ else
     SKIPPED+=("CORS_ORIGINS does not allow $FRONTEND_URL: check the variable and wait for the restart")
     warn "The backend does not allow $FRONTEND_URL yet."
   fi
+  # An unsigned request gets 400 when the webhook is set up, 503 when it is not.
+  HOOK="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 -X POST \
+    "$BACKEND_URL/webhooks/clerk" 2>/dev/null || true)"
+  if [[ "$HOOK" == 400 ]]; then
+    say "✓ The Clerk webhook is configured."
+  else
+    SKIPPED+=("Webhook check returned HTTP $HOOK, not 400: check the CLERK_WEBHOOK_SECRET and DATABASE_URL secrets")
+    warn "The Clerk webhook is not configured yet."
+  fi
 fi
 say ""
 open_url "$FRONTEND_URL"
-step "Ask: What is the punishment for murder?"
+step "Sign in, then ask: What is the punishment for murder?"
 step "You should see the Stages, then the answer, the Trust label and Citations."
 step "Check the disclaimer is visible and that 'Copy answer' works."
+step "On Contracts, upload a sample from backend/fixtures/contracts/, ask about it, then delete it."
+note "Refused while signed in? Check CLERK_ISSUER and CLERK_AUTHORIZED_PARTIES in the Space."
 note "The free Space sleeps when idle, so the first question after a quiet spell is slow."
-pause "Did it work?"
+if ! confirm "Did all of that work?"; then
+  SKIPPED+=("The manual check of the live site: read the Space's Logs tab, fix, and check again")
+fi
 
 finish
 }
